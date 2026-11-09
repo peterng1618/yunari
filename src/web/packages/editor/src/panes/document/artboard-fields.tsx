@@ -8,6 +8,8 @@ import {
   ARTBOARD_ORIENTATIONS,
   ARTBOARD_RATIOS,
   ARTBOARD_RESOLUTIONS,
+  type ArtboardOrientation,
+  artboardOrientation,
   artboardPresetFor,
   artboardSize,
   nearestArtboardPreset,
@@ -91,6 +93,16 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
       commit({ width: derived.width, height: derived.height });
       return;
     }
+    // **A size the presets do not name still has an orientation**, and it is
+    // the numbers': choosing the other one turns the board rather than being
+    // declined. Ratio and resolution keep deriving from the nearest preset, as
+    // they always have — neither is a direction the numbers carry.
+    if (matching === undefined && which === "orientation") {
+      if ((id as ArtboardOrientation) !== artboardOrientation(artboard)) {
+        commit({ width: artboard.height, height: artboard.width });
+      }
+      return;
+    }
     const chosen = {
       ratio:
         which === "ratio"
@@ -137,7 +149,9 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
             label={uiCopy.panels.orientation}
             data={{ "data-yunari-artboard-orientation": "" }}
             describedById={noteId}
-            value={matching?.orientation ?? ""}
+            // Read off the size, not the preset: a typed size has an
+            // orientation even where it has no preset to read it from.
+            value={artboardOrientation(artboard)}
             options={orientationOptions()}
             onChange={(id) => commitPreset("orientation", id)}
           />
@@ -243,13 +257,12 @@ function ratioOptions(): readonly ControlOption[] {
 }
 
 function orientationOptions(): readonly ControlOption[] {
-  return [
-    ...ARTBOARD_ORIENTATIONS.map((id) => ({
-      id,
-      name: uiCopy.artboardOrientations[id],
-    })),
-    CUSTOM,
-  ];
+  // No Custom entry: orientation is read off the numbers, so there is no size
+  // whose orientation is unnamed.
+  return ARTBOARD_ORIENTATIONS.map((id) => ({
+    id,
+    name: uiCopy.artboardOrientations[id],
+  }));
 }
 
 function resolutionOptions(): readonly ControlOption[] {

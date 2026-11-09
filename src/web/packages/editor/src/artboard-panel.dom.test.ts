@@ -17,6 +17,7 @@ import {
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
 import type { SceneBox } from "@yunari/scene-fabric";
+import { artboardOrientation } from "@yunari/theme-kit";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { type ArtboardPanel, createArtboardPanel } from "./artboard-panel.js";
@@ -575,12 +576,11 @@ describe("artboard presets in the panel", () => {
     await mount();
     await draw({ width: 1000, height: 700 });
 
-    for (const hook of [
-      "artboard-ratio",
-      "artboard-orientation",
-      "artboard-resolution",
-    ])
+    for (const hook of ["artboard-ratio", "artboard-resolution"])
       expect(choiceOf(`[data-yunari-${hook}]`), hook).toBe("");
+    // Orientation is not a custom reading: the numbers always name one, and a
+    // 1000 × 700 board is landscape.
+    expect(choiceOf("[data-yunari-artboard-orientation]")).toBe("landscape");
   });
 
   it("keeps the free size fields for a size no preset names", async () => {
@@ -624,12 +624,10 @@ describe("artboard presets in the panel", () => {
     await draw({ width: 1000, height: 700 });
 
     // A reading, not a choice: an author cannot ask for a size that is not a
-    // preset, and cannot get stuck on one they chose by accident.
-    for (const hook of [
-      "artboard-ratio",
-      "artboard-orientation",
-      "artboard-resolution",
-    ]) {
+    // preset, and cannot get stuck on one they chose by accident. Orientation
+    // has no such reading — it is read off the numbers, so it offers only the
+    // two directions.
+    for (const hook of ["artboard-ratio", "artboard-resolution"]) {
       const options = await openControl(`[data-yunari-${hook}]`);
       const custom = options.find(
         (option) => option.getAttribute("data-yunari-option") === "",
@@ -640,16 +638,13 @@ describe("artboard presets in the panel", () => {
       await click(custom, 1);
       await flush();
     }
-
     // The refusal is real, not a decoration: pressing the reading commits
-    // nothing and leaves the controls on the document's own size.
+    // nothing and leaves the controls on the document's own size. Orientation
+    // has no such reading — it is read off the numbers and names one.
     expect(change).not.toHaveBeenCalled();
-    for (const hook of [
-      "artboard-ratio",
-      "artboard-orientation",
-      "artboard-resolution",
-    ])
+    for (const hook of ["artboard-ratio", "artboard-resolution"])
       expect(choiceOf(`[data-yunari-${hook}]`), hook).toBe("");
+    expect(choiceOf("[data-yunari-artboard-orientation]")).toBe("landscape");
   });
 
   it("states that a size change does not move content, beside the controls that change it", async () => {
@@ -868,16 +863,16 @@ describe.each([
       envelope: created,
     });
 
-    // Load: the panel reads a size no preset names as Custom on all three,
-    // rather than claiming a preset the document is not at.
+    // Load: the panel reads a size no preset names as Custom on ratio and
+    // resolution, rather than claiming a preset the document is not at. The
+    // orientation is the numbers' own, so it names one.
     const { change } = await mount();
     await draw(created.artboard);
-    for (const hook of [
-      "artboard-ratio",
-      "artboard-orientation",
-      "artboard-resolution",
-    ])
+    for (const hook of ["artboard-ratio", "artboard-resolution"])
       expect(choiceOf(`[data-yunari-${hook}]`), hook).toBe("");
+    expect(choiceOf("[data-yunari-artboard-orientation]")).toBe(
+      artboardOrientation(size),
+    );
 
     // Edit: the free fields carry the shape, so a change keeps the other edge.
     await commitField("[data-yunari-artboard-width]", String(size.width + 100));
@@ -906,16 +901,16 @@ describe.each([
       height: size.height,
     });
 
-    // And the reopened document still reads as Custom, so the cycle ends where
-    // it started rather than stranding the author on a size the three controls
-    // deny.
+    // And the reopened document still reads as Custom on ratio and resolution,
+    // so the cycle ends where it started rather than stranding the author on a
+    // size the presets deny — while the orientation, the numbers' own, names
+    // one.
     await mount();
     await draw(parsed.envelope.artboard);
-    for (const hook of [
-      "artboard-ratio",
-      "artboard-orientation",
-      "artboard-resolution",
-    ])
+    for (const hook of ["artboard-ratio", "artboard-resolution"])
       expect(choiceOf(`[data-yunari-${hook}]`), hook).toBe("");
+    expect(choiceOf("[data-yunari-artboard-orientation]")).toBe(
+      artboardOrientation(size),
+    );
   });
 });

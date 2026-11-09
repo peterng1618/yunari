@@ -11,6 +11,7 @@ import {
   type ArtboardRatioId,
   type ArtboardResolutionId,
   type ArtboardSize,
+  artboardOrientation,
   artboardPresetFor,
   artboardSize,
   nearestArtboardPreset,
@@ -21,9 +22,11 @@ import {
   type ControlOption,
   ControlSelect,
 } from "./components/ui/control-select.js";
+import { ControlToggle } from "./components/ui/control-toggle.js";
 import { ACTION_BUTTON, Dialog } from "./components/ui/dialog.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
 import { openModal } from "./components/ui/modal-host.js";
+import { matchingPreviewLens, previewRatioTokenFor } from "./display-lens.js";
 import { uiCopy } from "./ui-copy.js";
 
 /** The empty option id: the technical selects' "not a preset". It is the
@@ -43,6 +46,10 @@ const CUSTOM_READING: ControlOption = {
 export interface NewDocumentAnswer {
   readonly size: ArtboardSize;
   readonly shape: ArtboardShape;
+  /** A ratio the author asked to add to the preview catalogue, because no
+   *  stored lens frames this size. Absent when a lens already matches or the
+   *  offer was declined. */
+  readonly savePreviewRatio?: string;
 }
 
 /**
@@ -75,16 +82,33 @@ export function NewDocumentChooser({
     nearest.orientation,
   );
   const sizeId = `yunari-new-document-size-${useId().replace(/[^\w-]/g, "")}`;
+  const copy = uiCopy.newDocument;
 
   /** The size the author has settled on. */
   const [chosen, adopt] = useState<ArtboardSize>(opening);
   /** The authored canvas's outline, read from the document it would replace.
    *  Absent there means rect, the same reading the envelope uses. */
   const [shape, setShape] = useState<ArtboardShape>(current?.shape ?? "rect");
+  /** The author's answer to the one offer this dialog makes: a size no stored
+   *  lens frames can be added to the preview catalogue. On by default — the
+   *  author typed the size to look through it. */
+  const [saveRatio, setSaveRatio] = useState(true);
 
   /** The three ids the size is at, or `undefined` for the author's own — the
    *  reading a control shows, not an answer it can commit. */
   const preset = artboardPresetFor(chosen);
+  /** The stored lens that frames this size exactly, or `undefined` when the
+   *  catalogue has no ratio to look through it with. */
+  const matchedLens = matchingPreviewLens({
+    width: chosen.width,
+    height: chosen.height,
+    shape,
+  });
+  const ratioToken = previewRatioTokenFor({
+    width: chosen.width,
+    height: chosen.height,
+    shape,
+  });
 
   /** A circle is drawn on a square, so switching to one narrows the current
    *  size to its shorter edge. Switching back keeps that square: it is the
@@ -119,7 +143,16 @@ export function NewDocumentChooser({
       adopt(artboardSize("1:1", id as ArtboardResolutionId, "landscape"));
       return;
     }
-    if (preset === undefined) return;
+    // **A size the presets do not name still has an orientation**, and it is
+    // the numbers': choosing the other one turns the board rather than being
+    // declined, so the control is never a reading an author cannot move.
+    if (preset === undefined) {
+      if (which !== "orientation") return;
+      if ((id as ArtboardOrientation) !== artboardOrientation(chosen)) {
+        adopt({ width: chosen.height, height: chosen.width });
+      }
+      return;
+    }
     const next =
       which === "ratio"
         ? {
@@ -141,7 +174,15 @@ export function NewDocumentChooser({
     adopt(artboardSize(next.ratio, next.resolution, next.orientation));
   };
 
-  const answer = (): NewDocumentAnswer => ({ size: chosen, shape });
+  const answer = (): NewDocumentAnswer => ({
+    size: chosen,
+    shape,
+    // Only a size the catalogue cannot frame is offered, and only while the
+    // offer stands: a matching lens needs nothing written.
+    ...(matchedLens === undefined && saveRatio
+      ? { savePreviewRatio: ratioToken }
+      : {}),
+  });
 
   return (
     <Dialog
@@ -183,7 +224,9 @@ export function NewDocumentChooser({
               <ControlSelect
                 label={uiCopy.panels.orientation}
                 data={{ "data-yunari-new-document-orientation": "" }}
-                value={preset?.orientation ?? CUSTOM}
+                // Read off the size, not the preset: typed numbers have an
+                // orientation even where they have no preset to read it from.
+                value={artboardOrientation(chosen)}
                 options={orientationOptions()}
                 onChange={(id) => derive("orientation", id)}
               />
@@ -251,6 +294,26 @@ export function NewDocumentChooser({
             {`${chosen.width} × ${chosen.height}`}
           </output>
         </div>
+        {/* How the theme will be framed in the display menu, and the one offer
+            this dialog makes: a size no stored ratio expresses can be added to
+            the catalogue, so the camera frames it exactly instead of through
+            the nearest lens somebody else chose. */}
+        {matchedLens === undefined ? (
+          <ControlToggle
+            label={copy.previewRatioAdd(ratioToken)}
+            data={{ "data-yunari-new-document-save-ratio": "" }}
+            density="settings"
+            checked={saveRatio}
+            onChange={setSaveRatio}
+          />
+        ) : (
+          <p
+            data-yunari-new-document-preview-ratio=""
+            className="m-0 text-xs text-muted"
+          >
+            {copy.previewRatioMatched(matchedLens.id)}
+          </p>
+        )}
         <div className="yunari-dialog-actions">
           <button
             type="button"
@@ -292,13 +355,12 @@ function ratioOptions(): readonly ControlOption[] {
 }
 
 function orientationOptions(): readonly ControlOption[] {
-  return [
-    ...ARTBOARD_ORIENTATIONS.map((id) => ({
-      id,
-      name: uiCopy.artboardOrientations[id],
-    })),
-    CUSTOM_READING,
-  ];
+  // No Custom entry: orientation is read off the numbers, so there is no size
+  // whose orientation is unnamed.
+  return ARTBOARD_ORIENTATIONS.map((id) => ({
+    id,
+    name: uiCopy.artboardOrientations[id],
+  }));
 }
 
 function resolutionOptions(): readonly ControlOption[] {

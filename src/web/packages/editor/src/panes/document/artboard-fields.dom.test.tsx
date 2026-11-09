@@ -236,3 +236,24 @@ it("has no native select left in the pane", async () => {
   expect(host.querySelectorAll("select")).toHaveLength(0);
   expect(host.querySelectorAll('input[type="range"]')).toHaveLength(0);
 });
+
+it("reads the orientation off the size, including a size no preset names", async () => {
+  // The orientation is a fact of the numbers, not a preset's answer: a board
+  // the preset table cannot name still has one, and the control says so rather
+  // than falling back to a Custom reading that means "unknown".
+  const { host } = await mount();
+  const orientation = (): string =>
+    host
+      .querySelector("[data-yunari-artboard-orientation] [data-yunari-value]")
+      ?.getAttribute("data-yunari-value") ?? "";
+
+  await draw({ width: 1280, height: 720 });
+  expect(orientation()).toBe("landscape");
+
+  await draw({ width: 720, height: 1280 });
+  expect(orientation()).toBe("portrait");
+
+  // 1000 × 1000 is no preset; a square reads landscape, per `artboardOrientation`.
+  await draw({ width: 1000, height: 1000 });
+  expect(orientation()).toBe("landscape");
+});

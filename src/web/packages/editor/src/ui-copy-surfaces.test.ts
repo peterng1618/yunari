@@ -99,6 +99,7 @@ it("leaves the React surfaces with no copy of their own", async () => {
         !owned.has(text) &&
         !isStoredName(text) &&
         !isLensId(text) &&
+        !isPreviewRatioSentence(text) &&
         !isShortcutWord(text) &&
         !isPreviewRemoveLabel(text),
     ),
@@ -141,6 +142,7 @@ it("reads the Settings tabs and the canvas context menu", async () => {
           !isShortcutWord(text) &&
           !isStoredName(text) &&
           !isLensId(text) &&
+          !isPreviewRatioSentence(text) &&
           !isPreviewRemoveLabel(text),
       ),
       tab,
@@ -176,7 +178,11 @@ it("reads the Settings tabs and the canvas context menu", async () => {
   expect(spoken).not.toEqual([]);
   expect(
     spoken.filter(
-      (text) => !owned.has(text) && !isStoredName(text) && !isLensId(text),
+      (text) =>
+        !owned.has(text) &&
+        !isStoredName(text) &&
+        !isLensId(text) &&
+        !isPreviewRatioSentence(text),
     ),
   ).toEqual([]);
   await act(async () => menuRoot.unmount());
@@ -211,6 +217,7 @@ it("reads the shortcut sheet, the publish popover and the two dialogs", async ()
           !owned.has(text) &&
           !isStoredName(text) &&
           !isLensId(text) &&
+          !isPreviewRatioSentence(text) &&
           !isShortcutWord(text) &&
           !isOwnedChordTooltip(text, owned),
       ),
@@ -338,7 +345,11 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     expect(said, "the store mode said nothing at all").not.toEqual([]);
     expect(
       said.filter(
-        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+        (text) =>
+          !owned.has(text) &&
+          !isItemWord(text) &&
+          !isLensId(text) &&
+          !isPreviewRatioSentence(text),
       ),
       "the store region",
     ).toEqual([]);
@@ -362,6 +373,7 @@ it("reads the store mode's words, which the editor's walk never reached", async 
           !owned.has(text) &&
           !isItemWord(text) &&
           !isLensId(text) &&
+          !isPreviewRatioSentence(text) &&
           !isOwnedChordTooltip(text, owned),
       ),
       "the item's own surface",
@@ -385,7 +397,11 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     ).toContain(uiCopy.store.facets.shapeGroups.orientation);
     expect(
       opened.filter(
-        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+        (text) =>
+          !owned.has(text) &&
+          !isItemWord(text) &&
+          !isLensId(text) &&
+          !isPreviewRatioSentence(text),
       ),
       "the Shape popover",
     ).toEqual([]);
@@ -401,7 +417,11 @@ it("reads the store mode's words, which the editor's walk never reached", async 
     expect(said, "an empty library said nothing").not.toEqual([]);
     expect(
       said.filter(
-        (text) => !owned.has(text) && !isItemWord(text) && !isLensId(text),
+        (text) =>
+          !owned.has(text) &&
+          !isItemWord(text) &&
+          !isLensId(text) &&
+          !isPreviewRatioSentence(text),
       ),
       "the empty library",
     ).toEqual([]);
@@ -599,6 +619,16 @@ function isStoredName(text: string): boolean {
  *  ratio added in Settings must need no copy change. */
 function isLensId(text: string): boolean {
   return activePreviewLenses().some((lens) => lens.id === text);
+}
+
+/** The chooser's matched-ratio line — `Preview ratio: 16:9` — is the table's
+ *  concept followed by the catalogue's own id, so it is owned by its prefix and
+ *  the author's list. The offer's sentence (`Add 24:25 to preview ratios`) is
+ *  not read here: the walk mounts the dialog on its opening size, which the
+ *  default catalogue frames, so the offer is not drawn. */
+function isPreviewRatioSentence(text: string): boolean {
+  const prefix = uiCopy.newDocument.previewRatioMatched("");
+  return text.startsWith(prefix) && isLensId(text.slice(prefix.length));
 }
 
 /** A preview row's Remove control is the copy word followed by the lens ids

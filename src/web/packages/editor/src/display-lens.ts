@@ -1,5 +1,8 @@
 import type { ArtboardShape } from "@yunari/renderer-core";
-import type { ArtboardOrientation } from "@yunari/theme-kit";
+import {
+  type ArtboardOrientation,
+  artboardOrientation,
+} from "@yunari/theme-kit";
 
 /**
  * The preview ratios an author can look through: a stored list of `W:H` tokens
@@ -340,8 +343,83 @@ export function nearestPreviewLens(artboard: {
   return best;
 }
 
-export type DisplayLensGroupKind = "landscape" | "square" | "portrait";
+/**
+ * The catalogue lens that frames this artboard exactly, or `undefined` when no
+ * stored ratio expresses it.
+ *
+ * Exactness is the aspect, not the token's spelling: `16:10` and `8:5` are one
+ * frame, and a portrait artboard is framed by the landscape token it is the
+ * turned twin of. A circle artboard matches `Circle` and no rect, for the
+ * reason `nearestPreviewLens` gives — a disc is not a 1:1 rect.
+ */
+export function matchingPreviewLens(size: {
+  readonly width: number;
+  readonly height: number;
+  readonly shape?: ArtboardShape;
+}): DisplayLens | undefined {
+  if (!(size.width > 0) || !(size.height > 0)) return undefined;
+  const shape: PreviewShape = size.shape === "circle" ? "circle" : "rect";
+  const key = longOverShort(size.width, size.height);
+  const matches: DisplayLens[] = [];
+  for (const lens of active) {
+    if (lens.shape !== shape) continue;
+    if (shape === "rect") {
+      if (Math.abs(longOverShort(lens.aspect, 1) - key) > key * 1e-9) continue;
+    }
+    matches.push(lens);
+  }
+  // A ratio and its turned twin share an aspect, so the catalogue offers both.
+  // The one that names this board the way up it is drawn wins.
+  const orientation = artboardOrientation(size);
+  return matches.find((lens) => lens.orientation === orientation) ?? matches[0];
+}
 
+/** The `W:H` token the catalogue would spell this artboard with, in lowest
+ *  terms so a 1920 × 1080 board is offered as `16:9` rather than as its
+ *  resolution. A circle's ratio is the disc, which the catalogue spells
+ *  `Circle`. */
+export function previewRatioTokenFor(size: {
+  readonly width: number;
+  readonly height: number;
+  readonly shape?: ArtboardShape;
+}): string {
+  if (size.shape === "circle") return "Circle";
+  const width = Math.round(size.width);
+  const height = Math.round(size.height);
+  const divisor = greatestCommonDivisor(width, height);
+  return `${width / divisor}:${height / divisor}`;
+}
+
+/** Adds a ratio the catalogue does not already express and makes it live. The
+ *  store is written first and the live list after it, as the previews page
+ *  writes: a refused store still leaves this session's list changed. */
+export function addPreviewRatioToken(
+  token: string,
+  storage: Storage | undefined,
+): void {
+  const tokenId = parsePreviewRatio(token).id;
+  const next = sortPreviewTokens([...activeTokens, tokenId]);
+  writePreviewRatioTokens(storage, next);
+  setActivePreviewRatios(next);
+}
+
+/** Long over short, the one form that ignores which way up a rect sits. */
+function longOverShort(a: number, b: number): number {
+  return Math.max(a, b) / Math.min(a, b);
+}
+
+function greatestCommonDivisor(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y > 0) {
+    const rest = x % y;
+    x = y;
+    y = rest;
+  }
+  return x === 0 ? 1 : x;
+}
+
+export type DisplayLensGroupKind = "landscape" | "square" | "portrait";
 interface DisplayLensGroup {
   readonly kind: DisplayLensGroupKind;
   readonly lenses: readonly DisplayLens[];

@@ -23,6 +23,7 @@ import { createShellLayout, readStorage } from "./editor-shell/shell-layout.js";
 import { mountEditorShell } from "./editor-shell.js";
 import "./editor-shell/editor-shell.css";
 import { type BootThemeOutcome, bootTheme } from "./boot-theme.js";
+import { addPreviewRatioToken } from "./display-lens.js";
 import { confirmDraftRecovery } from "./draft-recovery-prompt.js";
 import {
   bindDraftAutosave,
@@ -328,6 +329,11 @@ async function start(): Promise<void> {
       sensors,
       onBindingsChange: replaceSource,
       onNew: async (answer: NewDocumentAnswer) => {
+        // Before the mount: the camera reads the catalogue the moment the new
+        // document is shown, so a ratio added afterwards would not frame it.
+        if (answer.savePreviewRatio !== undefined) {
+          addPreviewRatioToken(answer.savePreviewRatio, readStorage());
+        }
         const fresh = createBlankFabricTheme({
           ...answer.size,
           ...(answer.shape === "circle" ? { shape: "circle" as const } : {}),

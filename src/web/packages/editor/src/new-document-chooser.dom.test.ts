@@ -285,6 +285,9 @@ describe("the new-document chooser", () => {
     await expect(pending).resolves.toEqual({
       size: { width: 1920, height: 2000 },
       shape: "rect",
+      // 24:25 is no stored lens, so the chooser's offer travels with the answer:
+      // adding it is what makes the camera frame this board exactly.
+      savePreviewRatio: "24:25",
     });
   });
 
@@ -301,12 +304,13 @@ describe("the new-document chooser", () => {
     await type("width", "3000");
     await type("height", "3000");
 
-    // The controls stop claiming a preset the document is not at.
+    // The controls stop claiming a preset the document is not at — except
+    // orientation, which the numbers always name: a square reads landscape.
     expect({
       ratio: read("ratio"),
       orientation: read("orientation"),
       resolution: read("resolution"),
-    }).toEqual({ ratio: "", orientation: "", resolution: "" });
+    }).toEqual({ ratio: "", orientation: "landscape", resolution: "" });
 
     await chooseIn("resolution", "4k");
     expect(size(), "the author's own size is still on screen").toContain(
@@ -333,9 +337,77 @@ describe("the new-document chooser", () => {
     // it would either do nothing or strand them on a value that derives nothing.
     void open();
 
-    for (const marker of ["ratio", "orientation", "resolution"]) {
+    for (const marker of ["ratio", "resolution"]) {
       expect(await optionDisabled(marker, ""), `${marker}'s Custom`).toBe(true);
     }
+    // Orientation has no unnamed reading to offer: it is read off the numbers,
+    // so every size has one of the two.
+    expect(await optionIds("orientation")).toEqual(["landscape", "portrait"]);
+  });
+
+  it("reads the orientation off the typed numbers, and turns the board", async () => {
+    void open();
+    await type("width", "2000");
+    await type("height", "3000");
+
+    expect(read("orientation"), "a portrait size does not read portrait").toBe(
+      "portrait",
+    );
+
+    // The other orientation is a turn, not a refusal: the board keeps its
+    // numbers and swaps the edges.
+    await chooseIn("orientation", "landscape");
+    expect(size()).toContain("3000 × 2000");
+    expect(read("orientation")).toBe("landscape");
+  });
+
+  it("names the stored lens that frames the size, and offers to add one that does not exist", async () => {
+    const first = open();
+    // 16:9 is in the default catalogue, so the theme will be framed through it
+    // and there is nothing to add.
+    expect(
+      document.querySelector("[data-yunari-new-document-preview-ratio]")
+        ?.textContent,
+    ).toContain("16:9");
+    expect(
+      document.querySelector("[data-yunari-new-document-save-ratio]"),
+    ).toBeNull();
+
+    create();
+    await expect(first).resolves.toEqual({
+      size: { width: 1920, height: 1080 },
+      shape: "rect",
+    });
+    await act(async () => {
+      document.body.replaceChildren();
+    });
+
+    // 1920 × 2000 reduces to 24:25, which no default lens frames.
+    const second = open();
+    await type("width", "1920");
+    await type("height", "2000");
+    const offer = document.querySelector<HTMLElement>(
+      "[data-yunari-new-document-save-ratio]",
+    );
+    expect(
+      offer?.getAttribute("aria-checked"),
+      "the offer does not start accepted",
+    ).toBe("true");
+    expect(
+      document.querySelector(`label[for="${offer?.id ?? ""}"]`)?.textContent,
+    ).toContain("24:25");
+
+    // Declining it leaves the catalogue alone: the answer carries no ratio the
+    // author did not ask for.
+    await act(async () => {
+      offer?.click();
+    });
+    expect(offer?.getAttribute("aria-checked")).toBe("false");
+    create();
+    await expect(second).resolves.toEqual({
+      size: { width: 1920, height: 2000 },
+      shape: "rect",
+    });
   });
 
   it("cancels to no choice and closes, so a New pressed by accident changes nothing", async () => {

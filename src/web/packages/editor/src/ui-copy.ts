@@ -1108,6 +1108,13 @@ export const uiCopy = {
     /** The authored canvas's outline, distinct from the ratio: a circle is
      *  drawn on a square artboard rather than being one. */
     shape: "Shape",
+    /** The catalogue ratio that frames this size exactly — the lens the
+     *  display menu will open on, named so the author is not surprised. */
+    previewRatioMatched: (ratio: string): string => `Preview ratio: ${ratio}`,
+    /** The offer a size no stored ratio expresses gets: adding it is what makes
+     *  the camera frame the theme exactly rather than through the nearest lens. */
+    previewRatioAdd: (ratio: string): string =>
+      `Add ${ratio} to preview ratios`,
     create: "Create",
     cancel: "Cancel",
   },

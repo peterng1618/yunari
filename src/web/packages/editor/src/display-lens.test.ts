@@ -2,15 +2,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   activePreviewLenses,
   activePreviewRatioTokens,
+  addPreviewRatioToken,
   DEFAULT_PREVIEW_RATIO_TOKENS,
   displayLensGroups,
   lensBox,
+  matchingPreviewLens,
   nearestPreviewLens,
   normalisePreviewRatioTokens,
   parsePreviewRatio,
   previewCatalogueKey,
   previewLenses,
   previewRatioKey,
+  previewRatioTokenFor,
   readPreviewRatioTokens,
   resolveLens,
   screenRect,
@@ -300,4 +303,67 @@ describe("the window rect refuses an impossible aspect", () => {
         RangeError,
       ),
   );
+});
+
+describe("the catalogue's answer for a new theme's size", () => {
+  const DEFAULT_TOKENS = DEFAULT_PREVIEW_RATIO_TOKENS;
+
+  it("spells a size's ratio in lowest terms, and a circle as the disc", () => {
+    expect(previewRatioTokenFor({ width: 1920, height: 1080 })).toBe("16:9");
+    expect(previewRatioTokenFor({ width: 1080, height: 1920 })).toBe("9:16");
+    expect(previewRatioTokenFor({ width: 1920, height: 2000 })).toBe("24:25");
+    expect(
+      previewRatioTokenFor({ width: 1080, height: 1080, shape: "circle" }),
+    ).toBe("Circle");
+  });
+
+  it("matches a stored lens by aspect, and names the one this way up", () => {
+    setActivePreviewRatios(DEFAULT_TOKENS);
+
+    expect(matchingPreviewLens({ width: 1920, height: 1080 })?.id).toBe("16:9");
+    // The turned twin is the lens that names a portrait board, not the
+    // landscape token it shares an aspect with.
+    expect(matchingPreviewLens({ width: 1080, height: 1920 })?.id).toBe("9:16");
+    // `16:10` and `8:5` are one frame.
+    setActivePreviewRatios([...DEFAULT_TOKENS, "8:5"]);
+    expect(matchingPreviewLens({ width: 1920, height: 1200 })?.id).toBe("8:5");
+    // A disc is not a 1:1 rect.
+    expect(
+      matchingPreviewLens({ width: 1080, height: 1080, shape: "circle" })?.id,
+    ).toBe("Circle");
+    expect(matchingPreviewLens({ width: 1920, height: 2000 })).toBeUndefined();
+  });
+
+  it("adds a ratio to the stored list and the live catalogue", () => {
+    const written: string[] = [];
+    const storage = {
+      getItem: () => null,
+      setItem: (_key: string, value: string) => {
+        written.push(value);
+      },
+      removeItem: () => {},
+    } as unknown as Storage;
+    setActivePreviewRatios(DEFAULT_TOKENS);
+
+    addPreviewRatioToken("8:5", storage);
+
+    expect(activePreviewRatioTokens()).toContain("8:5");
+    expect(written).toHaveLength(1);
+    expect(JSON.parse(written[0] ?? "[]")).toContain("8:5");
+  });
+
+  it("keeps the session's list when the store refuses the write", () => {
+    const refusing = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota");
+      },
+      removeItem: () => {},
+    } as unknown as Storage;
+    setActivePreviewRatios(DEFAULT_TOKENS);
+
+    addPreviewRatioToken("8:5", refusing);
+
+    expect(activePreviewRatioTokens()).toContain("8:5");
+  });
 });
