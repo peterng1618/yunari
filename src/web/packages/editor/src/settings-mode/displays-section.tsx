@@ -133,7 +133,7 @@ export function DisplaysList(props: {
                         <>
                           <span
                             data-yunari-host-display-theme=""
-                            className={`text-xs ${own === null ? "text-faint" : "text-muted"}`}
+                            className={`min-w-0 truncate text-xs ${own === null ? "text-faint" : "text-muted"}`}
                           >
                             {shown === null
                               ? copy.nothing

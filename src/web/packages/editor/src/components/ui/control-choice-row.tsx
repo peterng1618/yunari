@@ -53,7 +53,8 @@ export function ControlChoiceRow(
      * A fact about the choice, drawn after its name and right-aligned — what the
      * display shows, or where that answer came from. The name keeps the row's
      * left edge, because the name is what the member *is*; the detail is what
-     * choosing it would tell the author.
+     * choosing it would tell the author. The two share the row's width as equal
+     * columns, each ellipsised, so a long name cannot wrap the row.
      */
     readonly detail?: React.ReactNode;
   },
@@ -112,10 +113,13 @@ export function ControlChoiceRow(
         {shape === "chip" ? null : detail === undefined ? (
           label
         ) : (
-          <span className="min-w-0 flex-1">{label}</span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
         )}
         {detail === undefined ? null : (
-          <span className="flex flex-none items-center gap-[var(--space-8)]">
+          // The other half of the row's two columns: an equal share of the
+          // width, right-aligned, so a long name on either side ellipsises
+          // instead of pushing the other one onto a second line.
+          <span className="flex min-w-0 flex-1 items-center justify-end gap-[var(--space-8)]">
             {detail}
           </span>
         )}
