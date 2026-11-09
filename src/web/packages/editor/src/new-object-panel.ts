@@ -119,27 +119,23 @@ export interface InsertGroup {
 }
 
 /**
- * Everything an author can insert, grouped as the Add pane shows it. **The one
+ * Everything the Add pane inserts: the primitives and the charts. **The one
  * owner of that list:** the pane's fieldsets and the canvas context menu both
  * render this, because two lists that must agree and do not is how a panel —
  * the object this composition is mostly made of — came to be missing from one
  * surface while the other had it.
  *
- * **Units and primitives are both here, and neither is a fallback for the
- * other.** The card library is the fast path for the common case and the
- * primitives are the tool for the case nobody anticipated, which is the case
- * this product is for (§77, §139). Dropping either is a decision, not a
- * simplification — the test that pins both sections is what makes it one.
+ * **The bundled widgets are not here.** They are `widgetGroups()`, and the
+ * Widgets pane is their surface: the card library is expected to keep growing
+ * with packs, and a catalogue that grows inside another pane's fieldset competes
+ * with the primitives the author reaches for to draw something the library does
+ * not have. Neither list is a fallback for the other (§77, §139); the
+ * primitives are the tool for the case nobody anticipated, and both stay
+ * reachable from the canvas context menu.
  */
 export function insertGroups(): readonly InsertGroup[] {
   const removed = activeRemovedPathPresetIds();
   const objects: readonly InsertableObject[] = [
-    ...activeWidgetUnits().map((unit) => ({
-      kind: "card" as const,
-      label: unit.label,
-      card: unit.id,
-      diagram: unit.diagram,
-    })),
     { kind: "text", label: uiCopy.panels.text },
     { kind: "text", label: uiCopy.panels.verticalText, vertical: true },
     ...SHAPE_KINDS.map((shape) => ({
@@ -168,6 +164,33 @@ export function insertGroups(): readonly InsertGroup[] {
     })),
   ];
 
+  return groupsOf(objects);
+}
+
+/**
+ * The installed widget units, grouped as the Widgets pane shows them. **The one
+ * owner of that list:** the pane and the canvas context menu both render it, so
+ * a unit a pack installs appears on both surfaces the day it is installed, and a
+ * surface cannot hold a stale copy of the library.
+ *
+ * The units come from the host through `activeWidgetUnits()`, which is also what
+ * the pane's title bar counts — the count and the tiles are one list.
+ */
+export function widgetGroups(): readonly InsertGroup[] {
+  return groupsOf(
+    activeWidgetUnits().map((unit) => ({
+      kind: "card" as const,
+      label: unit.label,
+      card: unit.id,
+      diagram: unit.diagram,
+    })),
+  );
+}
+
+/** One heading's worth per run of the same kind, in the order given. */
+function groupsOf(
+  objects: readonly InsertableObject[],
+): readonly InsertGroup[] {
   const groups: InsertGroup[] = [];
   for (const object of objects) {
     const id = groupIdOf(object);
@@ -390,6 +413,10 @@ export function createNewObjectPanel(
   editor: EditorInteraction,
   globals: FabricGlobals | undefined,
   actions?: NewObjectActions,
+  /** What the pane offers. The Add pane takes the default; the Widgets pane
+   *  passes `widgetGroups`, so one component draws both panes and neither
+   *  holds a private copy of the other's list. */
+  groups: () => readonly InsertGroup[] = insertGroups,
 ): NewObjectPanel {
   // Read at construction time rather than captured by the render, so a theme
   // edit that arrives through `setGlobals` reaches the next insertion — the
@@ -406,7 +433,7 @@ export function createNewObjectPanel(
   const render = (): void => {
     reactRoot.render(
       createElement(AddPane, {
-        groups: insertGroups(),
+        groups: groups(),
         onInsert: (object) =>
           insertObject(editor, current.globals, actions, object),
       }),

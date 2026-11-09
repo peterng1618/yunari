@@ -35,7 +35,7 @@ import { createEditorShellBridge } from "./editor-shell/bridge.js";
 import { CanvasContextMenu } from "./editor-shell/canvas-context-menu.js";
 import { createErrorManager } from "./error-manager/index.js";
 import { createBlankFabricTheme } from "./new-fabric-theme.js";
-import { createNewObjectPanel } from "./new-object-panel.js";
+import { createNewObjectPanel, widgetGroups } from "./new-object-panel.js";
 import { idleCrop } from "./selection-inspector/idle-crop.test-stage.js";
 import { installStarterUnits } from "./testing/widget-units.js";
 import type { TextPlacementPort } from "./text-manager/index.js";
@@ -167,6 +167,7 @@ function wiredSession(envelope: typeof BLANK = BLANK): Wired {
     envelope,
     panelHosts: {
       add: document.body,
+      widgets: document.body,
       assets: document.body,
       tokens: document.body,
       document: document.body,
@@ -206,7 +207,7 @@ beforeEach(() => {
  * below through the same two surfaces an author can reach.
  */
 describe("a card a theme with its own vocabulary cannot name", () => {
-  it("is inserted and mapped, and the author is told, from the Add pane", async () => {
+  it("is inserted and mapped, and the author is told, from the widgets pane", async () => {
     const { session, errors, canvas } = wiredSession();
     const panel = createNewObjectPanel(
       document.body,
@@ -220,6 +221,7 @@ describe("a card a theme with its own vocabulary cannot name", () => {
         addChart: vi.fn(),
         insertCard: (cardId) => session.actionFacade().insertCard(cardId),
       },
+      widgetGroups,
     );
 
     const cpu = [...panel.root.querySelectorAll("button")].find(
@@ -272,9 +274,9 @@ describe("a card a theme with its own vocabulary cannot name", () => {
   });
 });
 
-/* ---- what the pane does with a construction it cannot reach ---- */
+/* ---- what a pane does with a construction it cannot reach ---- */
 
-describe("an insert the Add pane cannot reach its owner for", () => {
+describe("an insert a pane cannot reach its owner for", () => {
   it("says so, whichever kind it is, rather than swallowing the click", async () => {
     const { canvas, errors } = wiredSession();
     // **A mis-wired pane, not an empty one.** `actions` is absent: the state a
@@ -289,17 +291,26 @@ describe("an insert the Add pane cannot reach its owner for", () => {
     // The state the header's Insert menu was gated on is a different one: before
     // a document is open, this pane's host element is empty, so there is no row
     // to offer at all.
-    const panel = createNewObjectPanel(
+    // Two panes, because the card library and the primitives no longer share
+    // one: each must report its own unreachable owner.
+    const library = createNewObjectPanel(
+      document.body,
+      editorOf(canvas, errors),
+      undefined,
+      undefined,
+      widgetGroups,
+    );
+    const primitives = createNewObjectPanel(
       document.body,
       editorOf(canvas, errors),
       undefined,
     );
 
-    // Scoped to this panel: `wiredSession()` builds the session's own Add pane
-    // into `document.body` as well, and that one is wired.
-    buttonUnder(panel.root, uiCopy.panels.cards)?.click();
+    // Scoped to these panels: `wiredSession()` builds the session's own panes
+    // into `document.body` as well, and those are wired.
+    buttonUnder(library.root, uiCopy.panels.cards)?.click();
     await flush();
-    buttonUnder(panel.root, uiCopy.panels.charts)?.click();
+    buttonUnder(primitives.root, uiCopy.panels.charts)?.click();
     await flush();
 
     // Both, because they used to differ: the card path refused by name and the

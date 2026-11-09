@@ -329,6 +329,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -437,6 +438,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -510,6 +512,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -569,6 +572,7 @@ describe("EditorSession", () => {
         envelope,
         panelHosts: {
           add: document.body,
+          widgets: document.body,
           assets: document.body,
           document: document.body,
           tokens: document.body,
@@ -633,6 +637,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -696,6 +701,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -759,6 +765,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -834,6 +841,7 @@ describe("EditorSession", () => {
         envelope,
         panelHosts: {
           add: document.body,
+          widgets: document.body,
           assets: document.body,
           document: document.body,
           tokens: document.body,
@@ -949,6 +957,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1039,6 +1048,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1130,6 +1140,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1215,6 +1226,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1275,6 +1287,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1368,6 +1381,7 @@ describe("EditorSession", () => {
       envelope: { ...envelope, globals: { typeTokens: presets("Inter") } },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: documentHost,
         tokens: document.body,
@@ -1467,6 +1481,7 @@ describe("EditorSession", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1596,6 +1611,7 @@ describe("EditorSession", () => {
       },
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1758,6 +1774,7 @@ describe("EditorSession", () => {
       thumbnail,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -1834,6 +1851,7 @@ describe("opening a theme over a document that has unsaved changes", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -2089,6 +2107,7 @@ describe("a save the host refused", () => {
 
   const panelHosts = {
     add: document.body,
+    widgets: document.body,
     assets: document.body,
     document: document.body,
     tokens: document.body,
@@ -2460,6 +2479,7 @@ describe("a save that carries only what changed", () => {
 
   const panelHosts = {
     add: document.body,
+    widgets: document.body,
     assets: document.body,
     document: document.body,
     tokens: document.body,
@@ -2747,6 +2767,7 @@ describe("the Wallpaper Engine import transaction", () => {
       envelope: initial,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -3338,6 +3359,7 @@ describe("the local font import", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -3683,6 +3705,7 @@ describe("arming a text placement from every surface", () => {
       envelope: theme,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,
@@ -3858,6 +3881,7 @@ describe("the session's disposal", () => {
       envelope,
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets,
         document: document.body,
         tokens: document.body,
@@ -3949,6 +3973,7 @@ describe("the Assets pane background action", () => {
       ...(backgroundMedia === undefined ? {} : { backgroundMedia }),
       panelHosts: {
         add: document.body,
+        widgets: document.body,
         assets: document.body,
         document: document.body,
         tokens: document.body,

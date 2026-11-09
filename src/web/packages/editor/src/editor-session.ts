@@ -50,7 +50,9 @@ import {
   constructing,
   createNewObjectPanel,
   insertNewText,
+  type NewObjectActions,
   type NewObjectPanel,
+  widgetGroups,
 } from "./new-object-panel.js";
 import {
   createPalettePanel,
@@ -88,6 +90,9 @@ export class EditorSession {
   readonly #palette: PalettePanel;
   readonly #types: TypeTokenPanel;
   readonly #newObjects: NewObjectPanel;
+  /** The card library's own pane. A second instance of the same panel, over
+   *  `widgetGroups` rather than the primitives. */
+  readonly #widgets: NewObjectPanel;
   readonly #assetsPanel: { destroy(): void };
   readonly #selection: SelectionInspector;
   /** The selected token's own column, a sibling section of the object
@@ -457,15 +462,26 @@ export class EditorSession {
     options.shell.editor.textManager.setMentions(
       createMentionPort(this.#document, descriptors, measured),
     );
+    // One set of actions over one insertion path: the two panes differ in the
+    // list they render, not in what a tile does, so a refusal or a
+    // placement gesture cannot behave differently between them.
+    const newObjectActions: NewObjectActions = {
+      addText: (vertical) => this.#armText(vertical),
+      addChart: (family) => this.charts.addChart(family),
+      insertCard: (cardId) => this.#document.insertCard(cardId),
+    };
     this.#newObjects = createNewObjectPanel(
       options.panelHosts.add,
       options.shell.editor,
       this.#document.envelope.globals,
-      {
-        addText: (vertical) => this.#armText(vertical),
-        addChart: (family) => this.charts.addChart(family),
-        insertCard: (cardId) => this.#document.insertCard(cardId),
-      },
+      newObjectActions,
+    );
+    this.#widgets = createNewObjectPanel(
+      options.panelHosts.widgets,
+      options.shell.editor,
+      this.#document.envelope.globals,
+      newObjectActions,
+      widgetGroups,
     );
     this.#assetsPanel = createAssetsPane(options.panelHosts.assets, {
       manager: this.#assets,
@@ -737,6 +753,7 @@ export class EditorSession {
     this.#palette.destroy();
     this.#types.destroy();
     this.#newObjects.destroy();
+    this.#widgets.destroy();
     this.#assetsPanel.destroy();
     this.#snapping.destroy();
     this.#indicators.destroy();

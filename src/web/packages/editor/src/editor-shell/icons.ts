@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
+  Blocks,
   ChartColumn,
   ChartLine,
   ChartNoAxesCombined,
@@ -219,6 +220,10 @@ export const PLUS_GLYPH: LucideIcon = Plus;
  *  reads as a glyph; the camera cluster keeps `PLUS_GLYPH`, because there the
  *  plus is a zoom step and shares the toolbar's stroke weight with `MINUS`. */
 export const ADD_GLYPH: LucideIcon = CirclePlus;
+/** The Widgets slot: the bundled card units, drawn as the blocks they are
+ *  assembled from — a unit is a package of parts, not one of the primitives
+ *  beside it. */
+export const WIDGETS_GLYPH: LucideIcon = Blocks;
 /** The Assets slot: the declared files as one open collection, rather than the
  *  store's `Folder` for opening a single item. */
 export const ASSETS_GLYPH: LucideIcon = FolderOpen;
@@ -411,6 +416,7 @@ export const CLOSE_GLYPH: LucideIcon = X;
 export const RAIL_GLYPHS: Readonly<Record<RailSlot, LucideIcon>> = {
   composition: STACK_GLYPH,
   add: ADD_GLYPH,
+  widgets: WIDGETS_GLYPH,
   assets: ASSETS_GLYPH,
   tokens: PALETTE_GLYPH,
   document: PAGE_GLYPH,

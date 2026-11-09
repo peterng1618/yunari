@@ -33,7 +33,7 @@ import type * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it } from "vitest";
-import { insertGroups } from "../new-object-panel.js";
+import { insertGroups, widgetGroups } from "../new-object-panel.js";
 import { AddPane } from "../panes/add/add-pane.js";
 import { KindMark } from "../panes/composition/kind-mark.js";
 import { RowAffordances } from "../panes/composition/row-affordances.js";
@@ -192,6 +192,7 @@ const VOCABULARY: readonly Drawn[] = [
   { icon: LOCK_GLYPH.unlocked.icon, size: 15 },
   { icon: RAIL_GLYPHS.composition, size: 17 },
   { icon: RAIL_GLYPHS.add, size: 17 },
+  { icon: RAIL_GLYPHS.widgets, size: 17 },
   { icon: RAIL_GLYPHS.tokens, size: 17 },
   { icon: RAIL_GLYPHS.document, size: 17 },
   { icon: TWISTY_GLYPHS.collapsed, size: 13 },
@@ -270,7 +271,10 @@ function Fleet(): React.JSX.Element {
       {MARKS.map((mark) => (
         <KindMark key={mark.kind} mark={mark} />
       ))}
-      <AddPane groups={insertGroups()} onInsert={() => {}} />
+      <AddPane
+        groups={[...insertGroups(), ...widgetGroups()]}
+        onInsert={() => {}}
+      />
     </>
   );
 }
@@ -411,7 +415,9 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
   // object added there arrives in this case the day it is added. Three of the
   // four kinds are `LayerKind`s the case above closes; a card lands as a group,
   // which wears the same stack glyph.
-  const offered = insertGroups().flatMap((group) => group.objects);
+  const offered = [...insertGroups(), ...widgetGroups()].flatMap(
+    (group) => group.objects,
+  );
   // A count over nothing would pass for the wrong reason.
   expect(offered.length).toBeGreaterThan(0);
 
@@ -420,7 +426,12 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
   const root = createRoot(host);
   mounted.push(root);
   act(() =>
-    root.render(<AddPane groups={insertGroups()} onInsert={() => {}} />),
+    root.render(
+      <AddPane
+        groups={[...insertGroups(), ...widgetGroups()]}
+        onInsert={() => {}}
+      />,
+    ),
   );
 
   const tiles = [...host.querySelectorAll("button")];

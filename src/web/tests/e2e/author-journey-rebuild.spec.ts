@@ -96,6 +96,12 @@ test.describe("the reference composition, built from blank", () => {
       ).toBeGreaterThan(0);
     }
 
+    // The bundled widgets are their own pane, and the first card an author
+    // reaches for is there.
+    await openPane(page, "Widgets");
+    const library = page.locator('[data-yunari-panel="widgets"]');
+    await expect(library.getByRole("group", { name: "Card" })).toBeVisible();
+
     // The blank theme's own inventory is read where it is owned: the palette
     // and the presets are the Tokens pane's two lists, and "populated" is
     // measured rather than assumed. **This read the Document pane's resolved

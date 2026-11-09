@@ -161,7 +161,8 @@ is prose ("three parts") is sans.
 | `--text-xl` | 19px | 1.2 | Empty-state headings |
 
 Uppercase is reserved for **section eyebrows** — Content, Position, Layer,
-Paint, and the group headings in the Add pane. An eyebrow is `--text-2xs`, `600`,
+Paint, and the group headings in the Add and Widgets panes. An eyebrow is
+`--text-2xs`, `600`,
 `letter-spacing: .11em`, muted, and it always labels a region, never a control.
 Nothing else is uppercase: a chord is printed as the platform prints it, and a
 menu row is sentence case.
@@ -254,9 +255,9 @@ already looks, and only the stage changes between the two surfaces.
 ### The header
 
 **Document-level and editor-level actions only.** A command that has a rightful
-home elsewhere is not repeated here — Insert lives in the Add pane, so the
-header has no Insert menu, and Edit lives in the Layers pane's footer
-toolbar, so the header has no Edit menu.
+home elsewhere is not repeated here — Insert lives in the Add and Widgets
+panes, so the header has no Insert menu, and Edit lives in the Layers pane's
+footer toolbar, so the header has no Edit menu.
 
 - Left: brand mark, then the **mode switch**, then one **toolbar** of icon
   buttons in three groups, each divided by a short vertical rule:
@@ -306,12 +307,13 @@ use, so the source choice is the toolbar's own toggle rather than a menu.
 ### The rail
 
 A 46px vertical strip of glyph slots at the window's left edge, with the
-settings gear pinned to the foot. **Five slots:**
+settings gear pinned to the foot. **Six slots:**
 
 | Slot | Glyph | Holds |
 |---|---|---|
 | Layers | stack | The scene tree, and the object actions that act on it |
-| Add | plus | Everything insertable |
+| Add | plus | The text object, the shape primitives and the chart families |
+| Widgets | blocks | The bundled card widgets, as the installed packs declare them |
 | Assets | folder | Every declared file, its import and placement, and the finder link |
 | Tokens | palette | The theme's paints and type tokens — created and edited here |
 | Document | page | Artboard, metadata |
@@ -827,7 +829,7 @@ Rules:
   wrong.
 - **A group gets a generic glyph.** A card on the canvas is an arbitrary group of
   elements, so its row cannot depict it. It gets the stack glyph and its name. A
-  *card unit* in the Add pane is not arbitrary — the card library is a fixed set
+  *card unit* in the Widgets pane is not arbitrary — the card library is a fixed set
   of eight — so its tile wears the unit's own glyph, one per unit, and no two
   units share one.
 - **Destructive actions use `--hot`, never `--accent`.**

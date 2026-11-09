@@ -318,6 +318,7 @@ async function start(): Promise<void> {
       assetManager,
       panelHosts: {
         add: layout.hosts.add,
+        widgets: layout.hosts.widgets,
         assets: layout.hosts.assets,
         tokens: layout.hosts.tokens,
         document: layout.hosts.document,

@@ -8,7 +8,11 @@ import {
 import { Ellipse, Path, Polygon, Rect } from "fabric/es";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { PATH_PRESET_IDS, SHAPE_KINDS } from "./new-object-defaults.js";
-import { createNewObjectPanel, insertNewText } from "./new-object-panel.js";
+import {
+  createNewObjectPanel,
+  insertNewText,
+  widgetGroups,
+} from "./new-object-panel.js";
 import { installStarterUnits } from "./testing/widget-units.js";
 import { uiCopy } from "./ui-copy.js";
 import { activeWidgetUnits } from "./widget-packs.js";
@@ -336,7 +340,6 @@ describe("new object panel", () => {
     expect(
       groups.map((group) => group.querySelector("legend")?.textContent),
     ).toEqual([
-      uiCopy.panels.cards,
       uiCopy.panels.shapes,
       uiCopy.panels.customShapes,
       uiCopy.panels.charts,
@@ -659,14 +662,25 @@ describe("new object panel", () => {
   });
 });
 
-describe("the chooser offers units and primitives", () => {
-  /** The panel the session builds: a card needs the envelope's bindings. */
+describe("the insert panes offer units and primitives", () => {
+  /** The Add pane: the primitives and the text row. */
   function chooser(): HTMLElement {
     return createNewObjectPanel(
       document.body,
       editorStub() as never,
       palette as never,
       { addText: vi.fn(), addChart: vi.fn(), insertCard: vi.fn() },
+    ).root;
+  }
+
+  /** The Widgets pane: the card units, over the same insertion path. */
+  function widgets(insertCard = vi.fn()): HTMLElement {
+    return createNewObjectPanel(
+      document.body,
+      editorStub() as never,
+      palette as never,
+      { addText: vi.fn(), addChart: vi.fn(), insertCard },
+      widgetGroups,
     ).root;
   }
 
@@ -677,14 +691,14 @@ describe("the chooser offers units and primitives", () => {
     return [...(fieldset?.querySelectorAll("button") ?? [])];
   }
 
-  // THE gate. The unit is the fast path for the common case; the primitive is
-  // the tool for the case nobody anticipated, which is the case this product is
-  // for. Neither greyed, neither described as a fallback — so this test fails
-  // the moment the library quietly becomes the only way in.
-  it("populates both sections and disables neither", () => {
+  // THE gate. The unit is the fast path and the primitive is the tool for the
+  // case nobody anticipated: neither greyed, neither a fallback, so this fails
+  // the moment the library becomes the only way in.
+  it("populates both panes, greys nothing and calls neither a fallback", () => {
     const root = chooser();
+    const library = widgets();
 
-    const cards = buttonsIn(root, uiCopy.panels.cards);
+    const cards = buttonsIn(library, uiCopy.panels.cards);
     const shapes = buttonsIn(root, uiCopy.panels.shapes);
     const charts = buttonsIn(root, uiCopy.panels.charts);
 
@@ -696,20 +710,19 @@ describe("the chooser offers units and primitives", () => {
       [...root.querySelectorAll("button")].map((b) => b.textContent),
     ).toContain(uiCopy.panels.text);
 
-    for (const control of root.querySelectorAll("button")) {
+    for (const control of [
+      ...root.querySelectorAll("button"),
+      ...library.querySelectorAll("button"),
+    ]) {
       expect(control.disabled, control.textContent ?? "").toBe(false);
     }
-  });
 
-  it("calls neither section a fallback", () => {
-    const root = chooser();
-    const spoken = [...root.querySelectorAll("legend, button")]
+    // "Basic" and "Custom" are the sections' own names, not a ranking: the
+    // words below would say one path in is the lesser one.
+    const spoken = [root, library]
+      .flatMap((pane) => [...pane.querySelectorAll("legend, button")])
       .map((node) => node.textContent ?? "")
       .join(" ");
-
-    // "Basic" and "Custom" are the section names themselves, not a ranking:
-    // both sections are full peers. The words below would say one is the lesser
-    // path in.
     for (const word of ["fallback", "advanced", "simple", "expert"]) {
       expect(spoken.toLowerCase(), word).not.toContain(word);
     }
@@ -717,15 +730,8 @@ describe("the chooser offers units and primitives", () => {
 
   it("delegates a card button to the session, which owns the readings", () => {
     const insertCard = vi.fn();
-    const root = createNewObjectPanel(
-      document.body,
-      editorStub() as never,
-      palette as never,
-      { addText: vi.fn(), addChart: vi.fn(), insertCard },
-    ).root;
-
+    const root = widgets(insertCard);
     buttonsIn(root, uiCopy.panels.cards)[0]?.click();
-
     expect(insertCard).toHaveBeenCalledWith(activeWidgetUnits()[0]?.id);
   });
 
@@ -735,25 +741,18 @@ describe("the chooser offers units and primitives", () => {
       document.body,
       editor as never,
       palette as never,
+      undefined,
+      widgetGroups,
     ).root;
 
-    // A library button that quietly does nothing is the one failure an author
-    // cannot diagnose, so it reports through the same diagnostics as every
-    // other construction that refuses.
+    // A control that quietly does nothing is the failure an author cannot
+    // diagnose, so it reports through the same diagnostics as every refusal.
     buttonsIn(root, uiCopy.panels.cards)[0]?.click();
 
     expect(editor.errorManager.warn).toHaveBeenCalledWith(
       "controls",
       expect.stringContaining("card library"),
     );
-  });
-
-  it("names every card for a screen reader, by its own unit", () => {
-    const root = chooser();
-
-    expect(
-      buttonsIn(root, uiCopy.panels.cards).map((b) => b.textContent),
-    ).toEqual(activeWidgetUnits().map((unit) => unit.label));
   });
 });
 

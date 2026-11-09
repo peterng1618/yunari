@@ -5,14 +5,15 @@ import { themeToken, typeStep } from "./shell-tokens.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
- * The Add pane, now the one surface the insertable list is reached from.
+ * The Add and Widgets panes, the two surfaces the insertable lists are reached
+ * from: the primitives in Add, the installed card units in Widgets.
  *
- * These two journeys were `insert-popover.spec.ts`'s, carried over when the
+ * These journeys were `insert-popover.spec.ts`'s, carried over when the
  * header's Insert menu and the pane bar's `+` were deleted (the header rule: Insert lives
- * in the Add pane). Neither lost anything by the move — both already drove the
- * pane — and what the deleted file proved is kept: the pane offers the whole
- * `insertGroups()` list, and a card inserted from it arrives as a unit the tree
- * can name.
+ * in the panes). Neither lost anything by the move — both already drove them —
+ * and what the deleted file proved is kept: the panes offer the whole
+ * `insertGroups()` and `widgetGroups()` lists, and a card inserted from them
+ * arrives as a unit the tree can name.
  *
  * The third case came here from the Add pane's deleted file section: local files
  * belong to the Assets pane, so the control it measures is
@@ -30,32 +31,40 @@ function addPane(page: Page): Locator {
   return page.locator('[data-yunari-panel="add"]');
 }
 
-test("the Add pane offers units and primitives, neither greyed, neither a fallback", async ({
+test("the two insert panes offer units and primitives, neither greyed, neither a fallback", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await page.goto(EDITOR);
 
-  // The `+` chooser and the Insert menu both left, so the pane is now the one
-  // surface the insert list is reached from. Its own copy is unchanged: units
-  // and primitives, neither greyed.
+  // The `+` chooser and the Insert menu both left, so the panes are the
+  // surfaces the insert lists are reached from. Their own copy is unchanged:
+  // units and primitives, neither greyed.
   await openPane(page, "Add");
   const pane = addPane(page);
   await expect(pane).toBeVisible();
-  for (const heading of ["Card", "Basic Shape", "Custom Shape", "Chart"]) {
+  for (const heading of ["Basic Shape", "Custom Shape", "Chart"]) {
     await expect(pane.getByRole("group", { name: heading })).toBeVisible();
   }
+  await openPane(page, "Widgets");
+  const library = page.locator('[data-yunari-panel="widgets"]');
+  await expect(library.getByRole("group", { name: "Card" })).toBeVisible();
 
-  // Every control the pane offers is usable, whichever group it comes from.
-  const controls = pane.getByRole("button");
-  await expect(controls).not.toHaveCount(0);
-  for (const item of await controls.all()) {
-    await expect(item).toBeEnabled();
+  // Every control either pane offers is usable, whichever group it comes from.
+  for (const surface of [pane, library]) {
+    const controls = surface.getByRole("button");
+    await expect(controls).not.toHaveCount(0);
+    for (const item of await controls.all()) {
+      await expect(item).toBeEnabled();
+    }
   }
 
   // Neither half is greyed, and neither is described as one.
-  const spoken = await pane.locator("legend, button").allTextContents();
+  const spoken = await page
+    .locator('[data-yunari-panel="add"], [data-yunari-panel="widgets"]')
+    .locator("legend, button")
+    .allTextContents();
   for (const word of REFUSED) {
     expect(spoken.join(" ").toLowerCase()).not.toContain(word);
   }
@@ -92,7 +101,7 @@ test(`the Assets pane's import control takes control text, not the shell's ${the
   );
 });
 
-test("a card inserted from the Add pane arrives as a unit the tree can name", async ({
+test("a card inserted from the Widgets pane arrives as a unit the tree can name", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -108,8 +117,9 @@ test("a card inserted from the Add pane arrives as a unit the tree can name", as
   const clocks = page.locator(".yunari-layer-role", { hasText: "Clock" });
   const before = await clocks.count();
 
-  await openPane(page, "Add");
-  await addPane(page)
+  await openPane(page, "Widgets");
+  await page
+    .locator('[data-yunari-panel="widgets"]')
     .getByRole("button", { name: "Clock", exact: true })
     .click();
 

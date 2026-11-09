@@ -193,8 +193,10 @@ function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
  * directly. */
 interface ShellHosts {
   readonly canvas: HTMLElement;
-  /** The Add pane's body: shapes, text and the card library. */
+  /** The Add pane's body: text and the shape primitives. */
   readonly add: HTMLElement;
+  /** The Widgets pane's body: the installed card units. */
+  readonly widgets: HTMLElement;
   /** The Assets pane: every declared file, its import and placement, and the
       finder link. */
   readonly assets: HTMLElement;
@@ -325,6 +327,7 @@ export function createShellLayout(
   const hosts: ShellHosts = {
     canvas: element(),
     add: element("yunariPanelHostAdd"),
+    widgets: element("yunariPanelHostWidgets"),
     assets: element("yunariPanelHostAssets"),
     tokens: element("yunariPanelHostTokens"),
     document: element("yunariPanelHostDocument"),
@@ -512,7 +515,7 @@ export function createShellLayout(
     /** The box that scrolls, which is the showing pane's **body** and not the
      *  column around it (the overflow rule): the column clips, so its own
      *  `scrollTop` is always 0 and the offset has to come off the body inside
-     *  it. Only the showing pane's body carries this — the other four are
+     *  it. Only the showing pane's body carries this — the other five are
      *  `hidden`, so their bodies are not scrollable boxes at all. */
     const paneBody = useRef<HTMLDivElement | null>(null);
 
@@ -667,22 +670,23 @@ export function createShellLayout(
                 host's content with it. The pane is the one owner of the
                 `data-yunari-panel` name, so the Composition pane's is
                 `layers` — the name the specs and the panel CSS already browse
-                by — and the other four are named for their rail slot. The
-                visible title is the slot's own word, as the other four are;
+                by — and the other five are named for their rail slot. The
+                visible title is the slot's own word, as the other five are;
                 the `layers` name is only the DOM handle.
 
                 **Each title bar carries its own list's count, and the
-                list is named at the mount rather than in the pane.** Four of
-                the five panes are imperative hosts, so no React component
+                list is named at the mount rather than in the pane.** Most of
+                the panes are imperative hosts, so no React component
                 inside one owns its list and the count has to be sourced here.
                 The source of each:
                 - Composition — the scene's objects, through the bridge's own
                   `objectCount`, which the strip reads too. One number, two
                   chrome surfaces, and deliberately not a second spelling of it.
-                - Add — the installed widget units, `activeWidgetUnits()`, not
-                  `insertGroups()`'s objects: the pane's insert grid adds
-                  primitives and a text object to the units, and the Add pane's
-                  title bar counts the units.
+                - Add — nothing. Its body is primitives and a text object, not
+                  a list, so it draws no count rather than a fabricated one.
+                - Widgets — the installed units, `activeWidgetUnits()`: the same
+                  owner the pane's grid reads, so the count and the tiles are one
+                  list.
                 - Tokens — nothing, because its body is two libraries with
                   their own headings; each heading carries its own count
                   beside it rather than one total over both.
@@ -711,18 +715,31 @@ export function createShellLayout(
             >
               <CompositionPane bridge={store.bridge} />
             </Pane>
-            {/* The Add pane's body is one host and one React tree: shapes,
-                text and the card library. Local files belong to the Assets slot.
+            {/* The Add pane's body is one host and one React tree: the text
+                object and the shape primitives. Local files belong to the
+                Assets slot.
                 */}
             <Pane
               id="add"
               title={uiCopy.rail.slots.add}
               icon={RAIL_GLYPHS.add}
-              count={uiCopy.paneCounts.units(widgetUnits.length)}
               hidden={slot !== "add"}
               bodyRef={paneBody}
             >
               <Host node={hosts.add} hidden={slot !== "add"} />
+            </Pane>
+            {/* The bundled card widgets' own pane: the library grows with
+                every installed pack, so it does not share a body with the
+                primitives. */}
+            <Pane
+              id="widgets"
+              title={uiCopy.rail.slots.widgets}
+              icon={RAIL_GLYPHS.widgets}
+              count={uiCopy.paneCounts.units(widgetUnits.length)}
+              hidden={slot !== "widgets"}
+              bodyRef={paneBody}
+            >
+              <Host node={hosts.widgets} hidden={slot !== "widgets"} />
             </Pane>
             {/* The declared files' own pane. Its body is the persistent host
                 the session's asset library mounts into. */}

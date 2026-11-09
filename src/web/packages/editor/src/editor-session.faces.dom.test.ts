@@ -184,6 +184,7 @@ function createSession(
     envelope: documentEnvelope,
     panelHosts: {
       add: document.body,
+      widgets: document.body,
       assets: document.body,
       document: document.body,
       tokens: document.body,

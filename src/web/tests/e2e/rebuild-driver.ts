@@ -136,12 +136,13 @@ export async function openBlank(
   await expect.poll(async () => (await readScene(page)).length).toBe(0);
 }
 
-/** The Add pane's groups, by the kind of object each holds: the values the pane
- *  writes to `data-yunari-add-group`, which are `insertGroups()`'s `kind`s.
+/** The insert panes' groups, by the kind of object each holds: the values a pane
+ *  writes to `data-yunari-add-group`, which are the owners' own `kind`s.
  *
- *  **`"text"` is the one kind the pane draws in no group at all** — a group of
- *  one would say a region exists where there is one thing — so its scope is the
- *  pane itself and every other kind's is its own fieldset. */
+ *  **`"text"` is the one kind the Add pane draws in no group at all** — a group
+ *  of one would say a region exists where there is one thing — so its scope is
+ *  the Add pane itself and every other kind's is its own fieldset. `"card"` is
+ *  the Widgets pane's; the rest are the Add pane's. */
 export type AddGroup = "card" | "text" | "shape" | "custom-shape" | "chart";
 
 /** The button in the Add pane that makes an object, by the name it answers to,
@@ -164,14 +165,13 @@ export type AddGroup = "card" | "text" | "shape" | "custom-shape" | "chart";
  *  every kind but `"text"` is scoped to its own fieldset, and why the one that
  *  is not carries the note below. */
 export function addButton(page: Page, label: string, group: AddGroup): Locator {
-  // **The `"text"` scope is the pane, and that is a hazard rather than a tidy
-  // one.** A card tile renders *inside* the pane's subtree — `insertGroups()`
-  // puts the cards in a `card` fieldset that is a descendant of it — so a card
-  // ever labelled `Text` would give this lookup two matches. It would then fail
-  // **loudly**, as Playwright's strict-mode violation on the click, and not as
-  // the silent wrong-kind insert `vg-537` was: a broken driver rather than a
-  // lying one. The installed widget units carry no `Text` today, which is all
-  // that holds it.
+  // **The `"text"` scope is the Add pane, and that is a hazard rather than a
+  // tidy one.** The pane holds the file path's controls as well as the text
+  // row, so a label colliding with one of them would give this lookup two
+  // matches. It would then fail **loudly**, as Playwright's strict-mode
+  // violation on the click, and not as the silent wrong-kind insert `vg-537`
+  // was: a broken driver rather than a lying one. The widget library is in its
+  // own pane, so its units cannot collide with this lookup at all.
   const scope =
     group === "text"
       ? page.locator('[data-yunari-panel="add"]')

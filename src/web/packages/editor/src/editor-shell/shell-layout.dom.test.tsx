@@ -363,17 +363,17 @@ it("mounts the OS-resolved palette, menus, rail, inspector and dock hosts", () =
   expect(root.querySelector(".editor-shell-dock")?.closest("#stage")).toBe(
     root.querySelector("#stage"),
   );
-  // Five slots, and no `+`: the insert chooser went with the pane bar, and the
-  // Add pane is the one surface the insertable list is reached from now that
-  // the Insert menu has gone with it. Scoped to `[data-rail-slot]`: the foot's
-  // settings gear is a button on the rail too, and it is deliberately not a
-  // slot.
-  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(5);
+  // Six slots, and no `+`: the insert chooser went with the pane bar, and the
+  // Add and Widgets panes are where the insertable lists are reached from now
+  // that the Insert menu has gone with it. Scoped to `[data-rail-slot]`: the
+  // foot's settings gear is a button on the rail too, and it is deliberately
+  // not a slot.
+  expect(root.querySelectorAll(".editor-shell-rail-slot")).toHaveLength(6);
   expect(root.querySelector(".editor-shell-rail-settings")).not.toBeNull();
-  // The rail's whole button count, not only its slots: six is the five slots
-  // plus the foot's gear, and a seventh control arriving on the rail where it
+  // The rail's whole button count, not only its slots: seven is the six slots
+  // plus the foot's gear, and an eighth control arriving on the rail where it
   // should not fails here rather than hiding behind the slot count.
-  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(6);
+  expect(root.querySelectorAll(".editor-shell-rail button")).toHaveLength(7);
   // The horizontal bar is gone, not merely hidden.
   expect(root.querySelector(".editor-shell-pane-bar")).toBeNull();
   // The header's actions are one toolbar of glyph buttons, and the menus that
@@ -408,12 +408,12 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
   // and `hidden` unless its slot is chosen. The Composition pane's DOM name is
   // the `layers` the browser specs and the panel CSS already browse by, so the
   // chrome moved around the contract rather than the contract moving; its
-  // visible title, like the other four, is the slot's own word.
+  // visible title, like the other five, is the slot's own word.
   const panes = root.querySelectorAll(".editor-shell-pane");
-  expect(panes).toHaveLength(5);
+  expect(panes).toHaveLength(6);
   expect(
     [...panes].map((pane) => pane.getAttribute("data-yunari-panel")).sort(),
-  ).toEqual(["add", "assets", "document", "layers", "tokens"]);
+  ).toEqual(["add", "assets", "document", "layers", "tokens", "widgets"]);
   for (const pane of panes) {
     expect(pane.querySelector(".editor-shell-pane-title")).not.toBeNull();
   }
@@ -439,11 +439,11 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
 /**
  * The count, one per pane's own list, and the absences it takes.
  *
- * The row ruled per pane rather than per editor: the Add pane counts the card
- * library, the Composition pane the scene's objects, the Tokens pane the
+ * The row ruled per pane rather than per editor: the Widgets pane counts the
+ * card library, the Composition pane the scene's objects, the Tokens pane the
  * theme's paints. Each source is named at the mount in `shell-layout`, because
- * four of the five panes are imperative hosts with no React component inside
- * that owns a list.
+ * most of the panes are imperative hosts with no React component inside that
+ * owns a list.
  *
  * Three absences are the whole of the negative half. **Document draws none** —
  * its body is two sections of fields and it holds no list of its own, so a
@@ -455,7 +455,8 @@ it("gives every pane DESIGN.md's chrome, named by the section the specs browse",
  * mounted its document is a claim the product does not have. The
  * Add pane's count is the exception, and it proves the rule rather than
  * breaking it: the installed units are the host's own list, so the count is a
- * reading rather than a default standing in for one.
+ * reading rather than a default standing in for one. The Add pane holds the
+ * primitives rather than a list, so it prints none.
  */
 it("prints each pane's own count, and no count where a pane has no list", async () => {
   const root = document.createElement("div");
@@ -465,9 +466,10 @@ it("prints each pane's own count, and no count where a pane has no list", async 
     root.querySelector(`[data-yunari-panel="${pane}"] .editor-shell-pane-count`)
       ?.textContent ?? null;
 
-  expect(countOf("add")).toBe(
+  expect(countOf("widgets")).toBe(
     uiCopy.paneCounts.units(activeWidgetUnits().length),
   );
+  expect(countOf("add")).toBeNull();
   expect(countOf("layers")).toBeNull();
   expect(countOf("assets")).toBeNull();
   expect(countOf("tokens")).toBeNull();
@@ -492,12 +494,12 @@ it("prints each pane's own count, and no count where a pane has no list", async 
   // The Tokens pane prints no title-bar total: its two libraries are separate
   // lists, and each section heading carries its own count.
   expect(countOf("tokens")).toBeNull();
-  expect(countOf("add")).toBe(
+  expect(countOf("widgets")).toBe(
     uiCopy.paneCounts.units(activeWidgetUnits().length),
   );
   expect(countOf("document")).toBeNull();
   expect(countOf("assets")).toBeNull();
-  // Two spans, not five: Tokens, Document and Assets print none.
+  // Two spans, not six: Add, Tokens, Document and Assets print none.
   expect(root.querySelectorAll(".editor-shell-pane-count")).toHaveLength(2);
 
   // The session's own reading of the manager moves the Assets count, and the

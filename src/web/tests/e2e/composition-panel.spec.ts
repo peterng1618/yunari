@@ -1782,11 +1782,12 @@ test("a copy inserted beside the starter names its unit without costing the star
 
   await openStarterEditor(page);
 
-  await openPane(page, "Add");
-  // The Add pane is the insert surface now: the `+` chooser left with the pane
-  // bar, and the pane renders the same `insertGroups()` list it drew.
+  await openPane(page, "Widgets");
+  // The widget library is its own pane now: the `+` chooser left with the pane
+  // bar, and the pane renders the same `widgetGroups()` list the Add pane used
+  // to carry.
   await page
-    .locator('[data-yunari-panel="add"]')
+    .locator('[data-yunari-panel="widgets"]')
     .getByRole("button", { name: "Clock", exact: true })
     .click();
 

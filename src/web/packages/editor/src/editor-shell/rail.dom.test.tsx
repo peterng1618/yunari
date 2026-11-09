@@ -89,17 +89,18 @@ it("names every slot in a tooltip, Composition and Theme settings included", () 
   }
 });
 
-it("has five slots with Assets between Add and Tokens", () => {
+it("has six slots, with the widget library between Add and Assets", () => {
   expect(RAIL_SLOTS).toEqual([
     "composition",
     "add",
+    "widgets",
     "assets",
     "tokens",
     "document",
   ]);
 });
 
-it("names the fifth slot Assets", () => {
+it("names the Assets slot", () => {
   expect(uiCopy.rail.slots.assets).toBe("Assets");
 });
 

@@ -1,6 +1,6 @@
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { useEffect, useMemo, useState } from "react";
-import { insertGroups } from "../new-object-panel.js";
+import { insertGroups, widgetGroups } from "../new-object-panel.js";
 import { destructiveMarker, objectActionsFor } from "../object-actions.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
@@ -56,7 +56,10 @@ interface MenuGroup {
  * `OBJECT_ACTIONS`, which owns object commands only.
  */
 function creationGroups(session: EditorActionFacade): readonly MenuGroup[] {
-  return insertGroups().map((group) => ({
+  // The widgets share the canvas's one menu rather than living only in their
+  // pane: their two lists render it, so a right-click offers every insertable
+  // object. The group headings keep "Line" unambiguous between chart and shape.
+  return [...insertGroups(), ...widgetGroups()].map((group) => ({
     label: group.label,
     entries: group.objects.map((object) => ({
       // A key only has to be unique inside its own group, and each of the

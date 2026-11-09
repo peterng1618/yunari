@@ -718,13 +718,13 @@ test("the status bar reads the scene's counts, and still carries its message", a
 /**
  * The count, in each pane's title bar, read where an author reads it.
  *
- * The row ruled it per pane, so this walks all four slots and reads each title
- * bar against **the list that pane draws** rather than against a number this
- * test remembers: the Add pane's count is the tiles under it, the Tokens pane's
- * is the token rows under it, and the Composition pane's is the scene's own
- * total, which is also what the strip prints — the duplication the row
- * accepted and named, asserted here as one string in two surfaces so a pane
- * that drifted to a different number fails.
+ * The row ruled it per pane, so this walks the panes that hold a list and reads
+ * each title bar against **the list that pane draws** rather than against a
+ * number this test remembers: the Widgets pane's count is the tiles under it,
+ * the Tokens pane's is the token rows under it, and the Composition pane's is
+ * the scene's own total, which is also what the strip prints — the duplication
+ * the row accepted and named, asserted here as one string in two surfaces so a
+ * pane that drifted to a different number fails.
  *
  * **The Document pane is the one with no count, and the absence is the
  * assertion.** Its body is two sections of fields and it holds no list of its
@@ -764,15 +764,20 @@ test("every pane's title bar carries the count of its own list, and Document car
     `${objects} objects`,
   );
 
-  // Add: the card library's own entry count, which is the tiles it draws —
-  // not `insertGroups()`'s objects, which add primitives and a text object to
-  // the library.
-  await openPane(page, "Add");
+  // Widgets: the card library's own entry count, which is the tiles it draws.
+  await openPane(page, "Widgets");
   const cards = await page
-    .locator('[data-yunari-panel="add"] [data-yunari-panel-card]')
+    .locator('[data-yunari-panel="widgets"] [data-yunari-panel-card]')
     .count();
   expect(cards, "the booted library holds units").toBeGreaterThan(0);
-  await expect(titleCount("add")).toHaveText(`${cards} units`);
+  await expect(titleCount("widgets")).toHaveText(`${cards} units`);
+
+  // Add holds the primitives rather than a list, so its title bar prints none.
+  await openPane(page, "Add");
+  await expect(
+    page.locator('[data-yunari-panel="add"] .editor-shell-pane-count'),
+    "the Add pane holds primitives, not a list",
+  ).toHaveCount(0);
 
   // Tokens: the theme's paints, which is the rows the pane draws.
   await openPane(page, "Design tokens");

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 /**
- * The Add pane's insert surface.
+ * The insert surface: one component over two owners.
  *
- * **Membership and order come from `insertGroups()` and nowhere else.** The
- * pane draws a tile for whatever the owner declares, in the owner's order, so a
- * group added to the owner appears here the day it is added — and a group the
- * pane invented, or one it dropped, fails below rather than three tasks later.
+ * **Membership and order come from `insertGroups()` and `widgetGroups()` and
+ * nowhere else.** The Add pane draws the primitives and the Widgets pane draws
+ * the installed card units, each in its own owner's order, so a group added to
+ * an owner appears the day it is added — and a group a pane invented, or one it
+ * dropped, fails below rather than three tasks later.
  *
  * **Every tile wears the one icon vocabulary.** A card unit's glyph is the unit
  * it inserts, and no two units share one; a shape's is its kind and nothing
@@ -14,7 +15,11 @@
  */
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createNewObjectPanel, insertGroups } from "../../new-object-panel.js";
+import {
+  createNewObjectPanel,
+  insertGroups,
+  widgetGroups,
+} from "../../new-object-panel.js";
 import {
   installStarterUnits,
   installThermalUnit,
@@ -82,7 +87,10 @@ function editorStub() {
  * left mounted past the file schedules a commit that runs after the environment
  * is gone, where its `window` lookup throws.
  */
-function mount(actions?: Parameters<typeof createNewObjectPanel>[3]): {
+function mount(
+  actions?: Parameters<typeof createNewObjectPanel>[3],
+  groups?: Parameters<typeof createNewObjectPanel>[4],
+): {
   readonly pane: HTMLElement;
   readonly editor: ReturnType<typeof editorStub>;
   readonly panel: ReturnType<typeof createNewObjectPanel>;
@@ -90,7 +98,13 @@ function mount(actions?: Parameters<typeof createNewObjectPanel>[3]): {
   const editor = editorStub();
   const host = document.createElement("div");
   document.body.append(host);
-  const panel = createNewObjectPanel(host, editor as never, undefined, actions);
+  const panel = createNewObjectPanel(
+    host,
+    editor as never,
+    undefined,
+    actions,
+    groups,
+  );
   mounted.push(panel);
   return { pane: panel.root, editor, panel };
 }
@@ -178,7 +192,7 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("names a card unit with the library's own label, never a literal", () => {
-    const { pane } = mount();
+    const { pane } = mount(undefined, widgetGroups);
 
     // Change the installed pack's label and this fails: a tile that hard-codes
     // "CPU" agrees with the pack until the pack moves.
@@ -189,7 +203,7 @@ describe("the Add pane's insert surface", () => {
     // "Thermal rig" comes from the installed pack, so no build-time card word
     // could have drawn this tile.
     await installThermalUnit();
-    const { pane } = mount();
+    const { pane } = mount(undefined, widgetGroups);
 
     expect(cardTile(pane, THERMAL_UNIT_ID).textContent).toBe(
       THERMAL_UNIT_LABEL,
@@ -200,16 +214,17 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("draws a card unit and a primitive with the one icon vocabulary", () => {
-    const { pane } = mount();
+    const widgets = mount(undefined, widgetGroups).pane;
+    const primitives = mount().pane;
 
     // The card library is a fixed set of eight, so a unit's tile is its own
     // mark; a primitive's tile is its kind. Both are lucide, so neither is a
     // second icon family and neither is the pane's own drawing.
     expect(
-      cardTile(pane, CPU_CARD).querySelector("svg")?.getAttribute("class"),
+      cardTile(widgets, CPU_CARD).querySelector("svg")?.getAttribute("class"),
     ).toMatch(/^lucide/);
     expect(
-      shapeTile(pane, "rect").querySelector("svg")?.getAttribute("class"),
+      shapeTile(primitives, "rect").querySelector("svg")?.getAttribute("class"),
     ).toMatch(/^lucide/);
   });
 
@@ -254,7 +269,7 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("discloses a grid tile's whole label on focus and on hover, where that label may clip", async () => {
-    const { pane } = mount();
+    const { pane } = mount(undefined, widgetGroups);
     const tile = cardTile(pane, TRENDS_CARD);
 
     // "Performance trends" is the one label that truncates at 246px — 86px of
@@ -295,7 +310,7 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("refuses, in words, before a document is open, rather than offering tiles that insert nothing", async () => {
-    const { pane, editor } = mount();
+    const { pane, editor } = mount(undefined, widgetGroups);
 
     // The `constructing` wrapper owns the refusal: with no session behind the
     // tile, a press reaches `errorManager.warn("controls", …)` rather than
@@ -309,7 +324,7 @@ describe("the Add pane's insert surface", () => {
   });
 
   it("takes its tiles' tooltips with it on the panel's own disposal path", async () => {
-    const { pane, panel } = mount();
+    const { pane, panel } = mount(undefined, widgetGroups);
     const tile = cardTile(pane, TRENDS_CARD);
     await act(async () => tile.focus());
     expect(document.querySelector(".editor-shell-tooltip")).not.toBeNull();

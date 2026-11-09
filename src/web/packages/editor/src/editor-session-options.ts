@@ -18,8 +18,10 @@ import type { SensorCatalogue } from "./sensor-catalogue.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
 
 export interface EditorPanelHosts {
-  /** Text and chart creation, and the card library. */
+  /** Text and chart creation, and the shape primitives. */
   readonly add: HTMLElement;
+  /** The bundled card widgets, in the Widgets pane. */
+  readonly widgets: HTMLElement;
   /** The declared files, their import and placement, in the Assets pane. */
   readonly assets: HTMLElement;
   /** The theme's own paints and type presets, in the Tokens pane. */

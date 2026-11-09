@@ -3,7 +3,7 @@ import type { FabricObject } from "fabric/es";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import { insertGroups } from "../new-object-panel.js";
+import { insertGroups, widgetGroups } from "../new-object-panel.js";
 import { OBJECT_ACTIONS, type ObjectTarget } from "../object-actions.js";
 import {
   resolveShortcuts,
@@ -335,22 +335,24 @@ it("dispatches the clicked entry through the bridge's own run", async () => {
   await opened.close();
 });
 
-it("offers the Add pane's own list on empty canvas, and no object actions", async () => {
+it("offers both insert panes' own lists on empty canvas, and no object actions", async () => {
   const opened = await openMenu({ target: NO_TARGET });
 
-  // The pane's list, flattened — read from the owner rather than restated, so
-  // a third copy of "what can be inserted" cannot take root here. The menu used
-  // to hold exactly that: text and the four chart families, with no shapes and
-  // no panel, which is a surface an author cannot insert half the things the
+  // The panes' lists, flattened — read from the owners rather than restated,
+  // so a third copy of "what can be inserted" cannot take root here. The menu
+  // used to hold exactly that: text and the four chart families, with no shapes
+  // and no panel, which is a surface an author cannot insert half the things the
   // product offers.
-  const expected = insertGroups().flatMap((group) => group.objects);
+  const expected = [...insertGroups(), ...widgetGroups()].flatMap(
+    (group) => group.objects,
+  );
   expect(expected.length).toBeGreaterThan(0);
   expect(opened.labels).toEqual(expected.map((object) => object.label));
 
   // And in the pane's groups, so "Line" — a chart and a shape — is told apart
   // by the heading above it here as it is in the pane.
   expect(opened.groupLabels).toEqual(
-    insertGroups()
+    [...insertGroups(), ...widgetGroups()]
       .map((group) => group.label)
       .filter((label): label is string => label !== undefined),
   );
