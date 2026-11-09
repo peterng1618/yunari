@@ -2077,6 +2077,10 @@ export const uiCopy = {
      *  surface it is on before it reads them. */
     surface: "Publishing",
     address: "Phone address",
+    /** The section heading over every fact a phone pairs with: the rows below
+     *  it carry the address and the code, so the heading names who they are for
+     *  rather than repeating one row's label. */
+    phone: "Phone",
     /** The one-time code, printed beside the address because the symbol that
      *  carries it needs a camera and the device may not have one. */
     code: "Pairing code",

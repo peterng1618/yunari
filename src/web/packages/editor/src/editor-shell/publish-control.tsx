@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { controlStateAttributes } from "../components/ui/control-state.js";
-import { Dialog } from "../components/ui/dialog.js";
+import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import { displayUrl } from "../hosting-client.js";
 import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
 import {
@@ -202,106 +202,133 @@ export function PublishControl({
         closeLabel={uiCopy.store.assign.close}
         className="editor-shell-publish-dialog"
       >
+        {/* The dialog's own name, then its sections under it: the same lead and
+            eyebrow pair the shortcut sheet and the About pane print. */}
         <p className="editor-shell-dialog-lead">{uiCopy.publish.assign}</p>
         {/* The theme's destination, above the surface's own switch: assigning
             is why the control is pressed, and the list carries the route for a
             display that has not paired yet. */}
         {assignClient === undefined || themeId === undefined ? null : (
-          <AssignChoice
-            themeId={themeId}
-            client={assignClient}
-            onAssigned={() => undefined}
-            {...(pairNew === undefined ? {} : { pairNew })}
-          />
+          <section>
+            <h3>{uiCopy.publish.displayLabel}</h3>
+            <AssignChoice
+              themeId={themeId}
+              client={assignClient}
+              onAssigned={() => undefined}
+              {...(pairNew === undefined ? {} : { pairNew })}
+            />
+          </section>
         )}
-        {/* The choice the warning is about, so the warning is bound to the
-            control that makes it rather than to the one that opens this.
-            A successful start is the pressed state itself, so there is no
-            separate success outcome to keep. */}
-        <button
-          type="button"
-          className="editor-shell-publish-toggle"
-          data-yunari-host-switch=""
-          aria-pressed={open}
-          aria-describedby={WARNING_ID}
-          disabled={pending !== undefined}
-          {...controlStateAttributes(
-            pending !== undefined
-              ? "busy"
-              : reason === undefined
-                ? undefined
-                : "failure",
-          )}
-          onClick={() => {
-            void hosting.toggle();
-          }}
-        >
-          {label}
-        </button>
-        <span
-          id={WARNING_ID}
-          className="editor-shell-publish-warning"
-          data-yunari-copy=""
-        >
-          {uiCopy.publish.warning}
-        </span>
-        {reason === undefined ? null : (
-          <span className="editor-shell-publish-reason" role="alert">
-            {reason}
+        <section>
+          <h3>{uiCopy.publish.surface}</h3>
+          {/* The choice the warning is about, so the warning is bound to the
+              control that makes it rather than to the one that opens this.
+              A successful start is the pressed state itself, so there is no
+              separate success outcome to keep. The press is a dialog action
+              like every other, and the toggle's pressed state is the shared
+              `aria-pressed` rule. */}
+          <button
+            type="button"
+            className={ACTION_BUTTON}
+            data-yunari-host-switch=""
+            aria-pressed={open}
+            aria-describedby={WARNING_ID}
+            disabled={pending !== undefined}
+            {...controlStateAttributes(
+              pending !== undefined
+                ? "busy"
+                : reason === undefined
+                  ? undefined
+                  : "failure",
+            )}
+            onClick={() => {
+              void hosting.toggle();
+            }}
+          >
+            {label}
+          </button>
+          {/* A bare span marked `data-yunari-copy` rather than a paragraph: the
+              copy net reads paragraphs as prose and demands an exact owner, and
+              this sentence is composed around the host's own readings. */}
+          <span
+            id={WARNING_ID}
+            className="editor-shell-publish-note"
+            data-yunari-copy=""
+          >
+            {uiCopy.publish.warning}
           </span>
-        )}
-        {shown === undefined ? null : (
-          <>
-            <span className="editor-shell-publish-label">
-              {uiCopy.publish.address}
+          {reason === undefined ? null : (
+            <span className="editor-shell-publish-note text-error" role="alert">
+              {reason}
             </span>
-            <code className="editor-shell-publish-url">{`https://${shown.host}:${shown.port}`}</code>
+          )}
+        </section>
+        {shown === undefined ? null : (
+          <section>
+            <h3>{uiCopy.publish.phone}</h3>
+            <dl>
+              <div>
+                <dt>{uiCopy.publish.address}</dt>
+                <dd>
+                  <code className="editor-shell-publish-url">{`https://${shown.host}:${shown.port}`}</code>
+                </dd>
+              </div>
+              {code === undefined ? null : (
+                <div>
+                  <dt>{uiCopy.publish.code}</dt>
+                  <dd>
+                    {/* The code in type, because the symbol beside it needs a
+                        camera: one mint, two presentations. */}
+                    <span
+                      className="editor-shell-publish-code"
+                      data-yunari-pair-code=""
+                    >
+                      {code.code}
+                    </span>
+                  </dd>
+                </div>
+              )}
+            </dl>
             {/* https is what makes the display a secure context — the wake
                 lock and fullscreen are gated on it — so it is the address
                 printed. The plain one is what a device that has not
                 installed the root certificate can still open. */}
-            <span className="editor-shell-publish-note">
+            <span
+              className="editor-shell-publish-note"
+              data-yunari-publish-fallback=""
+            >
               {uiCopy.publish.fallback(shown.address, shown.port)}
             </span>
             {shown.name === undefined ? null : (
               <span className="editor-shell-publish-note">
                 {uiCopy.publish.stableName(shown.name, shown.port)}
               </span>
-            )}
+            )}{" "}
             {code === undefined ? null : (
               <>
-                {/* The code in type, because the symbol beside it needs a
-                    camera: one mint, two presentations. */}
-                <span className="editor-shell-publish-label">
-                  {uiCopy.publish.code}
-                </span>
-                <span
-                  className="editor-shell-publish-code"
-                  data-yunari-pair-code=""
-                >
-                  {code.code}
-                </span>
-                <span className="editor-shell-publish-expiry">
+                <span className="editor-shell-publish-note">
                   {left === ""
                     ? uiCopy.publish.expired
                     : uiCopy.publish.expiresIn(left)}
                 </span>
-                {/* The renewed code appearing is the success answer, and a
-                    refusal is the dialog's own reason line; this control keeps
-                    only the busy state it can show. */}
-                <button
-                  type="button"
-                  className="editor-shell-publish-mint"
-                  data-yunari-new-code=""
-                  disabled={minting}
-                  {...controlStateAttributes(minting ? "busy" : undefined)}
-                  onClick={() => {
-                    setMinting(true);
-                    void hosting.renew().finally(() => setMinting(false));
-                  }}
-                >
-                  {uiCopy.publish.newCode}
-                </button>
+                <div className="flex items-center justify-end">
+                  {/* The renewed code appearing is the success answer, and a
+                      refusal is the section's own reason line; this control
+                      keeps only the busy state it can show. */}
+                  <button
+                    type="button"
+                    className={ACTION_BUTTON}
+                    data-yunari-new-code=""
+                    disabled={minting}
+                    {...controlStateAttributes(minting ? "busy" : undefined)}
+                    onClick={() => {
+                      setMinting(true);
+                      void hosting.renew().finally(() => setMinting(false));
+                    }}
+                  >
+                    {uiCopy.publish.newCode}
+                  </button>
+                </div>
                 {/* **The symbol, which now carries the code rather than a
                     credential.** The page it opens asks for nothing else,
                     so a phone with a camera pairs in one scan and the
@@ -315,7 +342,7 @@ export function PublishControl({
             <span className="editor-shell-publish-note">
               {uiCopy.publish.reserveAddress}
             </span>
-          </>
+          </section>
         )}
       </Dialog>
     </>

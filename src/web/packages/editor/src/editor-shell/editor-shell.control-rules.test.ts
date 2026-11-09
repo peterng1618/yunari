@@ -191,10 +191,14 @@ function colourBearingMarkableControls(): readonly string[] {
  *  - `.editor-shell-toolbar button[aria-pressed="true"]` — the readings-source
  *    toggle. The toolbar renders the document actions, none of which carries
  *    the destructive mark, so its accent ink cannot beat the marker.
+ *  - `.editor-shell-publish-dialog button[aria-pressed="true"]` — the host
+ *    switch, whose pressed state is the shared chosen treatment. The dialog
+ *    renders the display choice and the switch, and no registry action ever
+ *    lands inside it.
  *
  * The first five were measured at `d9f81f1f` by parsing every rule body in the
  * stylesheet, which is how that set was reproduced rather than copied; the last
- * three arrived with the mode switch and the source toggle.
+ * four arrived with the mode switch, the source toggle and the host switch.
  */
 const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   // The three control-state rules. They paint every button from the shared
@@ -212,6 +216,7 @@ const MARKABLE_CONTROL_ALLOWLIST: readonly string[] = [
   ".editor-shell-rail button.editor-shell-rail-settings",
   '.editor-shell-rail button[aria-pressed="true"]',
   '.editor-shell-toolbar button[aria-pressed="true"]',
+  '.editor-shell-publish-dialog button[aria-pressed="true"]',
 ];
 
 describe("the destructive mark", () => {

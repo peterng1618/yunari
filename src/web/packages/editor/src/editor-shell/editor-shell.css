@@ -985,9 +985,9 @@ body,
   flex-direction: column;
   background: var(--panel);
 }
-/* The publish facts, in the assign dialog the one button opens. A column,
-   because it stacks the display choice, a sentence, a line of code and a code
-   symbol — and what keeps the header itself one row that never grows with the
+/* The publish facts, in the assign dialog the one button opens. A column of
+   sections, because it holds the display choice, the host switch and the phone's
+   facts — and what keeps the header itself one row that never grows with the
    LAN. The dialog owns the surface and elevation; this only stacks its rows. */
 .editor-shell-publish-dialog {
   display: flex;
@@ -997,44 +997,20 @@ body,
      a narrow window is the harder limit. */
   max-width: min(34ch, calc(100vw - 32px));
 }
-.editor-shell-publish-label {
-  color: var(--shell-muted);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* A section's own rows share the dialog's step, so the eyebrow, its control and
+   its small print are one block and the `section + section` rule above is the
+   only larger gap on the surface. */
+.editor-shell-publish-dialog section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-/* The host switch, inside the surface it belongs to: the header's button opens
-   this, and a press that only meant "show me the address" must not stop a
-   session. A secondary button, because the header already owns the one filled
-   accent control. */
-.editor-shell-publish-toggle,
-.editor-shell-publish-mint {
-  border: 1px solid var(--shell-edge);
-  background: var(--shell-surface-strong);
-  /* The ink is the dialog's, inherited: a declaration here would beat the
-     shared state rule when the control is busy or has failed. */
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-}
-/* What the host is doing, said on the control that changes it rather than on
-   the bar, which cannot tell a read from a stop. */
-.editor-shell-publish-toggle[aria-pressed="true"] {
+/* The host switch presses like a dialog action, and its pressed state is the
+   shared `aria-pressed` reading: accent ink over the action's own surface. It is
+   scoped here because the header and the toolbar own their own pressed paint. */
+.editor-shell-publish-dialog button[aria-pressed="true"] {
   border-color: var(--shell-primary-bg);
   color: var(--shell-primary-bg);
-}
-/* Hover raises the resting `--edge` to `--muted`; a pressed toggle keeps its
-   primary boundary, which is already the stronger one. */
-.editor-shell-publish-toggle:hover:not(:disabled):not([aria-pressed="true"]),
-.editor-shell-publish-mint:hover:not(:disabled) {
-  border-color: var(--shell-muted);
-}
-.editor-shell-publish-toggle:disabled,
-.editor-shell-publish-mint:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .editor-shell-publish-url {
   color: var(--shell-text);
@@ -1054,12 +1030,11 @@ body,
   font-size: 16px;
   letter-spacing: 0.16em;
 }
+/* The dialog's small print: the warning, the fallback origin, the stable-name
+   route, the countdown and the reservation. A bare span, because the copy net
+   reads a paragraph as prose and demands an exact owner, and these sentences
+   are composed around the host's own readings; the section's gap spaces them. */
 .editor-shell-publish-note {
-  color: var(--shell-muted);
-  font-size: 11px;
-}
-.editor-shell-publish-warning,
-.editor-shell-publish-expiry {
   color: var(--shell-muted);
   font-size: 11px;
 }

@@ -315,7 +315,7 @@ export function AssignDisplay(props: {
           surface says which of the four they are in. */}
       <p className="editor-shell-dialog-lead">
         {uiCopy.store.cell.actions.assign}
-      </p>
+      </p>{" "}
       <AssignChoice
         themeId={themeId}
         client={client}

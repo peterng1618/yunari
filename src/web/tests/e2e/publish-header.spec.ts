@@ -188,7 +188,7 @@ test.describe("the header's publish surface", () => {
     // that cannot resolve the name is what it exists for.
     expect(shown).toMatch(/^https:\/\/[^:\s]+\.local:\d+$/);
     expect(
-      await facts.locator(".editor-shell-publish-note").first().textContent(),
+      await facts.locator("[data-yunari-publish-fallback]").textContent(),
     ).toMatch(/^Fallback http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);
 
     const qr = facts.locator("[data-yunari-qr]");
