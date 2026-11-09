@@ -334,6 +334,28 @@ it("returns to following the system by deleting the stored choice", async () => 
   );
 });
 
+it("draws a ratio's two orientations as two columns, one empty where it has none", async () => {
+  const container = await mount(<PreviewsPage storage={localStorage} />);
+  const cells = (token: string): readonly string[] =>
+    [
+      ...container.querySelectorAll<HTMLElement>(
+        `[data-yunari-preview-ratio="${token}"] [data-yunari-preview-lens]`,
+      ),
+    ].map((cell) => cell.getAttribute("data-yunari-preview-lens") ?? "");
+
+  // A wide token is offered both ways, and the landscape cell is the phone
+  // turned a quarter rather than a second device's drawing.
+  expect(cells("4:3")).toEqual(["4:3", "3:4"]);
+  expect(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-preview-ratio="4:3"] [data-yunari-preview-lens="4:3"] > span',
+    )?.className,
+  ).toContain("rotate-90");
+  // A square derives one lens, so the second column is empty rather than a
+  // portrait preview the display menu does not offer.
+  expect(cells("1:1")).toEqual(["1:1"]);
+});
+
 it("restores a removed ratio without dropping one the author added", async () => {
   const container = await mount(<PreviewsPage storage={localStorage} />);
 

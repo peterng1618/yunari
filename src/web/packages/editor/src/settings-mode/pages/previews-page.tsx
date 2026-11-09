@@ -5,6 +5,7 @@ import { ACTION_BUTTON } from "../../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
   DEFAULT_PREVIEW_RATIO_TOKENS,
+  type DisplayLens,
   normalisePreviewRatioTokens,
   type PreviewRatio,
   parsePreviewRatio,
@@ -16,7 +17,7 @@ import {
   subscribeLenses,
   writePreviewRatioTokens,
 } from "../../display-lens.js";
-import { Glyph, MINUS_GLYPH } from "../../editor-shell/icons.js";
+import { Glyph, MINUS_GLYPH, PHONE_GLYPH } from "../../editor-shell/icons.js";
 import { uiCopy } from "../../ui-copy.js";
 import { Page } from "../page.js";
 import { Group } from "../section-group.js";
@@ -130,16 +131,30 @@ function PreviewsSection(props: {
         <div className="flex flex-col gap-[var(--space-4)]">
           {tokens.map((token) => {
             const ratio = parsePreviewRatio(token);
-            const ids = previewLenses([token]).map((lens) => lens.id);
+            const lenses = previewLenses([token]);
+            const ids = lenses.map((lens) => lens.id);
             return (
               <div
                 key={token}
                 className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-sm)] border border-edge bg-[var(--panel-2)] px-[var(--space-10)] py-[var(--space-4)]"
                 data-yunari-preview-ratio={token}
               >
-                <span className="flex-1 font-mono text-sm">
-                  {ids.join(" ")}
-                </span>
+                {/* **Two columns, one per orientation.** The display menu offers
+                    a wide token in both orientations, so the row lists them side
+                    by side rather than as one run of ids, and a column with no
+                    lens stays empty so the two line up down the list. */}
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-[var(--space-8)]">
+                  <LensCell
+                    lens={lenses.find(
+                      (lens) => lens.orientation === "landscape",
+                    )}
+                  />
+                  <LensCell
+                    lens={lenses.find(
+                      (lens) => lens.orientation === "portrait",
+                    )}
+                  />
+                </div>
                 <ControlIconButton
                   label={`${uiCopy.settings.previewRatioRemove} ${ids.join(" ")}`}
                   data={{ "data-yunari-preview-ratio-remove": token }}
@@ -196,5 +211,38 @@ function PreviewsSection(props: {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One orientation's column: its phone glyph and the lens id the display menu
+ * offers. `landscape` is the same glyph turned a quarter — lucide has one
+ * phone, and drawing a second device for the other orientation would say the
+ * two are different screens.
+ */
+function LensCell(props: {
+  readonly lens: DisplayLens | undefined;
+}): React.JSX.Element {
+  const { lens } = props;
+  // An empty cell, not a repeat of the other column: a square token derives one
+  // lens, and printing it twice would offer a portrait preview that does not
+  // exist.
+  if (lens === undefined) return <span aria-hidden="true" />;
+  return (
+    <span
+      className="flex min-w-0 items-center gap-[var(--space-4)] font-mono text-sm text-muted"
+      data-yunari-preview-lens={lens.id}
+    >
+      <span
+        className={
+          lens.orientation === "landscape"
+            ? "inline-flex rotate-90"
+            : "inline-flex"
+        }
+      >
+        <Glyph icon={PHONE_GLYPH} size={14} />
+      </span>
+      <span className="truncate">{lens.id}</span>
+    </span>
   );
 }

@@ -69,6 +69,7 @@ import {
   Search,
   Settings,
   Shapes,
+  Smartphone,
   Spline,
   Square,
   SquarePen,
@@ -200,6 +201,10 @@ export const PALETTE_GLYPH: LucideIcon = Palette;
  *  `Shapes` is the mark the Add pane's custom section wears. */
 export const PREVIEW_RATIOS_GLYPH: LucideIcon = Ratio;
 export const CUSTOM_SHAPES_GLYPH: LucideIcon = Shapes;
+/** One preview ratio's orientation in the settings list: the same phone drawn
+ *  upright for portrait and turned a quarter for landscape, so the two columns
+ *  differ by orientation rather than by two different glyphs. */
+export const PHONE_GLYPH: LucideIcon = Smartphone;
 /** The Extensions page: a package that contributes its own behaviour. */
 export const PACKAGE_GLYPH: LucideIcon = Package;
 
