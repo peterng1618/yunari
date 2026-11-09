@@ -27,7 +27,6 @@ import { idleCrop, idleCropEdits } from "./idle-crop.test-stage.js";
 import { type ColumnContext, perKindColumn } from "./per-kind-column.js";
 import {
   type ColumnSectionView,
-  type FontFaceEdits,
   type ProjectionPorts,
   projectSelection,
   type RunEdits,
@@ -90,14 +89,6 @@ const chart: ChartEdits = {
 /** A crop port that records nothing: this file reads the chrome, not writes. */
 const crop = idleCropEdits();
 
-/** A face-field port that records nothing, for the same reason. */
-const font: FontFaceEdits = {
-  applyFace: async () => undefined,
-  applyTrio: async () => undefined,
-  listFavorites: async () => [],
-  saveFavorites: async (ids) => ids,
-};
-
 function ports(): ProjectionPorts {
   return {
     globals: undefined,
@@ -136,9 +127,6 @@ function context(): ColumnContext {
     nodeBindings: undefined,
     onNodeBindingsChange: undefined,
     sampleSource: undefined,
-    // An owner that can write a face, so a text object's column is the one the
-    // editor builds rather than one with the field withheld.
-    canWriteFontFace: true,
   };
 }
 
@@ -171,7 +159,6 @@ function renderedSections(view: SelectionView): HTMLElement[] {
         runs={runs}
         chart={chart}
         crop={crop}
-        font={font}
       />,
     );
   });
@@ -373,7 +360,6 @@ describe("SelectionColumn", () => {
           runs={runs}
           chart={chart}
           crop={crop}
-          font={font}
         />,
       );
     });
@@ -452,7 +438,6 @@ describe("SelectionColumn", () => {
           runs={runs}
           chart={chart}
           crop={crop}
-          font={font}
         />,
       );
     });
@@ -523,7 +508,6 @@ describe("SelectionColumn", () => {
           runs={runs}
           chart={chart}
           crop={crop}
-          font={font}
         />,
       );
     });
@@ -598,7 +582,6 @@ describe("SelectionColumn", () => {
           runs={runs}
           chart={chart}
           crop={crop}
-          font={font}
           designTokens={designTokens}
         />,
       );
@@ -629,50 +612,6 @@ describe("SelectionColumn", () => {
       "palette.created",
     );
     expect(revealed).toEqual([{ kind: "paint", id: "created" }]);
-  });
-
-  /**
-   * The face picker is mounted on the field that owns faces, and the face it
-   * picks is applied to the preset the object is set in — a text object has no
-   * face of its own, a run names a preset and the preset carries the face. This
-   * pins the mount and the write. The face field is a button: the catalogue
-   * browser lives in the finder's Fonts body, so the field's whole job is to
-   * ask for that surface. The preset a face applies to is read where the write
-   * happens, because only the session still holds the selected object.
-   */
-  it("renders a button that asks for the finder", async () => {
-    const openPicker = vi.fn();
-    const text = new IText("", { left: 0, top: 0 });
-    text.set({
-      yunariText: {
-        runs: [{ kind: "literal", text: "Hi", typeToken: "typeTokens.body" }],
-      },
-    });
-
-    await act(async () => {
-      root.render(
-        <SelectionColumn
-          view={viewOf(text)}
-          edits={edits}
-          runs={runs}
-          chart={chart}
-          crop={crop}
-          font={font}
-          onOpenFontPicker={openPicker}
-        />,
-      );
-    });
-
-    const field = host.querySelector("[data-yunari-font-face-field]");
-    expect(field).not.toBeNull();
-
-    const button = field?.querySelector<HTMLButtonElement>(
-      "[data-yunari-open-font-picker]",
-    );
-    expect(button?.textContent).toBe(uiCopy.assets.openFontPicker);
-    await act(async () => button?.click());
-
-    expect(openPicker).toHaveBeenCalledTimes(1);
   });
 });
 

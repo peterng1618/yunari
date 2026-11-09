@@ -53,7 +53,7 @@ export function createProjection(args: {
   const { state, options, background, roots, dispatcher, editPorts } = args;
   const { column, lead, sectionColumn } = roots;
   const { edits, commit, stillTarget, write } = dispatcher;
-  const { runEdits, cropEdits, chartEdits, fontEdits } = editPorts;
+  const { runEdits, cropEdits, chartEdits } = editPorts;
   const editor = state.editor;
 
   const columnContext = (): ColumnContext => {
@@ -73,7 +73,6 @@ export function createProjection(args: {
       nodeBindings: options.nodeBindings,
       onNodeBindingsChange: options.onNodeBindingsChange,
       sampleSource: options.sampleSource,
-      canWriteFontFace: options.fontActions !== undefined,
       ...(options.descriptors === undefined
         ? {}
         : { descriptors: options.descriptors }),
@@ -143,8 +142,6 @@ export function createProjection(args: {
       runEdits,
       chartEdits(),
       cropEdits,
-      fontEdits,
-      undefined,
       options.designTokens,
     );
   };
@@ -208,8 +205,6 @@ export function createProjection(args: {
       runEdits,
       chartEdits(),
       cropEdits,
-      fontEdits,
-      options.onOpenFontPicker,
       options.designTokens,
     );
   };

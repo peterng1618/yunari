@@ -18,7 +18,7 @@ import {
   writeUnitDisplay,
 } from "./run-edits.js";
 import type { SelectionState } from "./selection-state.js";
-import type { CropEdits, FontFaceEdits, RunEdits } from "./view.js";
+import type { CropEdits, RunEdits } from "./view.js";
 
 /** The write ports the column's non-field sub-surfaces reach. */
 export interface EditPorts {
@@ -26,17 +26,15 @@ export interface EditPorts {
   readonly cropEdits: CropEdits;
   /** The chart owner's writes, or a port that does nothing. */
   chartEdits(): ChartEdits;
-  readonly fontEdits: FontFaceEdits;
 }
 
 /**
- * The write ports for the run editor, the crop row, the chart fields and the
- * face field.
+ * The write ports for the run editor, the crop row and the chart fields.
  *
  * These are not object fields: a run write replaces authored text and records
- * one history entry, a crop command drives the session, and the chart and face
- * ports are their owners' own actions. They share `index.ts`'s target and
- * history path through `commit` and `stillTarget`.
+ * one history entry, a crop command drives the session, and the chart port is
+ * its owner's own actions. They share `index.ts`'s target and history path
+ * through `commit` and `stillTarget`.
  */
 export function createEditPorts(args: {
   readonly state: SelectionState;
@@ -189,29 +187,5 @@ export function createEditPorts(args: {
       onRemoveBinding: () => {},
     };
 
-  /**
-   * The face field's port, built once so the field's own effects — the
-   * favourites read and the specimen cache — are not re-run by a fresh object
-   * on every publish.
-   *
-   * A missing action is a no-op rather than a refusal the author sees: the
-   * column only projects the field when `canWriteFontFace` says an owner is
-   * mounted, so the absent case is a column built without one and never a press
-   * that silently did nothing.
-   */
-  const fontEdits: FontFaceEdits = {
-    applyFace: async (presetId, face) => {
-      await options.fontActions?.applyFace(presetId, face);
-    },
-    applyTrio: async (trioId) => {
-      await options.fontActions?.applyTrio(trioId);
-    },
-    listFavorites: async () => (await options.favoritesClient?.list()) ?? [],
-    // With no store the list stays what the author has this session: the star
-    // still answers, and nothing claims to have been saved.
-    saveFavorites: async (ids) =>
-      (await options.favoritesClient?.save(ids)) ?? ids,
-  };
-
-  return { runEdits, cropEdits, chartEdits, fontEdits };
+  return { runEdits, cropEdits, chartEdits };
 }

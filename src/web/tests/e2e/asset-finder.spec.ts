@@ -12,7 +12,7 @@ import type {
 import { choiceOf, optionPairs } from "./control-set.js";
 import { captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
-import { placeText, readScene } from "./rebuild-driver.js";
+import { readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
@@ -801,40 +801,6 @@ test("the first search names the host once, and the second does not", async ({
   await page.locator("[data-yunari-asset-search]").fill("cat");
 
   await expect(notice).toHaveCount(0);
-});
-
-test("the font field opens the finder on Fonts", async ({ page }, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  await stubAssets(page, {
-    sources: [curatedFonts],
-    answer: () => ({ pages: [answered("curated-fonts", [fontResult])] }),
-  });
-  await page.goto(EDITOR);
-  await page.waitForFunction(() => "yunariEditorBridge" in window);
-  await placeText(page);
-  // The field below belongs to a text selection, so the placed object has to be
-  // the text class that carries runs.
-  expect((await readScene(page)).at(-1)?.type).toBe("i-text");
-
-  // The inspector's own column, not the whole shell: the font body lives in
-  // the finder once it is open, and the claim is about this surface.
-  const column = page.locator('[data-yunari-panel="selection"]');
-  const field = column.locator("[data-yunari-open-font-picker]").first();
-  await expect(field).toBeVisible();
-
-  await field.click();
-
-  await expect(page.getByRole("dialog", { name: "Assets" })).toBeVisible();
-  await expect(page.locator('[data-yunari-asset-tab="font"]')).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  // The Fonts pane browses on open: the grid is what it draws, no term needed.
-  await expect(page.locator("[data-yunari-asset-grid]")).toBeVisible();
-  await expect(
-    page.locator(`[data-yunari-finder-card="${fontResult.id}"]`),
-  ).toBeVisible();
 });
 
 test("the Fonts tab draws a trio grid on open", async ({ page }, testInfo) => {

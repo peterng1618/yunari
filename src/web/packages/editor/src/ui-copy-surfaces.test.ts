@@ -842,18 +842,6 @@ async function mountLandedSurfaces(): Promise<{
       } as never,
       nodeBindings: () => [{ id: "clock-time", semanticKey: "date.today" }],
       refreshGlass: () => undefined,
-      // The face field is projected only when an owner that can write one is
-      // mounted, so the catalogue browser is only in this walk's tree when these
-      // are handed over — and a surface the walk does not mount is a surface it
-      // cannot read.
-      fontActions: {
-        applyFace: async () => undefined,
-        applyTrio: async () => undefined,
-      },
-      favoritesClient: {
-        list: async () => [],
-        save: async (ids: readonly string[]) => ids,
-      },
     });
   }
 

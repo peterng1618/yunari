@@ -24,7 +24,6 @@ import {
   type AppearanceContext,
   opacityField,
   resolveToken,
-  typeTokenOf,
 } from "./appearance.js";
 import { cropView } from "./crop.js";
 import { glassFields } from "./glass.js";
@@ -35,7 +34,6 @@ import {
   type ExtraView,
   type FieldView,
   IMAGE_BINDING_FIELD_ID,
-  isTextObject,
   type PairHalfView,
 } from "./view.js";
 
@@ -76,21 +74,19 @@ interface SectionParts {
 /**
  * Whether the column renders this extra today.
  *
- * All five are wired: `runs`, `chartContent` and `chartPaint` when their
- * sections moved to React, `crop` with Position, and `fontFace` with the face
- * field the ruling moved into the finder. The section's count and
- * the column's rows are the same decision made once, so emitting an extra whose
- * renderer has not landed cannot make a header claim a row that is not there.
- * Wiring one is a change to this predicate and to the column's row together,
- * which is the point.
+ * All four are wired: `runs` and the two chart halves when their sections moved
+ * to React, and `crop` with Position. The section's count and the column's rows
+ * are the same decision made once, so emitting an extra whose renderer has not
+ * landed cannot make a header claim a row that is not there. Wiring one is a
+ * change to this predicate and to the column's row together, which is the
+ * point.
  */
 export function rendersExtra(extra: ExtraView): boolean {
   return (
     extra.kind === "runs" ||
     extra.kind === "crop" ||
     extra.kind === "chartContent" ||
-    extra.kind === "chartPaint" ||
-    extra.kind === "fontFace"
+    extra.kind === "chartPaint"
   );
 }
 
@@ -223,17 +219,6 @@ export interface ColumnContext {
    * a chart is not a kind this column invents questions for.
    */
   readonly chartFields?: ChartFieldsPort;
-  /**
-   * Whether an owner that can write a font face is mounted.
-   *
-   * A capability, not the port: the field's writes are the Tokens pane's own
-   * actions, and the column is handed them beside its other ports rather than
-   * through this context. Absent means the field is not offered at all — a face
-   * browser whose every press did nothing would be worse than no browser, and
-   * the gate is what stops one being projected from a column with no owner
-   * behind it.
-   */
-  readonly canWriteFontFace?: boolean;
 }
 
 /** Every section is open when the column answers with it. `advanced`, when a
@@ -446,19 +431,6 @@ function contentBody(
     },
   );
   if (runs !== undefined) extras.push({ kind: "runs", nodeId, runs });
-
-  // The face field: the object's own face, which is its first run's preset.
-  // Offered only when that preset resolves, because the field writes *to the
-  // preset* and a text object whose runs name none has no face to change — the
-  // same rule the run editor follows for a box with no authored text, and the
-  // reason an empty box is not given a browser over a value it does not have.
-  const presetRef = isTextObject(target) ? typeTokenOf(target) : undefined;
-  if (presetRef !== undefined && context.canWriteFontFace === true) {
-    extras.push({
-      kind: "fontFace",
-      font: { presetId: presetRef.slice("typeTokens.".length) },
-    });
-  }
 
   // A chart's own questions: the readings it draws and how its family is set.
   // The owner answers them through the port; asking here is what puts them in

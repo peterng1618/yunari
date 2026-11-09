@@ -6,7 +6,6 @@ import type {
   ChartPaintFieldsView,
 } from "../chart-manager/chart-fields.js";
 import { rowNameOf } from "../editor-shell/layer-tree.js";
-import type { CuratedFontFace } from "../font-catalog.js";
 import type { SensorKeyStatus } from "../sensor-key-options.js";
 import { uiCopy } from "../ui-copy.js";
 import {
@@ -358,45 +357,12 @@ export interface CropEdits {
 }
 
 /**
- * The face field: the type preset whose face the field changes.
- *
- * A text object's face is not the object's own — a run names a preset and the
- * preset carries the face — so the field writes to the preset the object is set
- * in (`typeTokenOf`, the one owner of that reading) rather than to the object.
- * That is also why the field carries the preset and nothing else: the catalogue,
- * the author's favourites and the specimen cache are the control's own, and
- * `favorites` in particular is asynchronous, which a projected value cannot be.
- */
-export interface FontFaceView {
-  /** The preset id, without the `typeTokens.` prefix the writer takes off. */
-  readonly presetId: string;
-}
-
-/**
- * The face field's one way to write, and its two reads of the author's own
- * favourites.
- *
- * The face and trio writes are the Tokens pane's own actions — a face is bound
- * to a preset, and a trio rewrites every preset that names a role — so they are
- * performed by that owner and asked for here rather than re-implemented. The
- * favourites live on the host rather than in the document, so they are read and
- * written rather than held.
- */
-export interface FontFaceEdits {
-  readonly applyFace: (
-    presetId: string,
-    face: CuratedFontFace,
-  ) => Promise<void>;
-  readonly applyTrio: (trioId: string) => Promise<void>;
-  readonly listFavorites: () => Promise<readonly string[]>;
-  readonly saveFavorites: (
-    ids: readonly string[],
-  ) => Promise<readonly string[]>;
-}
-
-/**
- * The five sub-surfaces that are not one control. Each names one React
+ * The four sub-surfaces that are not one control. Each names one React
  * component in this family; no other kind is added without amending this.
+ *
+ * The text face has no row here: the type-token dropdown already offers the
+ * catalogue's "Add new token" entry, and a second door to the same browser was
+ * the redundant control the feedback named.
  */
 export type ExtraView =
   | { readonly kind: "runs"; readonly nodeId: string; readonly runs: RunsView }
@@ -405,8 +371,7 @@ export type ExtraView =
       readonly kind: "chartContent";
       readonly content: ChartContentFieldsView;
     }
-  | { readonly kind: "chartPaint"; readonly paint: ChartPaintFieldsView }
-  | { readonly kind: "fontFace"; readonly font: FontFaceView };
+  | { readonly kind: "chartPaint"; readonly paint: ChartPaintFieldsView };
 
 /**
  * The run editor's one way to write, beside `SelectionEdits`.

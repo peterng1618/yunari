@@ -243,11 +243,9 @@ export class EditorSession {
       },
     );
     this.#palette.render(this.#document.envelope.globals?.palette);
-    // The catalogue's three writes, built once because two surfaces ask this
-    // session for them: the Tokens pane's own controls and the selection
-    // inspector's face field are the same owner answering the same question
-    // are the same owner answering the same question, so neither
-    // re-implements a face or trio write.
+    // The catalogue's two writes, built once so every surface that asks this
+    // session for them shares one owner: neither uses a second implementation
+    // of a face or a trio write.
     const fontActions: TypeTokenFontActions = {
       applyFace: async (id, face) => {
         await this.#document.runFontAction(() =>
@@ -389,22 +387,11 @@ export class EditorSession {
       onBackgroundAssetSelect: (assetId) =>
         this.#document.setBackgroundAsset(assetId),
       onBackgroundModeChange: (mode) => this.#document.setBackgroundMode(mode),
-      // The face field's writes are the catalogue's own, above; the favourites
-      // it browses by are the host's, so the client travels rather than a list.
-      fontActions,
-      ...(options.favoritesClient === undefined
-        ? {}
-        : { favoritesClient: options.favoritesClient }),
-      // Both finder ports are the shell's one port: the face field's row and the
-      // run row's action entry open the same finder. The import opens Task 4.2's
-      // dialog and names its token back so the run that asked can point itself
-      // at it.
+      // The import opens Task 4.2's dialog and names its token back so the run
+      // that asked can point itself at it.
       ...(options.onFindFontPicker === undefined
         ? {}
-        : {
-            onOpenFontPicker: options.onFindFontPicker,
-            openFontFinder: options.onFindFontPicker,
-          }),
+        : { openFontFinder: options.onFindFontPicker }),
       importLocalFont: (onImported) =>
         pickFontFile(this.#fontHost(), onImported),
       // The run rows' in-place token editor: the same actions and the same

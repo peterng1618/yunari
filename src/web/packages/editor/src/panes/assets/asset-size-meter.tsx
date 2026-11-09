@@ -27,7 +27,7 @@ export function AssetSizeMeter({
     <div className="mb-[var(--space-8)] flex flex-wrap items-baseline gap-x-[var(--space-8)] font-mono text-[10px]">
       <span data-yunari-theme-size="" className={tone}>
         {uiCopy.panels.assetSizes.theme(
-          percent,
+          uiCopy.panels.assetCard.size(summary.themeBytes),
           uiCopy.panels.assetCard.size(summary.limitBytes),
         )}
       </span>

@@ -2027,63 +2027,6 @@ test.describe("the per-kind inspector column", () => {
     await captureColumn(page, testInfo, "editor-inspector-card");
   });
 
-  /**
-   * `vg-268`/`vg-283`: the catalogue browser the font-trio plan shipped is
-   * mounted on the field the ruling named as its owner — the selection
-   * inspector's face field for a text object — and it is that control rather
-   * than a second face picker written beside it.
-   *
-   * **Reachability is the claim, and it is about a rendered surface.** The field
-   * is inside the text object's Content section, it is the catalogue (its rows
-   * name real families, and its search narrows them), and a shape — which has no
-   * face to change — is offered none. The write a face row makes is pinned in
-   * jsdom (`column.dom.test.tsx`) and in the session's own `applyPresetFace`
-   * test; applying one here would download the face from a CDN, which is a
-   * network the suite does not own.
-   */
-  test("reaches the font catalogue from a text object's face field, and offers a shape none", async ({
-    page,
-  }, testInfo) => {
-    test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
-    await page.waitForFunction(() => "yunariEditorBridge" in window);
-    await openBlank(page);
-    await insert(page, "Text", "text");
-
-    // Scoped to Content: the field is the text section's, and a field that
-    // rendered anywhere in the column would satisfy an unscoped read.
-    const field = page.locator(
-      '[data-yunari-section="content"] [data-yunari-font-face-field]',
-    );
-    await expect(field).toBeVisible();
-
-    // **The catalogue is the finder's Fonts tab**, not the field: the field
-    // names the face and opens the browser that owns the list, so what the
-    // press reaches is what this case asserts. The finder asks the host for its
-    // sources first; the preview is not a host, and an empty listing is the
-    // host answering that it serves none, so route it rather than let the
-    // dialog fall back to "the host is not connected" (which hides every tab).
-    await page.route("**/api/assets/sources", (route) =>
-      route.fulfill({ json: { sources: [] } }),
-    );
-    await field.locator("[data-yunari-open-font-picker]").click();
-    await expect(
-      page.locator('[data-yunari-asset-tab="font"][data-active]'),
-      "the press lands on the Fonts tab",
-    ).toHaveCount(1);
-    // The body is drawn, saying no source answered — it is not the grid's
-    // empty sentence dressed up as a catalogue. The catalogue's own rows, sort,
-    // trio and search are `asset-finder.spec.ts`'s subject, against a host that
-    // serves one; repeating them here would let two fixtures drift apart.
-    await expect(page.locator("[data-yunari-asset-body]")).toBeVisible();
-
-    // A shape has no face, so it is offered no field over one.
-    await page.keyboard.press("Escape");
-    await expect(page.locator("[data-yunari-asset-frame]")).toBeHidden();
-    await insert(page, "Rectangle", "shape");
-    await expect(page.locator("[data-yunari-font-face-field]")).toHaveCount(0);
-  });
-
   test("captures the sectioned column a shape gets", async ({
     page,
   }, testInfo) => {

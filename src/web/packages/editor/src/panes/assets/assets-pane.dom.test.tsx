@@ -256,7 +256,7 @@ describe("the Assets pane", () => {
     const roomy = read(5 * 1024 * 1024);
     expect(roomy.text).toBe(
       uiCopy.panels.assetSizes.theme(
-        50,
+        uiCopy.panels.assetCard.size(5 * 1024 * 1024),
         uiCopy.panels.assetCard.size(10 * 1024 * 1024),
       ),
     );

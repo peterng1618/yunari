@@ -9,8 +9,6 @@ import type {
 } from "@yunari/renderer-core";
 import type { ChartEdits } from "../chart-manager/chart-fields.js";
 import type { EditorInteraction } from "../editor-interaction.js";
-import type { FavoritesClient } from "../favorites-client.js";
-import type { TypeTokenFontActions } from "../type-preset-manager/panel.js";
 import type { DesignTokenPort } from "./design-token-editor.js";
 import type { ChartFieldsPort } from "./per-kind-column.js";
 
@@ -77,24 +75,6 @@ export interface SelectionInspectorOptions {
    */
   readonly chartEdits?: () => ChartEdits | undefined;
   /**
-   * The font catalogue's writes, from the owner that already performs them for
-   * the Tokens pane.
-   *
-   * The same two actions and no second implementation: a face is bound to a
-   * preset and a trio rewrites every preset that names a role, so the rule is
-   * the type-preset owner's and this asks for it. **Absent means no face field**
-   * — a catalogue browser whose every press did nothing would be worse than the
-   * field being absent, so the column is told the capability rather than handed
-   * a port that swallows it.
-   */
-  readonly fontActions?: TypeTokenFontActions;
-  /**
-   * The author's favourite trios, which the host keeps rather than the document.
-   * Absent reads as none and stores none, which is the standalone editor's own
-   * answer rather than a failure.
-   */
-  readonly favoritesClient?: FavoritesClient;
-  /**
    * Whether the shell's selection is the background layer. The background is no
    * Fabric object, so this is the only way the column can describe it, and the
    * shell is the one owner of the flag (`EditorShellBridge.backgroundSelected`).
@@ -116,12 +96,8 @@ export interface SelectionInspectorOptions {
   readonly onBackgroundAssetSelect?: (assetId: string | undefined) => void;
   /** Enters or leaves the advanced background model, through the document. */
   readonly onBackgroundModeChange?: (mode: BackgroundMode) => void;
-  /** Opens the finder on Fonts, where the catalogue now lives. Absent in a
-   *  panel built without the shell's finder. */
-  readonly onOpenFontPicker?: () => void;
-  /** Opens that same finder from a run's token list. The session passes the
-   *  same shell port as `onOpenFontPicker`; two ports because the two surfaces
-   *  ask separately, not because the answers differ. */
+  /** Opens the finder on Fonts, where the catalogue lives. Absent in a panel
+   *  built without the shell's finder. */
   readonly openFontFinder?: () => void;
   /** Imports a local font and hands back the token the commit produced or
    *  adopted, so the run that asked can point itself at it. Absent where the

@@ -1708,7 +1708,6 @@ export const uiCopy = {
     needsCredential: (label: string): string =>
       `${label} needs a key this host does not have.`,
     connectionsAction: "Open Connections",
-    openFontPicker: "Browse the font catalogue",
     /** The Fonts body's own search and filter row (R5). The old picker's
      *  facet vocabulary and rule sentence die with it in Task 13. */
     fontSearch: "Search trios and font names",
@@ -2424,8 +2423,9 @@ export const uiCopy = {
     /** The pane's size meter, under its Import row. The percentage carries the
      *  same state as the colour, so the reading survives without it. */
     assetSizes: {
-      theme: (percent: number, limit: string): string =>
-        `Theme ${percent}% of ${limit}`,
+      /** The package's own bytes against the bound, in the app's size words:
+       *  the percentage is the meter's colour, not a second reading here. */
+      theme: (size: string, limit: string): string => `${size} of ${limit}`,
       unused: (size: string): string => `Unused ${size}`,
     },
     /** The inline form a chosen font expands to: the facts the file cannot
@@ -2669,8 +2669,6 @@ export const uiCopy = {
     weight: "Weight",
     lineHeight: "Line height",
     letterSpacing: "Letter spacing",
-    /** The curated face a preset adopts. */
-    fontFace: "Font face",
     fontBound: "Bound to a packaged face",
     unbindFont: "Unbind",
   },
