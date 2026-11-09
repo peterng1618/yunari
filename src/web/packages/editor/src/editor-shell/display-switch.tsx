@@ -48,6 +48,21 @@ function useIsFitted(viewport: ViewportManager): boolean {
   return useSyncExternalStore(subscribe, () => viewport.isFitted());
 }
 
+/** The browser owns fullscreen and reports every change, including the Esc
+ *  that leaves it; React reads that one document fact rather than keeping a
+ *  copy that a browser-side exit would leave wrong. */
+function useFullscreen(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      document.addEventListener("fullscreenchange", listener);
+      return () => document.removeEventListener("fullscreenchange", listener);
+    },
+    // A browser without the Fullscreen API reports no `fullscreenElement` at
+    // all, which is the same answer as "nothing is fullscreen".
+    () => (document.fullscreenElement ?? null) !== null,
+  );
+}
+
 /** The catalogue is module state the settings tab writes; reading its revision
  *  subscribes this control, and the groups are then read from the same live
  *  list. A snapshot of the revision rather than the lenses keeps the identity
@@ -62,20 +77,26 @@ function usePreviewCatalogue(): void {
  *  is the control asserting a framing the camera is not in. */
 const NEITHER = "neither";
 
-/** The browser owns what is fullscreen; React keeps no copy of it. Esc exits,
- *  which is why the control is one-way rather than a toggle whose name would
- *  have to change under it. **The stage is the element**, not the document: the
- *  author asked for the canvas at full size, not the editor's chrome around it.
- *  A preview rendered without a stage does nothing rather than falling back to
- *  the whole page. */
-function viewFullscreen(): void {
-  document
-    .querySelector<HTMLElement>(".editor-shell-stage")
-    ?.requestFullscreen?.()
-    .catch(() => {
+/** **The stage is the element**, not the document: the author asked for the
+ *  canvas at full size, not the editor's chrome around it. A preview rendered
+ *  without a stage does nothing rather than falling back to the whole page.
+ *
+ *  One command either way, so the menu's checkbox and the cluster's button
+ *  cannot disagree about what a press does: enter when the document is not
+ *  fullscreen, leave when it is, whichever element got there. */
+function setFullscreen(on: boolean): void {
+  const stage = document.querySelector<HTMLElement>(".editor-shell-stage");
+  if (on) {
+    stage?.requestFullscreen?.().catch(() => {
       // A browser policy or a refusal leaves the stage where it was; the
       // control is a request, not a state this app can assert.
     });
+    return;
+  }
+  document.exitFullscreen?.().catch(() => {
+    // Already left, or the browser refused: the next `fullscreenchange`
+    // reports whichever is true.
+  });
 }
 
 export function DisplaySwitch({
@@ -92,6 +113,7 @@ export function DisplaySwitch({
   const zoom = useZoom(viewport);
   const display = useDisplay(viewport);
   const isFitted = useIsFitted(viewport);
+  const fullscreen = useFullscreen();
   usePreviewCatalogue();
   const groups = displayLensGroups();
   const percent = `${Math.round(zoom * 100)}%`;
@@ -168,7 +190,7 @@ export function DisplaySwitch({
               </Menu.RadioGroup>
               <Menu.Item
                 aria-label={uiCopy.display.zoomToFit}
-                onClick={() => viewport.zoomToFit()}
+                onClick={() => viewport.toggleFit()}
               >
                 {uiCopy.display.zoomToFit}
               </Menu.Item>
@@ -184,12 +206,20 @@ export function DisplaySwitch({
               >
                 {uiCopy.display.actualSize}
               </Menu.Item>
-              <Menu.Item
+              <Menu.CheckboxItem
                 aria-label={uiCopy.display.fullscreen}
-                onClick={viewFullscreen}
+                checked={fullscreen}
+                closeOnClick
+                onCheckedChange={(checked: boolean) => setFullscreen(checked)}
               >
+                <Menu.CheckboxItemIndicator
+                  className="editor-shell-menu-tick"
+                  keepMounted
+                >
+                  {"•"}
+                </Menu.CheckboxItemIndicator>
                 {uiCopy.display.fullscreen}
-              </Menu.Item>
+              </Menu.CheckboxItem>
             </Menu.Popup>
           </Menu.Positioner>
         </Menu.Portal>
@@ -204,17 +234,21 @@ export function DisplaySwitch({
           menu's Fit tick reads: one fact, two readings, so a lens chosen and
           then moved off the fit cannot be marked as fitted here and unmarked
           there. It is carried by `data-fitted` rather than `aria-pressed`
-          because Fit is one-way — pressing it fits, and no second press un-fits
-          — so the toggle pattern would announce a state the control cannot
-          change. */}
+          because the lit state is the smile of the fit, not a two-position
+          switch — the press toggles as a convenience, but the control says
+          "fitted" or it says nothing. */}
       <ViewButton
         label={uiCopy.display.zoomToFit}
         fitted={isFitted}
-        onClick={() => viewport.zoomToFit()}
+        onClick={() => viewport.toggleFit()}
       >
         <Glyph icon={FIT_GLYPH} size={15} />
       </ViewButton>
-      <ViewButton label={uiCopy.display.fullscreen} onClick={viewFullscreen}>
+      <ViewButton
+        label={uiCopy.display.fullscreen}
+        pressed={fullscreen}
+        onClick={() => setFullscreen(!fullscreen)}
+      >
         <Glyph icon={PREVIEW_GLYPH} size={15} />
       </ViewButton>
     </div>
@@ -225,15 +259,19 @@ export function DisplaySwitch({
  *  the one owner of the name/tooltip pairing, as it is for the dock's actions.
  *
  *  `fitted` is omitted rather than `false` on the two stepping commands: it is
- *  the fitted camera's mark, and they hold no such state. */
+ *  the fitted camera's mark, and they hold no such state. `pressed` is the
+ *  fullscreen button's two-position state and is announced as one; the fit
+ *  button is not a switch and carries only the mark. */
 function ViewButton({
   label,
   fitted,
+  pressed,
   onClick,
   children,
 }: {
   readonly label: string;
   readonly fitted?: boolean;
+  readonly pressed?: boolean;
   readonly onClick: () => void;
   readonly children: ReactNode;
 }): React.JSX.Element {
@@ -243,6 +281,7 @@ function ViewButton({
         type="button"
         className="editor-shell-view-step"
         aria-label={label}
+        {...(pressed === undefined ? {} : { "aria-pressed": pressed })}
         data-fitted={fitted}
         onClick={onClick}
       >

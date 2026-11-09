@@ -18,6 +18,7 @@ function setup() {
     zoomToPoint: vi.fn(),
     zoomBy: vi.fn(),
     zoomToFit: vi.fn(),
+    toggleFit: vi.fn(),
     zoomToSelection: vi.fn(),
     reset: vi.fn(),
     panBy: vi.fn(),

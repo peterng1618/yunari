@@ -34,6 +34,7 @@ function setup(display: string | undefined = "19.5:9") {
   const showDisplay = vi.fn();
   const zoomBy = vi.fn();
   const zoomToFit = vi.fn();
+  const toggleFit = vi.fn();
   const zoomToSelection = vi.fn();
   const reset = vi.fn();
   const listeners = new Set<() => void>();
@@ -49,6 +50,7 @@ function setup(display: string | undefined = "19.5:9") {
     zoomToPoint: vi.fn(),
     zoomBy,
     zoomToFit,
+    toggleFit,
     zoomToSelection,
     reset,
     panBy: vi.fn(),
@@ -76,6 +78,7 @@ function setup(display: string | undefined = "19.5:9") {
     showDisplay,
     zoomBy,
     zoomToFit,
+    toggleFit,
     zoomToSelection,
     reset,
     render: (playback?: ReactNode) =>
@@ -173,7 +176,7 @@ it("keeps every choice reachable, inside one view cluster", async () => {
  *  one owner rather than restated, because two literals would be two answers to
  *  "what is one step" and the mouse and the keyboard would drift apart. */
 it("offers the camera's −, +, fit and fullscreen beside the readout, stepping by the keys' amount", async () => {
-  const { host, render, zoomBy, zoomToFit } = setup();
+  const { host, render, zoomBy, toggleFit } = setup();
   await render();
 
   const click = (label: string): Promise<void> =>
@@ -186,7 +189,7 @@ it("offers the camera's −, +, fit and fullscreen beside the readout, stepping 
   await click(uiCopy.display.zoomIn);
   expect(zoomBy).toHaveBeenLastCalledWith(ZOOM_STEP);
   await click(uiCopy.display.zoomToFit);
-  expect(zoomToFit).toHaveBeenCalled();
+  expect(toggleFit).toHaveBeenCalled();
 
   // Siblings of the readout, which keeps the display chooser and the scale: the
   // cluster is one row of controls, not a control that replaced the readout.
@@ -240,12 +243,88 @@ it("asks the browser for fullscreen on the stage, from the cluster and the menu"
   }
 });
 
+/** The browser is the state, and Esc is a way out of it this app never sees
+ *  as a click: the control reads `fullscreenElement` and listens for the
+ *  change rather than remembering what its own last press asked for. */
+it("reflects the live fullscreen state and leaves it on a second press", async () => {
+  const request = vi.fn().mockResolvedValue(undefined);
+  const exit = vi.fn().mockResolvedValue(undefined);
+  const stage = document.createElement("main");
+  stage.className = "editor-shell-stage";
+  document.body.append(stage);
+  let fullscreen: Element | null = null;
+  Object.defineProperty(stage, "requestFullscreen", {
+    configurable: true,
+    value: request,
+  });
+  Object.defineProperty(document, "exitFullscreen", {
+    configurable: true,
+    value: exit,
+  });
+  Object.defineProperty(document, "fullscreenElement", {
+    configurable: true,
+    get: () => fullscreen,
+  });
+  try {
+    const { host, render } = setup();
+    await render();
+
+    const clusterButton = (): HTMLButtonElement | null =>
+      host.querySelector<HTMLButtonElement>(
+        `[aria-label="${uiCopy.display.fullscreen}"]`,
+      );
+    const menuItem = (): Element | null =>
+      document.querySelector(
+        `[role="menuitemcheckbox"][aria-label="${uiCopy.display.fullscreen}"]`,
+      );
+
+    expect(clusterButton()?.getAttribute("aria-pressed")).toBe("false");
+    expect(menuItem()?.getAttribute("aria-checked")).toBe("false");
+
+    await act(async () =>
+      menuItem()?.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(request, "the menu's item enters fullscreen").toHaveBeenCalledTimes(
+      1,
+    );
+
+    fullscreen = stage;
+    await act(async () =>
+      document.dispatchEvent(new Event("fullscreenchange")),
+    );
+    expect(
+      clusterButton()?.getAttribute("aria-pressed"),
+      "the cluster says the stage is fullscreen",
+    ).toBe("true");
+    expect(
+      menuItem()?.getAttribute("aria-checked"),
+      "and so does the menu's tick",
+    ).toBe("true");
+
+    await act(async () => clusterButton()?.click());
+    expect(exit, "a second press leaves fullscreen").toHaveBeenCalledTimes(1);
+    expect(request, "it does not ask to enter again").toHaveBeenCalledTimes(1);
+
+    fullscreen = null;
+    await act(async () =>
+      document.dispatchEvent(new Event("fullscreenchange")),
+    );
+    expect(clusterButton()?.getAttribute("aria-pressed")).toBe("false");
+  } finally {
+    stage.remove();
+    Reflect.deleteProperty(document, "exitFullscreen");
+    Reflect.deleteProperty(document, "fullscreenElement");
+  }
+});
+
 /** Fit says whether the camera is fitted, off the same `isFitted()` the camera
  *  owns. A lens chosen and then moved off the fit is the state this separates:
  *  the lens is still chosen, and the camera is not where a fit would put it.
  *
- *  The mark is `data-fitted` and not `aria-pressed`: Fit cannot be pressed off,
- *  so the toggle pattern would announce a state the control does not hold. */
+ *  The mark is `data-fitted`, not `aria-pressed`: the press toggles back to the
+ *  previous camera, but the control's lit state is "the camera is a fit", and
+ *  `aria-pressed` would announce a two-position switch whose off state is not
+ *  "unpressed fit" but whatever camera the author had before. */
 it("marks fit from the camera, so a lens that is not fitted is not marked", async () => {
   const { host, render, setFitted } = setup("16:9");
   await render();
@@ -263,7 +342,7 @@ it("marks fit from the camera, so a lens that is not fitted is not marked", asyn
     host
       .querySelector(`[aria-label="${uiCopy.display.zoomToFit}"]`)
       ?.getAttribute("aria-pressed"),
-    "and no aria-pressed is announced, because Fit is not a toggle",
+    "and no aria-pressed is announced: the mark is the fitted camera",
   ).toBeNull();
 });
 

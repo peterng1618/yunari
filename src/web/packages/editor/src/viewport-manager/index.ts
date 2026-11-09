@@ -63,6 +63,9 @@ export interface ViewportManager {
   zoomToPoint(point: Point, zoom: number): void;
   zoomBy(factor: number): void;
   zoomToFit(): void;
+  /** Fit when the camera is not already fitted; return the camera the last
+   *  fit replaced when it is. */
+  toggleFit(): void;
   zoomToSelection(): void;
   reset(): void;
   panBy(deltaX: number, deltaY: number): void;
@@ -366,15 +369,55 @@ export function createViewportManager({
     );
   };
 
-  const zoomToFit = (): void => {
+  /**
+   * The camera the author had before the last fit that left a real camera
+   * behind. Fit is the control's on state as well as its command, so the
+   * second press has to go somewhere: the zoom and pan the fit replaced, or
+   * nothing at all when the camera was already fitted when it opened.
+   */
+  let unfitted:
+    | { scale: number; translateX: number; translateY: number }
+    | undefined;
+
+  /**
+   * Fits the camera, and — for a command the author gave — remembers what the
+   * camera was looking at first.
+   *
+   * A refit the author did not ask for keeps no memory: a resize, a removed
+   * lens or the construction's own opening fit would otherwise hand the toggle
+   * a camera nobody chose, and the second press would restore it.
+   */
+  function fit(rememberPrevious: boolean): void {
     const viewport = viewportSize();
     if (viewport === undefined) return;
+    const current = transform();
+    const wasFitted = isFittedIn(viewport);
     // Through `fitTransformIn` rather than recomputing the centre here, so a
     // fit cannot disagree with the predicate that decides whether a resize
     // should perform one — which is exactly the disagreement that made an
     // author's pan vanish on the window nudge that was meant to keep it.
-    const { scale, translateX, translateY } = fitTransformIn(viewport);
-    commit(scale, translateX, translateY);
+    const next = fitTransformIn(viewport);
+    if (rememberPrevious && !wasFitted) unfitted = current;
+    commit(next.scale, next.translateX, next.translateY);
+    notify();
+  }
+
+  /** The fit command: always fits, and remembers the camera it replaced. */
+  const zoomToFit = (): void => fit(true);
+
+  /** Fit when the camera is not already there, and return to the camera the
+   *  last fit replaced when it is. */
+  const toggleFit = (): void => {
+    const viewport = viewportSize();
+    if (viewport === undefined) return;
+    if (!isFittedIn(viewport)) {
+      zoomToFit();
+      return;
+    }
+    if (unfitted === undefined) return;
+    const back = unfitted;
+    unfitted = undefined;
+    commit(back.scale, back.translateX, back.translateY);
     notify();
   };
 
@@ -386,7 +429,7 @@ export function createViewportManager({
   const unsubscribeLenses = subscribeLenses(() => {
     if (lens === undefined || resolveLens(lens) !== undefined) return;
     lens = undefined;
-    zoomToFit();
+    fit(false);
   });
 
   function resize(): void {
@@ -406,7 +449,7 @@ export function createViewportManager({
       // theirs: re-centring it on every size change yanks the view back under
       // them, which is what broke the point-under-cursor invariant when this
       // was tried as an unconditional re-centre.
-      zoomToFit();
+      fit(false);
       return;
     }
     const { scale, translateX, translateY } = transform();
@@ -433,9 +476,10 @@ export function createViewportManager({
   observer?.observe(host);
   // The preview opens fitted: `resize` sizes the canvas and holds an unfitted
   // camera, so the fit is the construction's own last word rather than a
-  // gesture the caller has to remember.
+  // gesture the caller has to remember. It keeps no previous camera, for the
+  // same reason.
   resize();
-  zoomToFit();
+  fit(false);
 
   return {
     zoom,
@@ -462,6 +506,7 @@ export function createViewportManager({
       );
     },
     zoomToFit,
+    toggleFit,
     zoomToSelection() {
       const active = canvas.getActiveObject();
       if (active === undefined) return zoomToFit();
