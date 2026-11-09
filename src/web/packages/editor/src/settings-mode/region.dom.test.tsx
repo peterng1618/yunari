@@ -513,6 +513,22 @@ const DEVICES: DeviceSettings = {
   names: { "ssd-0": "Data drive" },
 };
 
+/** Two of each, where a slot is a real question. */
+const TWO_OF_EACH: DeviceSettings = {
+  available: {
+    gpus: [
+      { id: "gpu-0", name: "NVIDIA GeForce RTX 4070" },
+      { id: "gpu-1", name: "AMD Radeon RX 7800" },
+    ],
+    disks: [
+      { id: "ssd-0", name: "Samsung SSD 990 PRO" },
+      { id: "hdd-0", name: "Seagate Barracuda" },
+    ],
+  },
+  assigned: { gpu: "gpu-0" },
+  names: { "ssd-0": "Data drive" },
+};
+
 /** The region over one run's answers, with both seams handed in. `published` is
  *  every status line the region handed the shell, in order: the strip is the
  *  shell's, so this is what the region *says* about the run rather than a bar it
@@ -1433,7 +1449,7 @@ it("asks only the questions the theme on that display raises", async () => {
         answers: { gpu: "gpu-0" },
       },
     },
-    devices: DEVICES,
+    devices: TWO_OF_EACH,
   });
 
   expect(
@@ -1470,7 +1486,10 @@ it("asks only the questions the theme on that display raises", async () => {
  *  whatever the count, so the control always shows something and a choice can be
  *  undone. The chosen device is the value the well prints. */
 it("offers each slot's devices with the automatic choice first", async () => {
-  const { container } = await mountHost({ ...TWO_DISPLAYS, devices: DEVICES });
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    devices: TWO_OF_EACH,
+  });
 
   expect(
     selectValue(container, "[data-yunari-host-device-group='gpu']"),
@@ -1491,7 +1510,7 @@ it("offers each slot's devices with the automatic choice first", async () => {
       ),
     ),
     "the card slot does not offer the automatic choice before the devices",
-  ).toEqual(["", "gpu-0"]);
+  ).toEqual(["", "gpu-0", "gpu-1"]);
 
   expect(
     must(
@@ -1502,6 +1521,65 @@ it("offers each slot's devices with the automatic choice first", async () => {
     ).value,
     "a device with a chosen name does not show it",
   ).toBe("Data drive");
+});
+
+/**
+ * **One device is not a choice.** The slot states the device it reads instead of
+ * offering a dropdown whose entries — the automatic choice and the one device —
+ * are the same answer. The names column still lists the device, so nothing is
+ * lost by the row shrinking.
+ */
+it("states a slot's only device instead of offering it", async () => {
+  const { container } = await mountHost(
+    { ...TWO_DISPLAYS, devices: DEVICES },
+    undefined,
+    "hardware",
+  );
+
+  expect(
+    container.querySelector("[data-yunari-host-device-group='gpu']"),
+    "a slot the host has one device for was still offered as a choice",
+  ).toBeNull();
+  expect(
+    must(
+      container.querySelector<HTMLElement>(
+        "[data-yunari-host-device-only='gpu']",
+      ),
+      "the card slot's statement",
+    ).textContent,
+    "the slot does not say which device it reads",
+  ).toContain(uiCopy.hostSettings.devices.onlyOne("NVIDIA GeForce RTX 4070"));
+});
+
+/**
+ * The same rule on the display's side: a theme that reads a slot the host has
+ * one device for raises no question, because the host's automatic answer is that
+ * device. With two devices the question survives.
+ */
+it("does not ask a theme's slot the host has one device for", async () => {
+  const questions = {
+    "this-pc/kitchen-strip": { required: ["gpu"] as const, answers: {} },
+  };
+
+  const { container } = await mountHost({
+    ...TWO_DISPLAYS,
+    questions,
+    devices: DEVICES,
+  });
+  expect(
+    answerRows(container),
+    "a slot with one device behind it was asked as if there were a choice",
+  ).toEqual([]);
+
+  const two = await mountHost({
+    ...TWO_DISPLAYS,
+    questions,
+    devices: TWO_OF_EACH,
+  });
+  expect(
+    answerRows(two.container),
+    "a slot with two devices is not asked",
+  ).toEqual(["gpu"]);
 });
 
 /**

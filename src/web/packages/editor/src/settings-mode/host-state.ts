@@ -42,6 +42,20 @@ export function devicesFor(
   return group === "gpu" ? settings.available.gpus : settings.available.disks;
 }
 
+/** Whether a slot is a question at all.
+ *
+ *  **One device answers itself**: the host's automatic choice is the first
+ *  device of the group, so with exactly one there is nothing a dropdown could
+ *  change and nothing a theme answer could add. Both surfaces ask this one
+ *  question rather than repeating the count — the Hardware page states the
+ *  device instead of offering it, and a theme's raised slot is not asked. */
+export function asksWhichDevice(
+  settings: DeviceSettings,
+  group: AssignableGroup,
+): boolean {
+  return devicesFor(settings, group).length > 1;
+}
+
 /** Every device this PC reported, the two lists in the order the pages draw
  *  them: the cards first, then the drives. */
 export function everyDevice(
@@ -619,7 +633,13 @@ export function useHostSettings(props: {
     }
   };
 
-  const asked = unanswered(questions?.required ?? [], questions?.answers ?? {});
+  // A theme's slot is only asked where the device count leaves a choice. The
+  // devices are read separately, so the row disappears when the read lands
+  // rather than being answered with a guess.
+  const asked = unanswered(
+    questions?.required ?? [],
+    questions?.answers ?? {},
+  ).filter((group) => devices === undefined || asksWhichDevice(devices, group));
 
   return {
     displays,

@@ -4,6 +4,7 @@ import { ControlSelect } from "../../components/ui/control-select.js";
 import { uiCopy } from "../../ui-copy.js";
 import { DeviceNameRow } from "../device-name-row.js";
 import {
+  asksWhichDevice,
   devicesFor,
   everyDevice,
   groupQuestion,
@@ -37,6 +38,21 @@ export function HardwarePage(state: HostState): React.JSX.Element {
               // A slot with nothing behind it is not a question: the page draws
               // no row rather than an empty dropdown.
               if (options.length === 0) return null;
+              // One device is not a question either: the row states what the
+              // slot reads rather than offering the one device and the
+              // automatic choice, which mean the same thing here. The names
+              // column still draws the device, so it stays renamed and listed.
+              if (!asksWhichDevice(devices, group)) {
+                return (
+                  <p
+                    key={group}
+                    data-yunari-host-device-only={group}
+                    className="m-0 text-xs text-muted"
+                  >
+                    {groupQuestion(devices, group)}
+                  </p>
+                );
+              }
               const choices = [
                 // The default exists whatever the count, so the control always
                 // shows something and a choice can be undone.

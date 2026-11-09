@@ -85,7 +85,10 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     const disks = await disksOn(request);
-    test.skip(disks.length === 0, "this machine reports no disks");
+    test.skip(
+      disks.length < 2,
+      "this machine has no second disk to choose between",
+    );
 
     resetStores();
     await openPage(page, "hardware");
@@ -128,7 +131,10 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     const disks = await disksOn(request);
-    test.skip(disks.length === 0, "this machine reports no disks");
+    test.skip(
+      disks.length < 2,
+      "this machine has no second disk to choose between",
+    );
 
     resetStores();
     await openPage(page, "hardware");
@@ -280,7 +286,10 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     const disks = await disksOn(request);
-    test.skip(disks.length === 0, "this machine reports no disks");
+    test.skip(
+      disks.length < 2,
+      "this machine has no second disk to choose between",
+    );
 
     resetStores();
     const global = await assignedSystemDisk(request);
@@ -351,7 +360,10 @@ test.describe("the settings page a consumer configures", () => {
     );
 
     const disks = await disksOn(request);
-    test.skip(disks.length === 0, "this machine reports no disks");
+    test.skip(
+      disks.length < 2,
+      "this machine has no second disk to choose between",
+    );
 
     resetStores();
     const chosen = disks[0]!;
@@ -389,6 +401,12 @@ test.describe("the settings page a consumer configures", () => {
     test.skip(
       !isDesktopSurface(testInfo),
       "one desktop pass owns the shared host state",
+    );
+
+    const disks = await disksOn(request);
+    test.skip(
+      disks.length < 2,
+      "this machine has no second disk to choose between",
     );
 
     resetStores();
