@@ -11,14 +11,20 @@ import {
 } from "./globals.js";
 
 /**
- * The tokens a blank theme starts from: the ink, the panel materials and the
- * two chart surfaces, and nothing else.
+ * The tokens a blank theme starts from: the two inks, the panel and its glass
+ * material and outline, the divider, and the chart surface — and nothing else.
  *
  * The starter palette also carries the reference composition's device colours —
  * `cpu`, `gpu`, `ram`, `vram`, `down` — and those are not a starting set. A
  * theme opened on a machine with no GPU should not arrive holding a GPU token,
  * and one that does says something about the author's display that they never
  * chose. Product decision, recorded 2026-09-29.
+ *
+ * The same rule keeps the composition's two glass chart inks out: a blank theme
+ * has no glass card for them to sit on, and a card inserted later that names
+ * one resolves through `resolveCardToken`, which substitutes by role and tells
+ * the author what it mapped — a substitution the library is built to report
+ * rather than a token every new theme must carry unused.
  */
 const BLANK_PALETTE_IDS = [
   "none",
@@ -29,13 +35,11 @@ const BLANK_PALETTE_IDS = [
   "panelStroke",
   "rule",
   "chartTrack",
-  "frostInk",
-  "frostArea",
 ] as const satisfies readonly StarterPaletteId[];
 
 /**
- * A new document: the ink, the panel materials and the two chart surfaces, at
- * the artboard the author chose.
+ * A new document: the inks, the panel and its glass material, the divider and
+ * the chart surface, at the artboard the author chose.
  *
  * Written as a literal rather than derived from a starter composition: the
  * composition is committed data now (`bundled/starter.theme.zip` in the

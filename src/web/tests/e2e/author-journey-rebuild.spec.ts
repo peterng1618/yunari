@@ -118,7 +118,7 @@ test.describe("the reference composition, built from blank", () => {
   test("the wordmark, the strapline and the clock card", async ({ page }) => {
     await openBlank(page);
 
-    // The blank theme's ten tokens carry no device colours, and the composition
+    // The blank theme's eight tokens carry no device colours, and the composition
     // is painted with four. The palette owns adding one, so that is the route.
     for (const [name, hex] of [
       ["CPU blue", "#3b9dff"],

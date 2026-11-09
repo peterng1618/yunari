@@ -5,7 +5,7 @@ import { artboardSize } from "@yunari/theme-kit";
  * A card the theme cannot express, through each surface that offers one.
  *
  * **Reachable, not theoretical.** On a blank theme (`File > New`) the palette
- * carries ten tokens and the cards name `palette.cpu`, `palette.gpu`,
+ * carries eight tokens and the cards name `palette.cpu`, `palette.gpu`,
  * `palette.ram`, `palette.vram`, `palette.down`, `palette.sparkArea` and
  * `palette.storageFill` — so only Clock survives. The author inserts a `CPU`
  * card, and before this was fixed **nothing happened, nothing was said**, and an
@@ -80,7 +80,7 @@ beforeAll(async () => {
   await installStarterUnits();
 });
 
-/** The palette of `File > New`: ten tokens, none of them a device's colour. */
+/** The palette of `File > New`: eight tokens, none of them a device's colour. */
 const BLANK = createBlankFabricTheme(
   artboardSize("16:9", "1080p", "landscape"),
 );
@@ -193,7 +193,7 @@ beforeEach(() => {
 /**
  * A theme whose palette is not the starter's.
  *
- * This is the **blank theme** — `File > New`, ten tokens, none of them a
+ * This is the **blank theme** — `File > New`, eight tokens, none of them a
  * device's colour — and it is where the rule bites hardest: **seven of the
  * eight cards cannot be refused here**, because refusing is what keeps an
  * unresolved reference out of a document that `snapshot` validates and throws

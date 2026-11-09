@@ -41,7 +41,7 @@ import {
  */
 
 /**
- * The four device colours the composition is painted with. The blank theme's ten
+ * The four device colours the composition is painted with. The blank theme's eight
  * tokens are the minimal set the plan's Product decisions chose — surfaces, a
  * rule and a text, no accents — so an author paints a device-coloured dashboard
  * by adding four tokens through the palette. That is the decision working, not

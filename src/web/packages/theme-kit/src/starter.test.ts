@@ -13,8 +13,8 @@ const createBlankFabricTheme = (artboard: {
 }) => createBlankTheme({ artboard });
 
 describe("the blank Fabric document", () => {
-  /** The ten ids the product decision names: the minimal tokens plus `none`,
-      which the validator requires of any palette. */
+  /** The eight ids the product decision names: what a blank theme can paint
+      with, plus `none`, which the validator requires of any palette. */
   const BLANK_PALETTE_IDS = [
     "none",
     "text",
@@ -24,11 +24,10 @@ describe("the blank Fabric document", () => {
     "panelStroke",
     "rule",
     "chartTrack",
-    "frostInk",
-    "frostArea",
   ] as const;
   /** What the decision rules out: the reference composition's device colours
-      are not a starting vocabulary. */
+      are not a starting vocabulary, and neither are the chart inks only its
+      glass cards use. */
   const BLANK_PALETTE_ABSENT = [
     "cpu",
     "gpu",
@@ -39,6 +38,8 @@ describe("the blank Fabric document", () => {
     "storageFill",
     "bars",
     "background",
+    "frostInk",
+    "frostArea",
   ] as const;
 
   it("is a valid document at the artboard it was given", () => {
