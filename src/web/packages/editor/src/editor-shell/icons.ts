@@ -17,6 +17,7 @@ import {
   CircuitBoard,
   Clock,
   CloudUpload,
+  Component,
   Cpu,
   Download,
   Ellipse,
@@ -382,7 +383,9 @@ export const EXPORT_THEME_GLYPH: LucideIcon = Download;
 export const NEW_THEME_GLYPH: LucideIcon = FilePlus2;
 export const TEMPLATE_THEME_GLYPH: LucideIcon = LayoutTemplate;
 export const OPEN_RECENT_GLYPH: LucideIcon = Clock;
-export const EXPORT_WIDGET_GLYPH: LucideIcon = Download;
+/** A widget is one component lifted out of a theme, so it wears the component
+ *  mark; Export theme keeps the download arrow the store's export owns. */
+export const EXPORT_WIDGET_GLYPH: LucideIcon = Component;
 
 /** The online cell's *Install* control, which the copy marks with an upload
  *  into a tray. *Update* wears the download arrow, the same `EXPORT_ITEM_GLYPH`

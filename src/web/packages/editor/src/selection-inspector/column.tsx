@@ -15,6 +15,7 @@ import { ControlSlider } from "../components/ui/control-slider.js";
 import { ControlSwatch } from "../components/ui/control-swatch.js";
 import { ControlText } from "../components/ui/control-text.js";
 import { ControlToggle } from "../components/ui/control-toggle.js";
+import { ControlTogglePair } from "../components/ui/control-toggle-pair.js";
 import { InspectorSection } from "../components/ui/inspector-section.js";
 import { uiCopy } from "../ui-copy.js";
 import { CROP_ASPECTS } from "./crop.js";
@@ -151,6 +152,19 @@ function fieldControl(
           checked={field.checked}
           onChange={(value) => commit(value)}
           {...refused}
+        />
+      );
+    case "toggle-pair":
+      return (
+        <ControlTogglePair
+          label={field.label}
+          halves={field.halves.map((half) => ({
+            label: half.label,
+            checked: half.checked,
+            data: half.data,
+            onChange: (value: boolean) =>
+              edits.commit(revision, half.id, value),
+          }))}
         />
       );
     case "select":

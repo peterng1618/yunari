@@ -12,12 +12,14 @@ import {
   LAYER_ROW_INDENT,
   ROW_HEIGHT,
 } from "../panes/composition/composition-pane.js";
+import { shortcutLabel } from "../shortcut-manager/display.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   createEditorShellBridge,
   type EditorShellBridge,
   type LayerDrop,
 } from "./bridge.js";
+import { LayerActions } from "./layer-panel.js";
 import type {
   LayerKind,
   LayerMark,
@@ -2220,4 +2222,25 @@ it("keeps the background reachable while a group is entered", async () => {
     '[data-yunari-layer="$background"]',
   );
   expect(row?.hasAttribute("data-context")).toBe(false);
+});
+
+it("prints an action's chord in the pane footer, as the dock does", async () => {
+  // The footer and the canvas dock name the same registry actions, so the
+  // second surface must not be the one that drops the keyboard hint.
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(<LayerActions bridge={bridge([])} />));
+
+  const button = host.querySelector<HTMLButtonElement>(
+    `[aria-label="${uiCopy.actions.duplicate}"]`,
+  );
+  expect(button).not.toBeNull();
+  await act(async () => button?.focus());
+  expect(document.querySelector(".editor-shell-tooltip kbd")?.textContent).toBe(
+    shortcutLabel("edit.duplicate"),
+  );
+
+  await act(async () => root.unmount());
+  host.remove();
 });

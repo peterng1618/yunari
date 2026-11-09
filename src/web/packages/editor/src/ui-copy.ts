@@ -2586,12 +2586,13 @@ export const uiCopy = {
 
     /** The background column's own rows: the box its media fills, the zoom over
         its cover fit, the one pair that moves both axes, and the two paint-time
-        mirrors. */
+        mirrors on one line. */
     backgroundBounds: "Bounds",
     backgroundScale: "Scale",
     backgroundOffset: "Offset",
-    backgroundFlipX: "Flip horizontally",
-    backgroundFlipY: "Flip vertically",
+    backgroundFlip: "Flip",
+    backgroundFlipHorizontal: "Horizontal",
+    backgroundFlipVertical: "Vertical",
     /** Where the picture sits inside its box, and how it fades into the fill. */
     backgroundComposition: "Composition",
     backgroundAnchor: "Anchor",

@@ -2825,6 +2825,12 @@ body,
   color: var(--shell-muted);
   font-size: 11px;
 }
+/* Hover belongs to the controls. The role is the column that yields while the
+   pointer is on the row, so the actions get the width instead of sharing it
+   with a word the row already speaks to a screen reader when not hovered. */
+.yunari-layer-row:hover .yunari-layer-role {
+  display: none;
+}
 /* The row's own controls — rename, the eye and the lock, plus the entry control
    on a group — laid over the row's right edge rather than held open beside it.
 
@@ -3174,6 +3180,9 @@ body,
   margin-left: auto;
   display: flex;
   align-items: center;
+  /* One step between the camera controls, the same step as the cluster's own
+     padding, so the readout and the three buttons read as one bar. */
+  gap: var(--space-4);
   padding: var(--space-4);
   border-radius: var(--radius-xl);
 }
@@ -3242,9 +3251,10 @@ body,
    than a Fabric object — a Fabric frame would be a scene object, and would
    change what `canvas.getObjects()` means.
 
-   An outline only. It must not cover the artboard or dim the pasteboard: the
-   claim it makes is where the screen's edges are, and anything more would be
-   the lens deciding what the author can see.
+   Its paint fills the box; it draws no frame — an outline around the lens read
+   as a border on the artwork, and the lens already says itself through the
+   letterbox. It must not cover the artboard or dim the pasteboard: anything
+   more would be the lens deciding what the author can see.
 
    `z-index: -1` puts it above the stage's own background (its texture) and
    below every in-flow and auto-z-index descendant of the stage's stacking
@@ -3254,8 +3264,6 @@ body,
    shell's paint pass. */
 [data-yunari-display-screen] {
   z-index: -1;
-  border: 1px solid var(--yunari-subdued);
-  box-sizing: border-box;
 }
 /* The theme's real extent under a lens whose aspect differs from the board's,
    and the disc a circle theme ships as while the rect preview keeps its
@@ -3299,10 +3307,17 @@ body,
   gap: 6px;
   align-items: baseline;
 }
+/* The chord is a key, not more of the sentence: its own surface, a step behind
+   the popup, keeps it from reading as another word of the label. */
 .editor-shell-tooltip-key {
+  padding: 1px var(--space-4);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--muted);
   font-family: ui-monospace, monospace;
-  font-size: 11px;
-  opacity: 0.75;
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
 }
 /* The live mark: the host is serving this document on the LAN. Accent, because
    it reads the host's own state rather than a message about the last edit, and

@@ -4,6 +4,11 @@ import {
   hasSelection,
   objectActionsFor,
 } from "../object-actions.js";
+import { useActiveShortcuts } from "../shortcut-manager/bindings.js";
+import {
+  shortcutLabel,
+  shortcutSpokenLabel,
+} from "../shortcut-manager/display.js";
 import type { EditorShellBridge } from "./bridge.js";
 import { Glyph } from "./icons.js";
 
@@ -31,26 +36,42 @@ export function LayerActions({
 }: {
   readonly bridge: EditorShellBridge | undefined;
 }): React.JSX.Element | null {
+  // The chord the tooltips print follows the live binding table, the same way
+  // the dock's do: a rebind has to re-render this surface rather than only
+  // reach the dispatcher.
+  useActiveShortcuts();
   // No bridge is no document, and no selection either. Either way the footer
   // is not a control surface: it is not drawn at all.
   if (bridge === undefined || !hasSelection(bridge.target())) return null;
   const actions = objectActionsFor(bridge);
   return (
     <footer className="editor-shell-pane-actions" data-yunari-layer-actions="">
-      {actions.map((action) => (
-        <ControlIconButton
-          key={action.id}
-          label={action.label}
-          // The mark is the whole mechanism: `destructiveMarker` carries the
-          // registry's flag to every surface, and the one
-          // `[data-yunari-destructive]` rule in the shell paints it `--hot`.
-          // Nothing here says "destructive" a second time.
-          data={destructiveMarker(action)}
-          onClick={() => bridge.run(action.id)}
-        >
-          <Glyph icon={action.icon} size={15} />
-        </ControlIconButton>
-      ))}
+      {actions.map((action) => {
+        // The dock and this footer name the same actions, so they print the
+        // same chord — read from the registry here rather than held.
+        const shortcut =
+          action.shortcut === undefined
+            ? undefined
+            : {
+                printed: shortcutLabel(action.shortcut),
+                spoken: shortcutSpokenLabel(action.shortcut),
+              };
+        return (
+          <ControlIconButton
+            key={action.id}
+            label={action.label}
+            {...(shortcut === undefined ? {} : { shortcut })}
+            // The mark is the whole mechanism: `destructiveMarker` carries the
+            // registry's flag to every surface, and the one
+            // `[data-yunari-destructive]` rule in the shell paints it `--hot`.
+            // Nothing here says "destructive" a second time.
+            data={destructiveMarker(action)}
+            onClick={() => bridge.run(action.id)}
+          >
+            <Glyph icon={action.icon} size={15} />
+          </ControlIconButton>
+        );
+      })}
     </footer>
   );
 }

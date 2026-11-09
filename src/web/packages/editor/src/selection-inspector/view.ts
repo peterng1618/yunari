@@ -135,6 +135,19 @@ export interface PairHalfView {
   readonly percent?: boolean;
 }
 
+/**
+ * One half of a paired switch row: two independent booleans sharing a line,
+ * each committing its own. The background's two mirrors are the shape — one
+ * concept drawn by two switches — so the pair is a row, not a control.
+ */
+export interface PairToggleHalfView {
+  /** The field id the half commits through, not the DOM hook. */
+  readonly id: string;
+  readonly label: string;
+  readonly checked: boolean;
+  readonly data: FieldHooks;
+}
+
 export type FieldView =
   | (FieldBase & {
       readonly control: "text";
@@ -167,6 +180,10 @@ export type FieldView =
   | (FieldBase & {
       readonly control: "pair";
       readonly halves: readonly PairHalfView[];
+    })
+  | (FieldBase & {
+      readonly control: "toggle-pair";
+      readonly halves: readonly PairToggleHalfView[];
     })
   | (FieldBase & { readonly control: "toggle"; readonly checked: boolean })
   | (FieldBase & {

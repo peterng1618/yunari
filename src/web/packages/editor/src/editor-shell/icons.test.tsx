@@ -52,6 +52,8 @@ import {
   CHECK_GLYPH,
   ENTER_GLYPH,
   ERROR_GLYPH,
+  EXPORT_THEME_GLYPH,
+  EXPORT_WIDGET_GLYPH,
   FINDER_TAB_FALLBACK_GLYPH,
   FINDER_TAB_GLYPHS,
   FIT_GLYPH,
@@ -448,4 +450,11 @@ it("draws every object the Add pane offers, so an insertable kind cannot arrive 
     // pattern rather than as vitest's "expected a string, got object".
     expect(svg?.getAttribute("class") ?? "").toMatch(/^lucide/);
   }
+});
+
+it("gives theme export and widget export different marks", () => {
+  // Two File commands that read alike in a menu: a widget is one component
+  // lifted out, a theme is the whole package going out. One download arrow for
+  // both made the rows indistinguishable at a glance.
+  expect(EXPORT_THEME_GLYPH).not.toBe(EXPORT_WIDGET_GLYPH);
 });

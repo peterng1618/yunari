@@ -43,8 +43,7 @@ describe("backgroundColumn", () => {
       "background.bounds",
       "background.scale",
       "background.offsetX-offsetY",
-      "background.flipX",
-      "background.flipY",
+      "background.flipX-flipY",
     ]);
     expect(
       withMedia[1]?.fields.find((field) => field.id === "background.scale"),
@@ -65,7 +64,7 @@ describe("backgroundColumn", () => {
     });
   });
 
-  it("shows offsets as percentages and the flips as switches", () => {
+  it("shows offsets as percentages and the flips as switches on one row", () => {
     const sections = backgroundColumn({
       background: {
         media: {
@@ -80,17 +79,16 @@ describe("backgroundColumn", () => {
       globals: undefined,
     });
 
-    const flips = (id: string) =>
-      sections[1]?.fields.find((field) => field.id === id);
-    expect(flips("background.flipX")).toMatchObject({
-      control: "toggle",
-      checked: true,
+    const field = (id: string) =>
+      sections[1]?.fields.find((entry) => entry.id === id);
+    expect(field("background.flipX-flipY")).toMatchObject({
+      control: "toggle-pair",
+      halves: [
+        { id: "background.flipX", checked: true },
+        { id: "background.flipY", checked: false },
+      ],
     });
-    expect(flips("background.flipY")).toMatchObject({
-      control: "toggle",
-      checked: false,
-    });
-    expect(flips("background.scale")).toMatchObject({
+    expect(field("background.scale")).toMatchObject({
       control: "slider",
       value: 2.5,
       min: 1,
@@ -131,7 +129,7 @@ describe("backgroundColumn", () => {
     });
     // The position fields are not here: the section waits for a media.
     expect(field("background.bounds")).toBeUndefined();
-    expect(field("background.flipX")).toBeUndefined();
+    expect(field("background.flipX-flipY")).toBeUndefined();
   });
 
   it("paints the stored palette reference and offers the document's tokens", () => {

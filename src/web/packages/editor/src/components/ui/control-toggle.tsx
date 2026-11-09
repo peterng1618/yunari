@@ -34,6 +34,13 @@ export function ControlToggle(
      *  something other than the inspector's labelled row — the settings modal
      *  draws it `boxed`. */
     readonly shape?: ControlShape;
+    /** A half of a paired row: the label and the pill without a row of their
+     *  own, so two switches can share one line. `ControlTogglePair` is the only
+     *  caller — a lone boolean wants its own row. */
+    readonly inline?: boolean;
+    /** The element outside this control that names it, when the caller draws
+     *  the pair's label itself. */
+    readonly labelledById?: string;
   },
 ): React.JSX.Element {
   const {
@@ -45,11 +52,57 @@ export function ControlToggle(
     density,
     data,
     shape,
+    inline,
+    labelledById,
     checked,
     onChange,
   } = props;
   const ids = useControlIds(id);
   const blocked = isBlocked({ disabled, refused });
+
+  const pill = (
+    <Switch.Root
+      {...data}
+      nativeButton
+      render={<button type="button" />}
+      id={ids.control}
+      checked={checked}
+      readOnly={blocked}
+      disabled={disabled}
+      aria-disabled={refused === undefined ? undefined : true}
+      {...(inline === true && labelledById !== undefined
+        ? { "aria-labelledby": labelledById }
+        : {})}
+      aria-describedby={describedBy(
+        hint === undefined ? undefined : ids.hint,
+        refused === undefined ? undefined : ids.reason,
+      )}
+      onCheckedChange={(next) => {
+        if (blocked) return;
+        onChange(next);
+      }}
+      className={`${hitTargetClasses} flex h-[14px] w-[26px] flex-none items-center rounded-full border border-edge bg-panel-2 p-0 hover:data-[unchecked]:border-muted data-[checked]:border-accent data-[checked]:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2`}
+    >
+      <Switch.Thumb className="block size-[10px] translate-x-[4px] rounded-full bg-muted transition-transform data-[checked]:translate-x-[10px] data-[checked]:bg-panel" />
+    </Switch.Root>
+  );
+
+  if (inline === true) {
+    return (
+      <>
+        {labelledById === undefined ? (
+          <label
+            id={ids.label}
+            htmlFor={ids.control}
+            className="text-xs text-muted"
+          >
+            {label}
+          </label>
+        ) : null}
+        {pill}
+      </>
+    );
+  }
 
   return (
     <ControlRow
@@ -61,27 +114,7 @@ export function ControlToggle(
       density={density}
       shape={shape}
     >
-      <Switch.Root
-        {...data}
-        nativeButton
-        render={<button type="button" />}
-        id={ids.control}
-        checked={checked}
-        readOnly={blocked}
-        disabled={disabled}
-        aria-disabled={refused === undefined ? undefined : true}
-        aria-describedby={describedBy(
-          hint === undefined ? undefined : ids.hint,
-          refused === undefined ? undefined : ids.reason,
-        )}
-        onCheckedChange={(next) => {
-          if (blocked) return;
-          onChange(next);
-        }}
-        className={`${hitTargetClasses} flex h-[14px] w-[26px] flex-none items-center rounded-full border border-edge bg-panel-2 p-0 hover:data-[unchecked]:border-muted data-[checked]:border-accent data-[checked]:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2`}
-      >
-        <Switch.Thumb className="block size-[10px] translate-x-[4px] rounded-full bg-muted transition-transform data-[checked]:translate-x-[10px] data-[checked]:bg-panel" />
-      </Switch.Root>
+      {pill}
     </ControlRow>
   );
 }

@@ -148,28 +148,30 @@ function boundsField(media: BackgroundMedia | undefined): FieldView {
   };
 }
 
-/** The scale and fit are gone: the media always covers, its zoom is the one
-    scalar the author sets, and the only other geometry is a translation plus
-    the two paint-time mirrors. */
-function flipField(
-  media: BackgroundMedia | undefined,
-  axis: "flipX" | "flipY",
-): FieldView {
-  return axis === "flipX"
-    ? {
+/** Both mirrors on one line, the way the offsets are: flipping a picture
+    horizontally and vertically is one concept, so two field rows would read as
+    two unrelated settings. */
+function flipsField(media: BackgroundMedia | undefined): FieldView {
+  return {
+    id: "background.flipX-flipY",
+    control: "toggle-pair",
+    label: uiCopy.panels.backgroundFlip,
+    halves: [
+      {
         id: "background.flipX",
-        control: "toggle",
-        label: uiCopy.panels.backgroundFlipX,
+        label: uiCopy.panels.backgroundFlipHorizontal,
         checked: media?.flipX === true,
         data: { "data-yunari-background-flip-x": "" },
-      }
-    : {
+      },
+      {
         id: "background.flipY",
-        control: "toggle",
-        label: uiCopy.panels.backgroundFlipY,
+        label: uiCopy.panels.backgroundFlipVertical,
         checked: media?.flipY === true,
         data: { "data-yunari-background-flip-y": "" },
-      };
+      },
+    ],
+    data: {},
+  };
 }
 
 /** The zoom over the cover fit, shown as 100–500%. The stored value is the
@@ -345,8 +347,7 @@ export function backgroundColumn(input: {
             boundsField(media),
             scaleField(media),
             offsetField(media),
-            flipField(media, "flipX"),
-            flipField(media, "flipY"),
+            flipsField(media),
           ]),
           // The anchor and fade describe how the media composes over the
           // background colour, which only an advanced background has.

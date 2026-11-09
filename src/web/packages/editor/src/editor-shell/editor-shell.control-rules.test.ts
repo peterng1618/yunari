@@ -608,3 +608,29 @@ describe("the glyph-only hover rule in ControlIconButton", () => {
     expect(source).not.toContain("enabled:hover:border-edge");
   });
 });
+
+/** Four surface treatments the design feedback named directly: the lens frame,
+ *  the camera cluster's rhythm, the layer row's hover, and the chord's chip. */
+describe("the chrome's frame, rhythm and hover treatments", () => {
+  it("draws no frame around the preview lens", () => {
+    const body = ruleBodies("[data-yunari-display-screen]");
+    expect(body, "the lens has no rule").not.toBe("");
+    expect(body, "the lens frame is back").not.toContain("border");
+  });
+
+  it("steps the camera controls apart at the cluster's own padding", () => {
+    expect(ruleBodies(".editor-shell-zoom")).toContain("gap: var(--space-4)");
+  });
+
+  it("yields the role column to the row's controls on hover", () => {
+    expect(ruleBodies(".yunari-layer-row:hover .yunari-layer-role")).toContain(
+      "display: none",
+    );
+  });
+
+  it("gives the chord its own surface in the tooltip", () => {
+    const body = ruleBodies(".editor-shell-tooltip-key");
+    expect(body).toContain("border: 1px solid var(--edge)");
+    expect(body).toContain("background: var(--panel-2)");
+  });
+});
