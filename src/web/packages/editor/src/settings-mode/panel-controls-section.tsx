@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { useRef, useState } from "react";
+import { ControlHint } from "../components/ui/control-hint.js";
 import { controlStateAttributes } from "../components/ui/control-state.js";
 import {
   plainButtonClasses,
@@ -298,12 +299,15 @@ export function PanelControlsSection(props: {
             <div className="flex flex-col gap-[var(--space-12)]">
               {holds("brightness") ? (
                 <div className="flex flex-col gap-[var(--space-6)]">
-                  <label htmlFor={BRIGHTNESS_ID} className="text-xs text-muted">
-                    {copy.brightness}
-                  </label>
-                  <p className="m-0 text-2xs text-faint">
-                    {copy.brightnessHint}
-                  </p>
+                  <div className="flex items-center gap-[var(--space-6)]">
+                    <label
+                      htmlFor={BRIGHTNESS_ID}
+                      className="text-xs text-muted"
+                    >
+                      {copy.brightness}
+                    </label>
+                    <ControlHint text={copy.brightnessHint} />
+                  </div>
                   <div className="flex items-center gap-[var(--space-6)]">
                     <div className={wellClasses("dialog")}>
                       <input
@@ -379,13 +383,11 @@ export function PanelControlsSection(props: {
 
               {holds("panel-settings") ? (
                 <div className="flex flex-col gap-[var(--space-6)]">
-                  <div className="flex flex-col gap-[var(--space-4)]">
+                  <div className="flex items-center gap-[var(--space-6)]">
                     <span className="text-xs text-muted">
                       {copy.settingsHeading}
                     </span>
-                    <p className="m-0 text-2xs text-faint">
-                      {copy.settingsHint}
-                    </p>
+                    <ControlHint text={copy.settingsHint} />
                   </div>
                   <div className="flex flex-col gap-[var(--space-4)]">
                     <label

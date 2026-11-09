@@ -2435,8 +2435,12 @@ it("keeps the stored id while editing and refuses a changed draft id", async () 
   await openEdit(container, "fixture");
   const idField = input(container, "data-yunari-source-id");
   expect(idField.readOnly, "the id field is editable while editing").toBe(true);
+  // The sentence is the hint mark's name and tooltip rather than a paragraph
+  // under the field, so the name is where it is read.
   expect(
-    container.textContent,
+    [
+      ...container.querySelectorAll<HTMLElement>("[data-yunari-control-hint]"),
+    ].map((hint) => hint.getAttribute("aria-label")),
     "the form does not say why the id is fixed",
   ).toContain(SOURCES_COPY.idFixed);
 

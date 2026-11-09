@@ -136,11 +136,9 @@ export function DisplayPresentationSection(props: {
             value={editable.label}
             onCommit={(label) => rename(editable, label)}
           />
-          {/* Inside the body, because the sentence is about controls a display
+          {/* The snap sentence travels with the rotation control's own hint
+              below; inside the body, because it is about controls a display
               without a record does not have. */}
-          <p className="text-xs text-muted">
-            {uiCopy.hostSettings.displays.rotationSnapHint}
-          </p>
           <ControlSegmented
             id="yunari-host-display-shape"
             label={uiCopy.hostSettings.displays.shape}
@@ -161,6 +159,7 @@ export function DisplayPresentationSection(props: {
           <ControlSlider
             id="yunari-host-display-rotation"
             label={uiCopy.hostSettings.displays.rotation}
+            hint={uiCopy.hostSettings.displays.rotationSnapHint}
             density="settings"
             data={{ "data-yunari-host-display-rotation": "" }}
             value={editable.rotation}
@@ -182,23 +181,19 @@ export function DisplayPresentationSection(props: {
               with one would get a control whose second option does nothing. */}
           {editable.panel !== undefined &&
           editable.panel.renderModes.length > 1 ? (
-            <>
-              <ControlSegmented
-                id="yunari-host-display-render-mode"
-                label={uiCopy.hostSettings.displays.renderMode}
-                density="settings"
-                data={{ "data-yunari-host-display-render-mode": "" }}
-                value={editable.panel.renderMode}
-                options={editable.panel.renderModes.map((mode) => ({
-                  id: mode,
-                  name: uiCopy.hostSettings.displays.renderModes[mode],
-                }))}
-                onChange={(mode) => changeRenderMode(editable, mode)}
-              />
-              <p className="text-xs text-muted">
-                {uiCopy.hostSettings.displays.renderModeHint}
-              </p>
-            </>
+            <ControlSegmented
+              id="yunari-host-display-render-mode"
+              label={uiCopy.hostSettings.displays.renderMode}
+              hint={uiCopy.hostSettings.displays.renderModeHint}
+              density="settings"
+              data={{ "data-yunari-host-display-render-mode": "" }}
+              value={editable.panel.renderMode}
+              options={editable.panel.renderModes.map((mode) => ({
+                id: mode,
+                name: uiCopy.hostSettings.displays.renderModes[mode],
+              }))}
+              onChange={(mode) => changeRenderMode(editable, mode)}
+            />
           ) : null}
         </>
       )}

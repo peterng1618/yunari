@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { useId } from "react";
+import { ControlHint } from "../components/ui/control-hint.js";
 import { controlStateAttributes } from "../components/ui/control-state.js";
 import { plainButtonClasses } from "../components/ui/control-well.js";
 import { uiCopy } from "../ui-copy.js";
@@ -232,9 +233,12 @@ function FormField(props: {
   const id = useId();
   return (
     <div className="flex flex-col gap-[var(--space-4)]">
-      <label className="text-xs text-muted" htmlFor={id}>
-        {props.label}
-      </label>
+      <div className="flex items-center gap-[var(--space-6)]">
+        <label className="text-xs text-muted" htmlFor={id}>
+          {props.label}
+        </label>
+        {props.hint === undefined ? null : <ControlHint text={props.hint} />}
+      </div>
       <input
         id={id}
         {...{ [props.attribute]: "" }}
@@ -243,9 +247,6 @@ function FormField(props: {
         onChange={(event) => props.onChange(event.target.value)}
         className="h-[26px] rounded-md border border-edge bg-panel-1 px-[var(--space-6)] text-sm text-text"
       />
-      {props.hint === undefined ? null : (
-        <p className="m-0 text-2xs text-faint">{props.hint}</p>
-      )}
       {props.reason === undefined ? null : (
         <p
           role="alert"

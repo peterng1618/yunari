@@ -492,6 +492,11 @@ menus.** Anything actionable belongs to a region that owns it.
   look simpler. Convenience is ordering and grouping, never a smaller surface.
 - **Order and group by what a person needs**, most likely first, obscure last,
   each field with a hint where the name is not self-evident.
+- **Help is the control's own hint, never a footnote paragraph.** A control's
+  sentence travels as its `hint` (the row's tooltip and its description) or,
+  on a hand-built field, as an info mark beside the label. State — a count, a
+  refusal, a disconnected reason, file data — stays visible text; it is not
+  help.
 - **Disclosure is for the once-in-a-while, not the frequent.** A frequently used
   control stays visible; a collapsed section is for what is adjusted rarely.
 - **A section header says what the section is** — the question it answers.

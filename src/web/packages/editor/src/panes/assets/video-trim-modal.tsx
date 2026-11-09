@@ -5,6 +5,7 @@ import {
 } from "@yunari/theme-package";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ControlHint } from "../../components/ui/control-hint.js";
 import { ACTION_BUTTON, Dialog } from "../../components/ui/dialog.js";
 import { uiCopy } from "../../ui-copy.js";
 
@@ -118,7 +119,7 @@ export function VideoTrimModal({
 
         {whole || failed ? null : (
           <div className="flex flex-col gap-[var(--space-4)]">
-            <span className="text-xs text-muted">{copy.hint}</span>
+            <ControlHint text={copy.hint} />
             <div className="flex items-center gap-[var(--space-8)]">
               <label className="flex min-w-0 flex-1 flex-col gap-[var(--space-4)] text-2xs text-faint">
                 {copy.start}
