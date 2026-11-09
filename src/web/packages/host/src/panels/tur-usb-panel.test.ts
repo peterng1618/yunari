@@ -1,5 +1,5 @@
 import forge from "node-forge";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PACKET_KEY } from "./panel-protocol.js";
 import { TurUsbPanel } from "./tur-usb-panel.js";
 import { type encodePanelH264, H264_BLOCK_BYTES } from "./tur-usb-video.js";
@@ -269,22 +269,38 @@ describe("TurUsbPanel", () => {
     // bytes it was given, and the picture holds at every block boundary.
     fake.setLevel(0);
 
-    await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 });
+    // The claim is about which branch the driver takes, not how long the
+    // machine took to reach it, so the pauses it asks for are what is
+    // recorded rather than the wall clock that measures them.
+    const waits: number[] = [];
+    const native = globalThis.setTimeout;
+    const timer = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      handler: () => void,
+      timeout?: number,
+    ): ReturnType<typeof native> => {
+      waits.push(timeout ?? 0);
+      return native(handler, timeout);
+    }) as typeof setTimeout);
 
-    const began = Date.now();
-    const blocks = () => fake.writes.filter((w) => w.length > 512).length;
-    // Start has already written the first two blocks.
-    const queued = blocks();
-    const deadline = Date.now() + 1_000;
-    while (blocks() < queued + 3) {
-      if (Date.now() > deadline) throw new Error("the ring was never filled");
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    try {
+      await panel.video.start(Uint8Array.of(0), { offsetX: 0, offsetY: 0 });
+
+      const blocks = () => fake.writes.filter((w) => w.length > 512).length;
+      // Start has already written the first two blocks.
+      const queued = blocks();
+      const deadline = Date.now() + 1_000;
+      while (blocks() < queued + 3) {
+        if (Date.now() > deadline) throw new Error("the ring was never filled");
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+    } finally {
+      await panel.video.stop();
+      timer.mockRestore();
     }
 
-    // Pacing would cost ~250 ms a block; filling the ring costs the vendor's
-    // 30 ms pause only.
-    expect(Date.now() - began).toBeLessThan(200);
-    await panel.video.stop();
+    // Every pause the feed asked for was the vendor's 30 ms one; a paced block
+    // would have owed the clip's own share of the second instead.
+    expect(waits.filter((ms) => ms >= 200)).toEqual([]);
   });
 
   it("paces a block once the decoder's ring holds one", async () => {
