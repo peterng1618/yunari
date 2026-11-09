@@ -213,6 +213,21 @@ describe("the Add pane's insert surface", () => {
     ).toMatch(/^lucide/);
   });
 
+  it("marks the Vertical text row apart from Text", () => {
+    // Two text rows, and the tile's label is the only thing that tells them
+    // apart: the hook is what a test — or an automation — reaches the one it
+    // asks for, rather than counting rows from the top.
+    const { pane } = mount();
+
+    const vertical = pane.querySelector<HTMLElement>(
+      '[data-yunari-panel-text="vertical"]',
+    );
+    expect(vertical?.getAttribute("aria-label")).toBe(
+      uiCopy.panels.verticalText,
+    );
+    expect(vertical?.classList.contains("yunari-add-text")).toBe(true);
+  });
+
   it("draws a glyph on every tile that is not the Text row, so none is blank", () => {
     const { pane } = mount();
 

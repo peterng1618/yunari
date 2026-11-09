@@ -45,7 +45,7 @@ export interface ActionFacadeHost {
   readonly video: VideoImportHost;
   readonly declarationsChanged: () => void;
   /** Arms the one text placement the Add pane and this facade share. */
-  readonly armText: () => void;
+  readonly armText: (vertical?: boolean) => void;
 }
 
 /**
@@ -270,7 +270,7 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     // constructs, so its refusal is reported at the gesture's end by
     // `armText`. `insertCard` is not wrapped: the document reports that one
     // at its own owner.
-    addText: () => host.armText(),
+    addText: (vertical) => host.armText(vertical),
     // A non-text construction is another tool: the armed text placement is
     // cancelled first, or the next canvas press would place a text instead of
     // selecting what was just made.

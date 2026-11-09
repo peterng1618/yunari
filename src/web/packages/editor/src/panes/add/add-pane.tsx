@@ -110,6 +110,9 @@ function InsertTile({
       {...(object.kind === "card"
         ? { "data-yunari-panel-card": object.card }
         : {})}
+      {...(object.kind === "text" && object.vertical === true
+        ? { "data-yunari-panel-text": "vertical" }
+        : {})}
       onClick={() => onInsert(object)}
     >
       {tileMark(object)}

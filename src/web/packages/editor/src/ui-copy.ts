@@ -2373,6 +2373,9 @@ export const uiCopy = {
     enter: "Enter",
     leave: "Leave",
     text: "Text",
+    /** A text standing on its end: the same object turned a quarter turn, so a
+     *  label can run up the side of a chart or a column. */
+    verticalText: "Vertical text",
     /** A fixed text, whose row must say which of the two elements it is: both
      *  share the `text` layer kind, so the name is the only place the class
      *  shows in the layer list. */

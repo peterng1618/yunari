@@ -808,7 +808,8 @@ export function createEditorShellBridge(input: {
         // This call is the footer's only route to a construction; the canvas
         // context menu's is the same façade method.
         const shape = constructedShape(action);
-        if (shape === undefined) input.session.addText();
+        if (shape === undefined)
+          input.session.addText(action === "new-text-vertical");
         else input.session.addShape(shape);
         return;
       }

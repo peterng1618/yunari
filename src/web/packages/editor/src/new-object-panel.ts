@@ -50,8 +50,10 @@ export interface NewObjectActions {
    * Arms the session's one placement gesture. The tile does not construct: the
    * pointer, not the menu, decides whether this is a Text or a Text box and
    * where it lands, and an object made here would appear before that decision.
+   * `vertical` asks for it standing on its end, and travels with the gesture
+   * because the object does not exist yet.
    */
-  readonly addText: () => void;
+  readonly addText: (vertical?: boolean) => void;
   readonly addChart: (family: ChartFamily) => void;
   /**
    * Inserts one card as a unit. The session owns this because the copy's
@@ -67,7 +69,15 @@ export interface NewObjectActions {
 
 /** One object an author can insert, named as the control that inserts it. */
 export type InsertableObject =
-  | { readonly kind: "text"; readonly label: string }
+  | {
+      readonly kind: "text";
+      readonly label: string;
+      /** The text stands on its end: the placement gesture still decides where
+       *  and whether it is a box, and this turns the object a quarter turn once
+       *  it exists. Nothing about the type is persisted, only the angle Fabric
+       *  already stores. */
+      readonly vertical?: true;
+    }
   | {
       readonly kind: "shape";
       readonly label: string;
@@ -131,6 +141,7 @@ export function insertGroups(): readonly InsertGroup[] {
       diagram: unit.diagram,
     })),
     { kind: "text", label: uiCopy.panels.text },
+    { kind: "text", label: uiCopy.panels.verticalText, vertical: true },
     ...SHAPE_KINDS.map((shape) => ({
       kind: "shape" as const,
       label: uiCopy.shapeKinds[shape],
@@ -210,11 +221,18 @@ export function insertNewText(
   editor: EditorInteraction,
   globals: FabricGlobals | undefined,
   placement: TextPlacement,
+  vertical = false,
 ): void {
   const content = "New text";
   const text = editor.textManager.addText({
     text: content,
-    ...createNewTextDefaults(globals, content, placement, placement.box),
+    ...createNewTextDefaults(
+      globals,
+      content,
+      placement,
+      placement.box,
+      vertical,
+    ),
   });
   // The caret, so typing goes somewhere. Asking for a text box and then having
   // to double-click it before the first character lands is a second, undiscoverable
@@ -333,7 +351,7 @@ export function insertObject(
             "Text placement needs the editor session that owns the text manager.",
           );
         }
-        return addText();
+        return addText(object.vertical === true);
       }
       case "shape":
         insertNewShape(editor, globals, object.shape);

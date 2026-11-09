@@ -90,7 +90,10 @@ export type ObjectCommandId =
 /** A construction: it needs no subject, and the id names what it makes — the
  *  kind rides in the id's tail exactly as an arrange verb rides in its own, so
  *  one dispatch carries the whole question. */
-export type ConstructionActionId = "new-text" | `new-shape:${ShapeInsertion}`;
+export type ConstructionActionId =
+  | "new-text"
+  | "new-text-vertical"
+  | `new-shape:${ShapeInsertion}`;
 
 /** What every entry carries, whichever half of the registry it is in: the word
  *  it is called, the glyph it wears, and the mark. */
@@ -439,6 +442,11 @@ export function arrangeActions(): readonly ObjectAction[] {
  */
 export const CONSTRUCTION_ACTIONS: readonly ConstructionAction[] = [
   { id: "new-text", label: uiCopy.panels.text, icon: KIND_GLYPHS.text },
+  {
+    id: "new-text-vertical",
+    label: uiCopy.panels.verticalText,
+    icon: KIND_GLYPHS.text,
+  },
   ...[...SHAPE_KINDS, ...PATH_PRESET_IDS].map((shape) => ({
     id: `new-shape:${shape}` as const,
     label: isPathPreset(shape)
@@ -456,14 +464,14 @@ export function isConstructionAction(
   return CONSTRUCTION_ACTIONS.some((action) => action.id === id);
 }
 
-/** The primitive behind a `new-shape:<kind>` id, or `undefined` for the text
- *  one. This module owns that id format, so this is its one reader. */
+/** The primitive behind a `new-shape:<kind>` id, or `undefined` for either
+ *  text arm. This module owns that id format, so this is its one reader. */
 export function constructedShape(
   id: ConstructionActionId,
 ): ShapeInsertion | undefined {
-  return id === "new-text"
-    ? undefined
-    : (id.slice("new-shape:".length) as ShapeInsertion);
+  return id.startsWith("new-shape:")
+    ? (id.slice("new-shape:".length) as ShapeInsertion)
+    : undefined;
 }
 
 /**

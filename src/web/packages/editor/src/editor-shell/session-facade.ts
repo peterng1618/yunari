@@ -83,7 +83,9 @@ export interface EditorActionFacade {
    *  metadata field alone. The identity chip's double-click rename is the one
    *  caller; a facade with no document behind it omits it. */
   renameTheme?(name: string): void;
-  addText(): void;
+  /** Arms the text placement gesture; `vertical` asks for the object on its
+   *  end, and only the insertion that follows the gesture can apply that. */
+  addText(vertical?: boolean): void;
   /** Freezes the selected text, as the author sees it, into vector paths. The
    *  document owns the theme's fonts and the bindings the frozen object stops
    *  using, so the conversion is its own. */

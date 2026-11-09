@@ -535,6 +535,35 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
+  it("puts a vertical text on its end, from the tile through to the object", () => {
+    // The object does not exist when the tile is pressed, so the quarter turn
+    // travels with the placement request and lands as Fabric's own `angle`.
+    const addText = vi.fn();
+    const editor = editorStub();
+    const panel = createNewObjectPanel(
+      document.body,
+      editor as never,
+      GLOBALS as never,
+      { addText, addChart: vi.fn(), insertCard: vi.fn() },
+    );
+
+    panel.root
+      .querySelector<HTMLButtonElement>('[data-yunari-panel-text="vertical"]')!
+      .click();
+    expect(addText).toHaveBeenCalledWith(true);
+
+    insertNewText(
+      editor as never,
+      GLOBALS as never,
+      { left: 10, top: 20 },
+      true,
+    );
+    const options = editor.textManager.addText.mock.calls[0]?.[0] as {
+      angle?: number;
+    };
+    expect(options.angle).toBe(-90);
+  });
+
   it("refuses the text tile rather than doing nothing when there is no session", () => {
     const editor = editorStub();
     const root = createNewObjectPanel(

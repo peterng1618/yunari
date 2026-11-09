@@ -462,7 +462,7 @@ export class EditorSession {
       options.shell.editor,
       this.#document.envelope.globals,
       {
-        addText: () => this.#armText(),
+        addText: (vertical) => this.#armText(vertical),
         addChart: (family) => this.charts.addChart(family),
         insertCard: (cardId) => this.#document.insertCard(cardId),
       },
@@ -630,7 +630,7 @@ export class EditorSession {
    * gesture ends — so the construction is the only part wrapped. A refusal is
    * reported there once, and the gesture has already disarmed by then.
    */
-  #armText(): void {
+  #armText(vertical = false): void {
     const editor = this.#options.shell.editor;
     editor.textManager.beginPlacement({
       contained: ({ x, y }) => {
@@ -641,7 +641,12 @@ export class EditorSession {
       },
       onPlace: (placement) =>
         constructing(editor, () =>
-          insertNewText(editor, this.#document.envelope.globals, placement),
+          insertNewText(
+            editor,
+            this.#document.envelope.globals,
+            placement,
+            vertical,
+          ),
         ),
     });
   }
@@ -656,7 +661,7 @@ export class EditorSession {
       charts: this.charts,
       video: this.#videoHost(),
       declarationsChanged: () => this.#declarationsChanged(),
-      armText: () => this.#armText(),
+      armText: (vertical) => this.#armText(vertical),
     };
     return buildActionFacade(host);
   }
