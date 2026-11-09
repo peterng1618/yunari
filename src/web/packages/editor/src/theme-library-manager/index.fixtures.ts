@@ -141,6 +141,7 @@ export interface Harness {
   readonly onError: Mock;
   readonly onNewFromStarter: Mock;
   readonly onOpenTheme: Mock;
+  readonly onOpened: Mock;
 }
 
 export function harness(options: {
@@ -187,6 +188,7 @@ export function harness(options: {
   const onSaved = vi.fn();
   const onError = vi.fn();
   const onNewFromStarter = vi.fn(async () => {});
+  const onOpened = vi.fn();
   const onOpenTheme = vi.fn<
     (
       envelope: FabricThemeEnvelope,
@@ -238,6 +240,7 @@ export function harness(options: {
     client,
     onError,
     onOpenTheme,
+    onOpened,
     ...(options.base === undefined ? {} : { base: options.base }),
   });
   return {
@@ -253,5 +256,6 @@ export function harness(options: {
     onError,
     onNewFromStarter,
     onOpenTheme,
+    onOpened,
   };
 }

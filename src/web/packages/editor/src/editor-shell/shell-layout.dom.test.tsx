@@ -14,6 +14,7 @@ import { setActiveShortcuts } from "../shortcut-manager/bindings.js";
 import { PRODUCT_SHORTCUTS } from "../shortcut-manager/index.js";
 import { DARK_GROUND, fixtureEntry } from "../store-mode/item-fixture.js";
 import { installStarterUnits } from "../testing/widget-units.js";
+import { themeRecents } from "../theme-recents/index.js";
 import { uiCopy } from "../ui-copy.js";
 import type { ViewportManager } from "../viewport-manager/index.js";
 import { activeWidgetUnits } from "../widget-packs.js";
@@ -77,7 +78,6 @@ function facade(): EditorActionFacade {
     activate: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
     saveLibrary: vi.fn(async () => undefined),
-    openRecent: vi.fn(async () => undefined),
     saveAs: vi.fn(async () => undefined),
     addText: vi.fn(),
     addShape: vi.fn(),
@@ -1450,7 +1450,7 @@ it("runs each File function from its toolbar button", async () => {
   // wired two rows to one call would pass a count taken from only one of them.
   await press(uiCopy.file.newDocument, "newDocument");
   await press(uiCopy.file.newFromTemplate, "newFromStarter");
-  await press(uiCopy.file.openRecent, "openRecent");
+  // Open recent is a menu rather than a command, so it is its own case below.
   await press(uiCopy.file.exportWidget, "exportWidget");
   expect(session.importPackage, "Export reached Import").not.toHaveBeenCalled();
 
@@ -1510,22 +1510,74 @@ it("runs the import from the toolbar button, and nothing else", async () => {
   layout.destroy();
 });
 
-/** The two library rows the top bar owes, each its own entry rather than a
- *  modifier of Open or Save, which is the ruling (`#35`): **Open recent** is a
- *  File button, and **Save as** is a toolbar button. */
-it("runs Open recent from its File button", async () => {
+/**
+ * **Open recent is the editor's list of opens, not the library's newest save.**
+ * The menu draws the store the session records into, so a theme the author
+ * opened (and one they never saved again) leads it, and an item reopens by the
+ * id the store kept — the same named open the store's own route uses.
+ *
+ * Both halves of the empty state are asserted on the live menu rather than on a
+ * fresh render: the trigger subscribes, so the seed below reaching the DOM is
+ * the same fact that a real open would produce.
+ */
+it("lists the themes it opened in a menu, and opens one by id", async () => {
+  const key = "yunari.editor.recent-themes";
+  localStorage.removeItem(key);
+  themeRecents.reload();
   const root = document.createElement("div");
   const layout = createShellLayout(root);
   const session = facade();
   layout.setBridge(bridgeStub({ session }), undefined);
   await Promise.resolve();
 
+  // The open menu's own items: Base UI keeps every popup it has mounted in the
+  // document once it has been opened in this process, so an unscoped query can
+  // read another control's items.
+  const menuItems = (): HTMLElement[] => [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menu"][data-open] [role="menuitem"]',
+    ),
+  ];
   await act(async () => toolbarButton(root, uiCopy.file.openRecent).click());
+  // Nothing opened here yet: the menu says so instead of drawing an empty
+  // popup, which is indistinguishable from a broken control.
+  expect(menuItems().map((item) => item.textContent ?? "")).toContain(
+    uiCopy.library.noRecentThemes,
+  );
 
-  expect(session.openRecent).toHaveBeenCalledTimes(1);
-  expect(session.saveAs).not.toHaveBeenCalled();
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      version: 1,
+      entries: [
+        { id: "a", name: "Alpha" },
+        { id: "b", name: "Beta" },
+      ],
+    }),
+  );
+  await act(async () => themeRecents.reload());
+  expect(menuItems().map((item) => item.textContent ?? "")).toEqual([
+    "Alpha",
+    "Beta",
+  ]);
 
-  layout.destroy();
+  const alpha = menuItems()[0];
+  if (alpha === undefined) throw new Error("No recent item.");
+  await act(async () =>
+    alpha.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  expect(session.openLibraryTheme).toHaveBeenCalledWith("a");
+  expect(
+    session.openLibrary,
+    "the menu opened the chooser",
+  ).not.toHaveBeenCalled();
+
+  // The unmount is flushed here rather than left to the next tick: a popup
+  // still mounted after a test is what the afterEach below reports, and this
+  // case is the one that opens a menu.
+  await act(async () => layout.destroy());
+  localStorage.removeItem(key);
+  themeRecents.reload();
 });
 
 it("runs Save as from its toolbar button", async () => {

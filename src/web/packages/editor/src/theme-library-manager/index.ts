@@ -178,6 +178,10 @@ interface ThemeLibraryManagerOptions {
     credits?: readonly ThemeCreditsEntry[],
     backgroundMedia?: BackgroundMediaMemory,
   ) => Promise<void>;
+  /** The stored theme an open landed on, by the id and name the host holds:
+   *  **Open recent** is a list of opens, and this is the one place every
+   *  library open passes through. */
+  readonly onOpened?: (id: string, name: string) => void;
 }
 
 /**
@@ -416,46 +420,6 @@ export class ThemeLibraryManager {
     }
   }
 
-  /**
-   * Opens the most recently saved theme that is not the one this document
-   * already is.
-   *
-   * **The read is the listing's**, so a template is never a candidate: it is not
-   * stored, has no modified time and is not in the library the listing draws.
-   * **The open is `openById`'s**, so the dirty-document question and the base
-   * bookkeeping stay in their owner rather than being re-spelled here.
-   */
-  async openRecent(): Promise<void> {
-    const options = this.#options;
-    const current = options.snapshot().id;
-    let entries: readonly {
-      readonly id: string;
-      readonly updatedAt?: string;
-    }[];
-    try {
-      entries = await this.#client().list();
-    } catch (error) {
-      options.onError?.(error instanceof Error ? error.message : String(error));
-      return;
-    }
-    // The document's id is the library folder it was opened from; a base is a
-    // content hash and the listing carries none, so the id is the comparable
-    // fact. Newest is the listing's own modified time, with the id as a stable
-    // tie-break for two themes written in the same tick.
-    const newest = entries
-      .filter((entry) => entry.id !== current)
-      .sort(
-        (a, b) =>
-          (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") ||
-          a.id.localeCompare(b.id),
-      )[0];
-    if (newest === undefined) {
-      options.onError?.(uiCopy.library.noOtherTheme);
-      return;
-    }
-    await this.openById(newest.id);
-  }
-
   /** Reads one stored theme and hands it to whoever builds the session that
    *  shows it. **The base travels with the document**: the session replacing
    *  this one saves against what the library holds, and a base dropped on the
@@ -463,6 +427,10 @@ export class ThemeLibraryManager {
   async #openStored(client: ThemeLibraryClient, id: string): Promise<void> {
     const options = this.#options;
     const opened = await client.open(id);
+    options.onOpened?.(
+      opened.envelope.id,
+      opened.envelope.metadata?.name ?? opened.envelope.id,
+    );
     if (options.onOpenTheme !== undefined) {
       this.#base = libraryBase(opened.base, opened.envelope.assets ?? []);
       await options.onOpenTheme(

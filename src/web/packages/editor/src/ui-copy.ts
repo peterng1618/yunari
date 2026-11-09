@@ -1087,8 +1087,9 @@ export const uiCopy = {
      *  the plain package download lives now — there is no separate row. */
     exportTheme: "Export theme",
     openLibrary: "Open",
-    /** The newest stored theme that is not the open document, opened by its own
-     *  `openById` road so the replacement question and the base stay there. */
+    /** A menu over the themes this editor has had open, most recent first;
+     *  each item opens by its own `openById` road so the replacement question
+     *  and the base stay there. */
     openRecent: "Open recent",
     saveLibrary: "Save",
     /** Writes the open document under a new theme id, leaving the theme it came
@@ -1597,10 +1598,10 @@ export const uiCopy = {
     /** A refused Activate, carrying the host's own sentence — "No such theme."
      *  or "No such display." — unwrapped. */
     activateFailed: (reason: string): string => `Could not activate: ${reason}`,
-    /** Open recent with no candidate: every stored theme is the open one, or
-     *  the library is empty. Said rather than left silent, because a menu row
-     *  that does nothing is indistinguishable from a broken one. */
-    noOtherTheme: "No other saved theme to open.",
+    /** Open recent before any theme has been opened here. Said rather than
+     *  left as an empty menu, because a menu with nothing in it is
+     *  indistinguishable from a broken one. */
+    noRecentThemes: "No recent themes yet.",
   },
   /** The package the picker brings in. Its landing word says what happened — a
    *  package written into the library — because the same line used to report a

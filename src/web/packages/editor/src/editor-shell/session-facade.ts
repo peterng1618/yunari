@@ -76,9 +76,6 @@ export interface EditorActionFacade {
    *  must carry every declared byte. */
   themePublished(id: string): void;
   saveLibrary(): Promise<void>;
-  /** File's **Open recent**: the newest stored theme that is not the document
-   *  that is open. */
-  openRecent(): Promise<void>;
   /** The toolbar's **Save as**: writes the open document under a new theme
    *  and continues as it, leaving the theme it came from untouched. */
   saveAs(): Promise<void>;

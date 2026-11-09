@@ -75,6 +75,7 @@ import {
   type ThemeLibraryClient,
 } from "./theme-library-client.js";
 import { ThemeLibraryManager } from "./theme-library-manager/index.js";
+import { themeRecents } from "./theme-recents/index.js";
 import { captureThumbnail } from "./thumbnail-capture.js";
 import {
   applyFontTrio as applyTrioPresets,
@@ -373,6 +374,7 @@ export class EditorDocument {
       ...(source.onOpenTheme === undefined
         ? {}
         : { onOpenTheme: source.onOpenTheme }),
+      onOpened: (id, name) => themeRecents.record(id, name),
     });
     // Undo carries the palette as well as the scene, and the board the scene
     // was authored on. The shell captured its opening entry before this
@@ -791,11 +793,6 @@ export class EditorDocument {
   /** Opens a stored theme, or the reference composition as a template. */
   openLibrary(): Promise<void> {
     return this.#library.open();
-  }
-
-  /** Opens the most recently saved theme that is not this document. */
-  openRecentLibrary(): Promise<void> {
-    return this.#library.openRecent();
   }
 
   /** Writes this document under a new theme, leaving its own stored theme

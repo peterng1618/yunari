@@ -1,14 +1,12 @@
 import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { ThemeConflictError } from "../theme-library-client.js";
-import { uiCopy } from "../ui-copy.js";
 import {
   assetsWith,
   CREDITS,
   declaration,
   envelope,
   harness,
-  listed,
   OTHER,
   PARENT,
   PNG,
@@ -411,7 +409,7 @@ describe("ThemeLibraryManager", () => {
       assets: { "assets/backdrop.png": PNG },
       base: "base-from-open",
     }));
-    const { manager, onOpenTheme } = harness({
+    const { manager, onOpenTheme, onOpened } = harness({
       client: { list: async () => [], open, save: async () => "base" },
     });
 
@@ -426,7 +424,35 @@ describe("ThemeLibraryManager", () => {
       undefined,
       undefined,
     );
+    // Open recent is a list of opens, so the theme's id and the name it opened
+    // under are named here rather than re-derived from the listing later.
+    expect(onOpened).toHaveBeenCalledWith("living-room", "living-room");
     expect(manager.isStored()).toBe(true);
+  });
+
+  it("records the name the theme opened under, not its id", async () => {
+    const open = vi.fn(async () => ({
+      envelope: storedInstalled,
+      assets: {},
+      base: "base",
+    }));
+    const { manager, onOpened } = harness({ client: { open } });
+
+    await manager.openById(storedInstalled.id);
+
+    expect(onOpened).toHaveBeenCalledWith("living-room", "Primary");
+  });
+
+  it("records nothing when the replacement was refused", async () => {
+    const open = vi.fn(async () => ({ envelope, assets: {}, base: "base" }));
+    const { manager, onOpened } = harness({
+      confirm: async () => false,
+      client: { open },
+    });
+
+    await manager.openById("living-room");
+
+    expect(onOpened).not.toHaveBeenCalled();
   });
 
   it("hands an opened theme's credits to the session that mounts it", async () => {
@@ -640,80 +666,6 @@ describe("ThemeLibraryManager", () => {
       expect(adoptIdentity).not.toHaveBeenCalled();
       expect(markSaved).not.toHaveBeenCalled();
       expect(manager.isStored()).toBe(false);
-    });
-  });
-
-  describe("Open recent", () => {
-    it("opens the newest stored theme that is not the open document", async () => {
-      const open = vi.fn(async () => ({
-        envelope,
-        assets: {},
-        base: "base-from-open",
-      }));
-      const { manager, onOpenTheme } = harness({
-        snapshot: () => ({ ...envelope, id: "current" }),
-        client: {
-          list: async () => [
-            listed("older", "2026-01-01T00:00:00.000Z"),
-            listed("current", "2026-03-01T00:00:00.000Z"),
-            listed("newest", "2026-02-01T00:00:00.000Z"),
-          ],
-          open,
-          save: async () => "base",
-        },
-      });
-
-      await manager.openRecent();
-
-      // `current` is the newest by time, but it is the document already open.
-      expect(open).toHaveBeenCalledWith("newest");
-      // The open travels through `openById`, so the base arrives with it.
-      expect(onOpenTheme).toHaveBeenCalledWith(
-        envelope,
-        {},
-        "base-from-open",
-        undefined,
-        undefined,
-      );
-    });
-
-    it("asks before replacing a dirty document, and a refusal reads nothing", async () => {
-      const open = vi.fn(async () => ({ envelope, assets: {}, base: "base" }));
-      const { manager, onOpenTheme } = harness({
-        confirm: async () => false,
-        client: {
-          list: async () => [listed("other", "2026-01-01T00:00:00.000Z")],
-          open,
-          save: async () => "base",
-        },
-      });
-
-      await manager.openRecent();
-
-      expect(open).not.toHaveBeenCalled();
-      expect(onOpenTheme).not.toHaveBeenCalled();
-    });
-
-    it("says there is nothing to open rather than doing nothing", async () => {
-      const { manager, onError } = harness({
-        client: { list: async () => [] },
-      });
-
-      await manager.openRecent();
-
-      expect(onError).toHaveBeenCalledWith(uiCopy.library.noOtherTheme);
-    });
-
-    it("does not count the open document as recent", async () => {
-      const { manager, onError } = harness({
-        client: {
-          list: async () => [listed("living-room", "2026-01-01T00:00:00.000Z")],
-        },
-      });
-
-      await manager.openRecent();
-
-      expect(onError).toHaveBeenCalledWith(uiCopy.library.noOtherTheme);
     });
   });
 });

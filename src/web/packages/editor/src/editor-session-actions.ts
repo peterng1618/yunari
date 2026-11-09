@@ -261,7 +261,6 @@ export function buildActionFacade(host: ActionFacadeHost): EditorActionFacade {
     themeRemoved: (id) => document.noteThemeRemoved(id),
     themePublished: (id) => document.noteThemePublished(id),
     saveLibrary: () => document.saveLibrary(),
-    openRecent: () => document.openRecentLibrary(),
     saveAs: () => document.saveLibraryAs(),
     // The constructions the shell dispatches are wrapped in the one owner of
     // a construction's refusal (`new-object-panel.ts`), because the surfaces

@@ -1,5 +1,9 @@
+import { Menu } from "@base-ui/react/menu";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { ControlIconButton } from "../components/ui/control-icon-button.js";
+import {
+  ControlIconButton,
+  controlIconButtonClass,
+} from "../components/ui/control-icon-button.js";
 import {
   activeShortcuts,
   subscribeShortcuts,
@@ -9,7 +13,9 @@ import {
   shortcutSpokenLabel,
 } from "../shortcut-manager/display.js";
 import type { ProductShortcutId } from "../shortcut-manager/index.js";
+import { themeRecents } from "../theme-recents/index.js";
 import { uiCopy } from "../ui-copy.js";
+import { ControlTooltip } from "./controls/tooltip.js";
 import {
   ACTIVATE_THEME_GLYPH,
   EXPORT_THEME_GLYPH,
@@ -38,12 +44,21 @@ import { type SelectionStore, useSelection } from "./shell-stores.js";
  *  `shortcut` is the `PRODUCT_SHORTCUTS` id whose handler reaches the same
  *  owner the press does. A row with no id prints no chord because the table
  *  binds none for it, not because a toolbar button cannot have one. */
-export interface ThemeToolbarAction {
-  readonly label: string;
-  readonly icon: LucideIcon;
-  readonly shortcut?: ProductShortcutId;
-  readonly run: (session: EditorActionFacade | undefined) => void;
-}
+export type ThemeToolbarAction =
+  | {
+      readonly label: string;
+      readonly icon: LucideIcon;
+      readonly shortcut?: ProductShortcutId;
+      readonly run: (session: EditorActionFacade | undefined) => void;
+    }
+  | {
+      /** The row opens a menu instead of running one command: its items are the
+       *  themes the editor has had open, which a command cannot name in
+       *  advance. */
+      readonly label: string;
+      readonly icon: LucideIcon;
+      readonly menu: "recentThemes";
+    };
 
 /**
  * The toolbar's rows, in order — the one owner of what it draws.
@@ -83,7 +98,7 @@ function openActions(): readonly ThemeToolbarAction[] {
     {
       label: uiCopy.file.openRecent,
       icon: OPEN_RECENT_GLYPH,
-      run: (session) => void session?.openRecent(),
+      menu: "recentThemes",
     },
     {
       label: uiCopy.file.importPackage,
@@ -138,6 +153,56 @@ function findAssetsAction(onFindAssets: () => void): ThemeToolbarAction {
 /** One toolbar button. `ControlIconButton` is the design's icon button and the
  *  one owner of the label/tooltip pairing; this only hands it the action and
  *  the live chord. */
+/** **Open recent**: the themes this editor has had open, newest first, each by
+ *  the name it had when it opened. The list is the editor's own store rather
+ *  than the library listing — "what did I have open" is not "what is saved" —
+ *  and an item reopens through the same named open the store's own route uses,
+ *  so the replacement question and the base stay with their owner. */
+function OpenRecentMenu({
+  action,
+  session,
+}: {
+  readonly action: ThemeToolbarAction;
+  readonly session: EditorActionFacade | undefined;
+}): React.JSX.Element {
+  const recents = useSyncExternalStore(
+    themeRecents.subscribe,
+    themeRecents.getSnapshot,
+  );
+  return (
+    <Menu.Root>
+      <ControlTooltip label={action.label}>
+        <Menu.Trigger
+          className={`${controlIconButtonClass} text-muted`}
+          aria-label={action.label}
+          data-yunari-open-recent=""
+        >
+          <Glyph icon={action.icon} size={15} />
+        </Menu.Trigger>
+      </ControlTooltip>
+      <Menu.Portal keepMounted>
+        <Menu.Positioner className="editor-shell-positioner">
+          <Menu.Popup className="editor-shell-menu-popup">
+            {recents.length === 0 ? (
+              <Menu.Item disabled>{uiCopy.library.noRecentThemes}</Menu.Item>
+            ) : (
+              recents.map((entry) => (
+                <Menu.Item
+                  key={entry.id}
+                  aria-label={entry.name}
+                  onClick={() => void session?.openLibraryTheme(entry.id)}
+                >
+                  {entry.name}
+                </Menu.Item>
+              ))
+            )}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 function ToolbarAction({
   action,
   session,
@@ -145,6 +210,9 @@ function ToolbarAction({
   readonly action: ThemeToolbarAction;
   readonly session: EditorActionFacade | undefined;
 }): React.JSX.Element {
+  if ("menu" in action) {
+    return <OpenRecentMenu action={action} session={session} />;
+  }
   const chord =
     action.shortcut === undefined
       ? undefined
