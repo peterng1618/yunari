@@ -5219,11 +5219,13 @@ describe("A local monitor is specified rather than paired", () => {
   function windowsOver(
     opened: { readonly kill: ReturnType<typeof vi.fn> }[],
     from: ReturnType<typeof createDisplayStore> = displays,
+    topmost?: (profileDir: string, topmost: boolean) => Promise<boolean>,
   ): ReturnType<typeof createDisplayLauncher> {
     return createDisplayLauncher({
       displays: from,
       port: 5227,
       browser: "/fake/chrome.exe",
+      ...(topmost === undefined ? {} : { topmost }),
       spawn: ((
         _file: string,
         _args: readonly string[],
@@ -6850,6 +6852,52 @@ describe("A local monitor is specified rather than paired", () => {
       // The record the POST wrote has never been seen, so the sighting is not
       // evidence of a window: the host opens one now, on that monitor.
       expect(opened).toHaveLength(1);
+    } finally {
+      await hosting.close();
+    }
+  });
+
+  it("applies a local display's always-on-top toggle to its window", async () => {
+    const raised: boolean[] = [];
+    const hosting = host({
+      launcher: windowsOver([], displays, (_profileDir, topmost) => {
+        raised.push(topmost);
+        return Promise.resolve(true);
+      }),
+    });
+
+    try {
+      await request(
+        hosting.server,
+        "POST",
+        "/api/displays",
+        json({
+          label: "Left screen",
+          monitor: { deviceName: "\\\\.\\DISPLAY2" },
+        }),
+      );
+
+      const on = await request(
+        hosting.server,
+        "PATCH",
+        "/api/displays/left-screen",
+        json({ alwaysOnTop: true }),
+      );
+      expect(on.status).toBe(200);
+      expect((on.json() as { alwaysOnTop?: unknown }).alwaysOnTop).toBe(true);
+      // The window that is already open is raised now, not at the next pass.
+      expect(raised).toEqual([true]);
+
+      const off = await request(
+        hosting.server,
+        "PATCH",
+        "/api/displays/left-screen",
+        json({ alwaysOnTop: false }),
+      );
+      expect(off.status).toBe(200);
+      expect(off.json()).not.toHaveProperty("alwaysOnTop");
+      expect(raised).toEqual([true, false]);
+      expect((await displays.find("left-screen"))?.alwaysOnTop).toBeUndefined();
     } finally {
       await hosting.close();
     }

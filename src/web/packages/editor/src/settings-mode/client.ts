@@ -205,6 +205,9 @@ export interface HostSettingsClient {
     id: string,
     next: DisplayRenderMode,
   ): Promise<DisplayRenderMode>;
+  /** Keeps a local display's window above other windows, and answers what the
+   *  host stored. The host applies it to the window that is already open. */
+  setDisplayAlwaysOnTop(id: string, next: boolean): Promise<boolean>;
   /** Renames a paired display and answers the name the host stored. The id does
    *  not move with it: assignments and themes are keyed by the id minted when
    *  the display was created. */
@@ -896,6 +899,27 @@ export function createHostSettingsClient(options?: {
       }
       const body = (await response.json()) as { readonly renderMode?: unknown };
       return readRenderMode(body?.renderMode);
+    },
+
+    async setDisplayAlwaysOnTop(id, next) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ alwaysOnTop: next }),
+        },
+      );
+      if (!response.ok) {
+        throw await refusal(
+          response,
+          "Could not save the display's always-on-top setting",
+        );
+      }
+      const body = (await response.json()) as {
+        readonly alwaysOnTop?: unknown;
+      };
+      return body?.alwaysOnTop === true;
     },
 
     async renameDisplay(id, label) {

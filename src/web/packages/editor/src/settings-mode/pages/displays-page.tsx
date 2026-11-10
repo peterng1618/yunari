@@ -54,6 +54,10 @@ export function DisplaysPage(state: HostState): React.JSX.Element {
             onRenderModeSaved={(id, saved) =>
               state.replaceRenderMode(id, saved)
             }
+            saveAlwaysOnTop={state.settingsClient.setDisplayAlwaysOnTop}
+            onAlwaysOnTopSaved={(id, saved) =>
+              state.replaceAlwaysOnTop(id, saved)
+            }
             rename={state.settingsClient.renameDisplay}
             onRenamed={(id, label) => state.replaceName(id, label)}
           />

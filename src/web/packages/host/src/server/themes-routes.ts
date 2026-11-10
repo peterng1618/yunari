@@ -40,6 +40,9 @@ interface ActiveDisplay {
   /** The glass and mounting angle; every row is a record, so both are stored. */
   readonly shape: DisplayShape;
   readonly rotation: number;
+  /** A local display whose window is kept above others. Absent for every other
+   *  kind, which is not a window this host opens. */
+  readonly alwaysOnTop?: boolean;
   /** Present for a display this host drives over a panel's own cable: what its
    *  device is doing, and the commands its driver accepts. Absent for a paired
    *  browser and for a local monitor, which the host does not open. */
@@ -137,6 +140,9 @@ export function createThemeRoutes(
             theme: holds[record.id] ?? null,
             shape: record.shape,
             rotation: record.rotation ?? 0,
+            ...(record.kind === "local" && record.alwaysOnTop === true
+              ? { alwaysOnTop: true }
+              : {}),
             // A panel is the one display whose state this host owns: the
             // surface reads whether the device is open and which commands its
             // driver takes, so it can draw a status and a reconnect for a panel

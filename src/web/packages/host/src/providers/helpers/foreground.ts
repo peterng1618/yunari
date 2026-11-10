@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { powershellPath } from "./supervisor.js";
+import { powerShellLiteral, powershellPath } from "./supervisor.js";
 
 /**
  * The foreground window's owning process, read by one embedded PowerShell
@@ -39,11 +39,6 @@ const PRODUCT_NAME_TIMEOUT_MS = 5_000;
  * share one PowerShell run.
  */
 const productNames = new Map<string, Promise<string | undefined>>();
-
-/** A single-quoted PowerShell literal: the only escape is a doubled quote. */
-function powerShellLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
 
 function productNameScript(executablePath: string): string {
   return `

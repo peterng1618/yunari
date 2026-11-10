@@ -160,6 +160,9 @@ export interface ThemedDisplay {
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; the host answers `0` for an absent record value. */
   readonly rotation: number;
+  /** Whether the host keeps this display's window above others. Local displays
+   *  only; absent for every other kind, which has no window. */
+  readonly alwaysOnTop?: boolean;
   /** Present only for a panel display this host drives: whether its device is
    *  open, and the commands its driver accepts. Absent for a paired browser and
    *  for a local monitor, which the host does not open. */
@@ -568,12 +571,22 @@ export function createThemeLibraryClient(options?: {
         ...(body?.displayFileUnreadable === true ? { unreadable: true } : {}),
         displays: Array.isArray(body?.displays)
           ? (body.displays as readonly ThemedDisplay[]).map(
-              ({ id, label, kind, theme, shape, rotation, panel }) => ({
+              ({
+                id,
+                label,
+                kind,
+                theme,
+                shape,
+                rotation,
+                alwaysOnTop,
+                panel,
+              }) => ({
                 id,
                 label,
                 kind: readDisplayKind(kind),
                 theme,
                 ...readDisplayPresentation(shape, rotation),
+                ...(alwaysOnTop === true ? { alwaysOnTop: true } : {}),
                 ...readPanelState(panel),
               }),
             )

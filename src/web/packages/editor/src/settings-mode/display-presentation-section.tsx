@@ -7,6 +7,7 @@ import type * as React from "react";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
 import { ControlText } from "../components/ui/control-text.js";
+import { ControlToggle } from "../components/ui/control-toggle.js";
 import {
   DEFAULT_DISPLAY_KEY,
   type ThemedDisplay,
@@ -63,6 +64,10 @@ export function DisplayPresentationSection(props: {
     next: DisplayRenderMode,
   ) => Promise<DisplayRenderMode>;
   readonly onRenderModeSaved: (id: string, saved: DisplayRenderMode) => void;
+  /** Keeps a local display's window above others. Only a local display has a
+   *  window this host opened. */
+  readonly saveAlwaysOnTop: (id: string, next: boolean) => Promise<boolean>;
+  readonly onAlwaysOnTopSaved: (id: string, saved: boolean) => void;
   readonly rename: (id: string, label: string) => Promise<string>;
   readonly onRenamed: (id: string, label: string) => void;
 }): React.JSX.Element {
@@ -100,6 +105,17 @@ export function DisplayPresentationSection(props: {
       const saved = await props.saveRenderMode(display.id, renderMode);
       props.onRenderModeSaved(display.id, saved);
       return uiCopy.hostSettings.displays.savedRenderMode;
+    });
+  };
+
+  const changeAlwaysOnTop = (
+    display: ThemedDisplay,
+    alwaysOnTop: boolean,
+  ): void => {
+    props.write(async () => {
+      const saved = await props.saveAlwaysOnTop(display.id, alwaysOnTop);
+      props.onAlwaysOnTopSaved(display.id, saved);
+      return uiCopy.hostSettings.displays.savedAlwaysOnTop;
     });
   };
 
@@ -179,6 +195,21 @@ export function DisplayPresentationSection(props: {
               })
             }
           />
+          {/* A window this host opened: a paired browser and a panel have none,
+              so the switch there would write a flag nothing acts on. */}
+          {editable.kind === "local" ? (
+            <ControlToggle
+              id="yunari-host-display-always-on-top"
+              label={uiCopy.hostSettings.displays.alwaysOnTop}
+              hint={uiCopy.hostSettings.displays.alwaysOnTopHint}
+              density="settings"
+              data={{ "data-yunari-host-display-always-on-top": "" }}
+              checked={editable.alwaysOnTop === true}
+              onChange={(alwaysOnTop) =>
+                changeAlwaysOnTop(editable, alwaysOnTop)
+              }
+            />
+          ) : null}
           {/* Only a family that offers two streams draws the choice; a panel
               with one would get a control whose second option does nothing. */}
           {editable.panel !== undefined &&

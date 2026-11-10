@@ -9,6 +9,7 @@ import type {
 import { readRenderMode } from "@yunari/renderer-core";
 import { DEVICE_ID_PATTERN } from "./devices.js";
 import {
+  DisplaySettingError,
   displayRenderMode,
   displayShape,
   normalizePresentation,
@@ -121,6 +122,10 @@ export interface DisplayRecord {
   /** Which stream a panel's device is fed. Omitted for `mode-a`, the stream
    *  every family accepts, so only the alternative is ever written. */
   readonly renderMode?: DisplayRenderMode;
+  /** A local display's window stays above other windows. Omitted when it does
+   *  not, and kept on local records only: no other kind is a window the host
+   *  opens. */
+  readonly alwaysOnTop?: boolean;
 }
 
 /** The things a person edits. None may touch the id. */
@@ -129,6 +134,7 @@ export interface DisplayPatch {
   readonly shape?: DisplayShape;
   readonly rotation?: number;
   readonly renderMode?: DisplayRenderMode;
+  readonly alwaysOnTop?: boolean;
 }
 
 export interface DisplayStore {
@@ -444,9 +450,14 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
   // dropped with it.
   const shape: DisplayShape = raw["shape"] === "circle" ? "circle" : "rect";
   const rotation = storedRotation(shape, raw["rotation"]);
+  // The key is absent on `mode-a`, so absence needs no separate answer: the
+  // reader's default is that stream.
   const renderMode = readRenderMode(raw["renderMode"]);
+  // On a local record only: a paired display or a panel is not a window this
+  // host opens, so the flag there would promise an effect nothing performs.
+  const alwaysOnTop = kind === "local" && raw["alwaysOnTop"] === true;
 
-  return {
+  const record: DisplayRecord = {
     id,
     label,
     kind,
@@ -459,6 +470,8 @@ function normalizeRecord(input: unknown): DisplayRecord | undefined {
     ...(monitor !== undefined ? { monitor } : {}),
     ...(panel !== undefined ? { panel } : {}),
   };
+
+  return alwaysOnTop ? { ...record, alwaysOnTop: true } : record;
 }
 
 interface DisplayFileRead {
@@ -559,13 +572,30 @@ export function normalizePatch(patch: DisplayPatch): DisplayPatch {
     patch.renderMode === undefined
       ? undefined
       : displayRenderMode(patch.renderMode);
+  const alwaysOnTop =
+    patch.alwaysOnTop === undefined
+      ? undefined
+      : displayAlwaysOnTop(patch.alwaysOnTop);
 
   return {
     ...(label === undefined ? {} : { label }),
     ...(shape === undefined ? {} : { shape }),
     ...(rotation === undefined ? {} : { rotation }),
     ...(renderMode === undefined ? {} : { renderMode }),
+    ...(alwaysOnTop === undefined ? {} : { alwaysOnTop }),
   };
+}
+
+/** A switch is a boolean, and a body carrying anything else is a caller's
+ *  mistake rather than a setting this store could read either way. */
+function displayAlwaysOnTop(value: unknown): boolean {
+  if (typeof value !== "boolean") {
+    throw new DisplaySettingError(
+      "A display's always-on-top setting must be true or false.",
+    );
+  }
+
+  return value;
 }
 
 /**
@@ -855,7 +885,14 @@ export function createDisplayStore(
         // `rotation` is taken out of the spread because omitting it must clear
         // the stored one rather than leave the found record's angle behind.
         // `renderMode` goes the same way, and `mode-a` is stored as absence.
-        const { rotation: _old, renderMode: _mode, ...rest } = found;
+        // A window flag is only meaningful on a local display: a paired record
+        // is not a window this host opens.
+        const {
+          rotation: _old,
+          renderMode: _mode,
+          alwaysOnTop: _top,
+          ...rest
+        } = found;
         const renderMode = patch.renderMode ?? found.renderMode ?? "mode-a";
         const record: DisplayRecord = {
           ...rest,
@@ -865,6 +902,9 @@ export function createDisplayStore(
             ? {}
             : { rotation: presentation.rotation }),
           ...(renderMode === "mode-a" ? {} : { renderMode }),
+          ...(found.kind === "local" && patch.alwaysOnTop === true
+            ? { alwaysOnTop: true }
+            : {}),
         };
 
         displays[index] = record;

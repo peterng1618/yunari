@@ -91,6 +91,14 @@ export function powershellPath(
   return pathExists(executable) ? executable : undefined;
 }
 
+/** A single-quoted PowerShell literal: the only escape is a doubled quote.
+ *
+ *  Shared with the other host of an embedded script (`serve/window-topmost.ts`)
+ *  so a path or a product name is quoted by one rule rather than two. */
+export function powerShellLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 /** The default spawn for a helper child, exported for non-script exes too. */
 export function spawnChildProcess(
   command: string,

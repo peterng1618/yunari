@@ -364,6 +364,13 @@ export function createDisplayRoutes(
         }
       }
 
+      // A local display's window is the host's own, so the flag is applied to
+      // the window that is up rather than waiting for the next reconcile. The
+      // store keeps it either way, so a window that opens later reads it.
+      if (patch.alwaysOnTop !== undefined && updated.kind === "local") {
+        options.launcher?.setAlwaysOnTop(id, updated.alwaysOnTop === true);
+      }
+
       // The answer is the record itself, so a surface redraws one row without
       // refetching the list it already has.
       sendJson(response, 200, peerOf(updated));

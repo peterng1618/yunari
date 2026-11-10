@@ -513,7 +513,13 @@ describe("ThemeLibraryClient", () => {
           JSON.stringify({
             default: "living-room",
             displays: [
-              { id: "hallway", label: "Hallway", kind: "local", theme: null },
+              {
+                id: "hallway",
+                label: "Hallway",
+                kind: "local",
+                theme: null,
+                alwaysOnTop: true,
+              },
               {
                 id: "kitchen-tablet",
                 label: "Kitchen Tablet",
@@ -546,6 +552,7 @@ describe("ThemeLibraryClient", () => {
           theme: null,
           shape: "rect",
           rotation: 0,
+          alwaysOnTop: true,
         },
         {
           id: "kitchen-tablet",

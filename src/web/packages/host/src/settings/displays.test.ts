@@ -824,6 +824,59 @@ describe("createDisplayStore", () => {
     );
   });
 
+  it("stores always-on-top on a local display and clears it back off", async () => {
+    const record = await store.createLocal("Desk", {
+      deviceName: "\\\\.\\DISPLAY1",
+    });
+    expect(record.alwaysOnTop).toBeUndefined();
+
+    const raised = await store.update(record.id, { alwaysOnTop: true });
+    expect(raised?.alwaysOnTop).toBe(true);
+    expect((await store.find(record.id))?.alwaysOnTop).toBe(true);
+
+    // Off is absence, the same way a default stream is, so nothing holds a
+    // second spelling of "not raised".
+    const lowered = await store.update(record.id, { alwaysOnTop: false });
+    expect(lowered).not.toHaveProperty("alwaysOnTop");
+  });
+
+  it("does not keep always-on-top on a display the host opens no window for", async () => {
+    const record = await store.create("Tablet", "token");
+
+    // A paired display is a browser the owner started elsewhere; a flag there
+    // would promise an effect nothing performs.
+    const updated = await store.update(record.id, { alwaysOnTop: true });
+    expect(updated).not.toHaveProperty("alwaysOnTop");
+  });
+
+  it("refuses an always-on-top value that is not a boolean", async () => {
+    expect(() => normalizePatch({ alwaysOnTop: "yes" as never })).toThrow(
+      DisplaySettingError,
+    );
+  });
+
+  it("drops a stored always-on-top from a record that is not local", async () => {
+    await writeFile(
+      path.join(directory, FILE),
+      JSON.stringify({
+        displays: [
+          {
+            id: "tablet",
+            label: "Tablet",
+            kind: "paired",
+            createdAt: "2026-10-18T00:00:00.000Z",
+            lastSeenAt: "2026-10-18T00:00:00.000Z",
+            tokenHash: hashToken("tok"),
+            shape: "rect",
+            alwaysOnTop: true,
+          },
+        ],
+      }),
+    );
+
+    expect((await store.list())[0]).not.toHaveProperty("alwaysOnTop");
+  });
+
   it("reads an invalid stored shape as rect and drops its rotation", async () => {
     await writeFile(
       path.join(directory, FILE),

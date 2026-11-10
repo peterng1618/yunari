@@ -21,6 +21,7 @@ import {
   findBrowser,
   LIVE_WINDOW_MS,
 } from "./display-launcher.js";
+import { LAUNCH_WAIT_MS, LIVE_WAIT_MS } from "./window-topmost.js";
 
 /**
  * A fake clock, so "recently" is a fact about the fixture rather than about how
@@ -123,6 +124,11 @@ describe("the host's own windows", () => {
     opened: OpenedWindow[],
     monitors: () => Promise<readonly Monitor[]> = () =>
       Promise.resolve(ATTACHED),
+    topmost?: (
+      profileDir: string,
+      topmost: boolean,
+      waitMs: number,
+    ) => Promise<boolean>,
   ) {
     return createDisplayLauncher({
       displays,
@@ -131,6 +137,7 @@ describe("the host's own windows", () => {
       spawn: recordingSpawn(opened),
       monitors,
       now: () => NOW,
+      ...(topmost === undefined ? {} : { topmost }),
     });
   }
 
@@ -146,6 +153,65 @@ describe("the host's own windows", () => {
 
     return record.id;
   }
+
+  it("raises a window whose record asked to stay on top", async () => {
+    const opened: OpenedWindow[] = [];
+    const raised: {
+      readonly profileDir: string;
+      readonly topmost: boolean;
+      readonly waitMs: number;
+    }[] = [];
+    const id = await local("Left screen", hintFor(ATTACHED[1]!), STALE);
+    await displays.update(id, { alwaysOnTop: true });
+
+    await launcher(opened, undefined, (profileDir, topmost, waitMs) => {
+      raised.push({ profileDir, topmost, waitMs });
+      return Promise.resolve(true);
+    }).reconcile();
+
+    // The window is created after the spawn, so the launch waits for it; the
+    // profile path is the identity, and it is this display's own.
+    expect(raised).toHaveLength(1);
+    expect(raised[0]?.topmost).toBe(true);
+    expect(raised[0]?.waitMs).toBe(LAUNCH_WAIT_MS);
+    expect(raised[0]?.profileDir.endsWith(id)).toBe(true);
+  });
+
+  it("leaves a window alone when its record did not ask", async () => {
+    const opened: OpenedWindow[] = [];
+    const raised: boolean[] = [];
+    await local("Left screen", hintFor(ATTACHED[1]!), STALE);
+
+    await launcher(opened, undefined, (_dir, topmost) => {
+      raised.push(topmost);
+      return Promise.resolve(true);
+    }).reconcile();
+
+    expect(raised).toEqual([]);
+  });
+
+  it("applies a live toggle to the window that is already up", async () => {
+    const raised: {
+      readonly profileDir: string;
+      readonly topmost: boolean;
+      readonly waitMs: number;
+    }[] = [];
+    const id = await local("Left screen", hintFor(ATTACHED[1]!), RECENT);
+    const windows = launcher([], undefined, (profileDir, topmost, waitMs) => {
+      raised.push({ profileDir, topmost, waitMs });
+      return Promise.resolve(true);
+    });
+
+    windows.setAlwaysOnTop(id, true);
+    windows.setAlwaysOnTop(id, false);
+
+    // A live toggle acts on a window that exists, so it does not wait for one
+    // and it reports the flag it was asked for both ways.
+    expect(raised.map(({ topmost, waitMs }) => [topmost, waitMs])).toEqual([
+      [true, LIVE_WAIT_MS],
+      [false, LIVE_WAIT_MS],
+    ]);
+  });
 
   it("launches a local display that has not been seen recently", async () => {
     const opened: OpenedWindow[] = [];

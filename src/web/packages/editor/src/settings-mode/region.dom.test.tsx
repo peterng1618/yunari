@@ -207,6 +207,11 @@ interface Written {
     readonly id: string;
     readonly next: DisplayRenderMode;
   }[];
+  /** The always-on-top writes, in order: id and the flag sent. */
+  readonly topmost: {
+    readonly id: string;
+    readonly next: boolean;
+  }[];
   /** The panels an add sent, in order: what the request carried. */
   readonly panels: {
     readonly vendorId: number;
@@ -280,6 +285,7 @@ function hostSettings(
     searches: [],
     presentation: [],
     renderModes: [],
+    topmost: [],
     panels: [],
     reconnects: [],
     names: [],
@@ -356,6 +362,10 @@ function hostSettings(
       },
       setDisplayRenderMode: async (id, next) => {
         wrote.renderModes.push({ id, next });
+        return next;
+      },
+      setDisplayAlwaysOnTop: async (id, next) => {
+        wrote.topmost.push({ id, next });
         return next;
       },
       // No panel attached is the ordinary machine, so the default fixture
@@ -1358,6 +1368,45 @@ it("draws no rendering control for a family with one stream", async () => {
 
   expect(
     container.querySelector("[data-yunari-host-display-render-mode]"),
+  ).toBeNull();
+});
+
+it("offers always-on-top for a local display and writes it", async () => {
+  const { container, wrote } = await mountHost({
+    displays: [
+      {
+        id: "left",
+        label: "Left screen",
+        kind: "local",
+        theme: null,
+        shape: "rect",
+        rotation: 0,
+      },
+    ],
+  });
+  await act(async () => displayRow(container, "left").click());
+
+  const toggle = (): HTMLElement | null =>
+    container.querySelector<HTMLElement>(
+      "[data-yunari-host-display-always-on-top]",
+    );
+  expect(toggle()?.getAttribute("aria-checked")).toBe("false");
+
+  await act(async () => toggle()?.click());
+
+  expect(wrote.topmost, "the toggle did not write the flag").toEqual([
+    { id: "left", next: true },
+  ]);
+  // The switch stands on the host's answer, not on the click.
+  expect(toggle()?.getAttribute("aria-checked")).toBe("true");
+});
+
+it("draws no always-on-top control for a display with no window of its own", async () => {
+  const { container } = await mountHost(TWO_DISPLAYS);
+  await act(async () => displayRow(container, "hallway").click());
+
+  expect(
+    container.querySelector("[data-yunari-host-display-always-on-top]"),
   ).toBeNull();
 });
 

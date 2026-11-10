@@ -9,6 +9,11 @@ import {
   listMonitors,
   type Monitor,
 } from "../settings/monitors.js";
+import {
+  LAUNCH_WAIT_MS,
+  LIVE_WAIT_MS,
+  setWindowTopmost,
+} from "./window-topmost.js";
 
 /**
  * The host's own windows on its local monitors: one per attached local display,
@@ -155,6 +160,8 @@ export interface Launcher {
   reconcile(): Promise<void>;
   /** Closes the window this launcher opened for a display, if any. */
   close(displayId: string): void;
+  /** Keeps that display's window above other windows, or lets it fall back. */
+  setAlwaysOnTop(displayId: string, topmost: boolean): void;
   stop(): void;
 }
 
@@ -202,6 +209,13 @@ export function createDisplayLauncher(input: {
   /** The browser to open. Omitted asks `findBrowser()` — this machine's own
    *  answer — and is supplied so a case does not depend on one being installed. */
   readonly browser?: string;
+  /** The native call that raises a window. Omitted asks this machine; supplied
+   *  so a case does not run PowerShell. */
+  readonly topmost?: (
+    profileDir: string,
+    topmost: boolean,
+    waitMs: number,
+  ) => Promise<boolean>;
 }): Launcher {
   const spawnProcess = input.spawn ?? spawn;
   const now = input.now ?? Date.now;
@@ -219,6 +233,26 @@ export function createDisplayLauncher(input: {
     // A window the owner closed, or one that never started, is not a window
     // this launcher still has: the next pass may put one back.
     if (windows.get(displayId) === child) windows.delete(displayId);
+  };
+
+  const raise = (displayId: string, topmost: boolean, waitMs: number): void => {
+    const run =
+      input.topmost ??
+      ((profileDir, above: boolean, wait: number) =>
+        setWindowTopmost(profileDir, above, { waitMs: wait }));
+
+    void run(profileDirFor(displayId), topmost, waitMs).then(
+      (applied) => {
+        // A window that was not found is a failure worth saying; clearing one
+        // that is already gone is not. Nothing is recorded as though it worked.
+        if (!applied && topmost && process.platform === "win32") {
+          console.error(
+            `Display ${displayId}: always-on-top could not be applied.`,
+          );
+        }
+      },
+      () => undefined,
+    );
   };
 
   const launch = (record: DisplayRecord, monitor: Monitor): void => {
@@ -242,6 +276,10 @@ export function createDisplayLauncher(input: {
     windows.set(record.id, child);
     child.once("exit", () => forget(record.id, child));
     child.once("error", () => forget(record.id, child));
+
+    // The window appears after the browser starts, so this waits for it rather
+    // than assuming the spawn already made one.
+    if (record.alwaysOnTop === true) raise(record.id, true, LAUNCH_WAIT_MS);
   };
 
   const reconcile = async (): Promise<void> => {
@@ -306,6 +344,13 @@ export function createDisplayLauncher(input: {
       // Only ever a window this launcher opened: a browser the owner started is
       // not the host's to close.
       if (!child.killed) child.kill();
+    },
+
+    setAlwaysOnTop(displayId, topmost): void {
+      // By the profile path rather than the child map: a window this launcher
+      // did not open this run — one that outlived a host restart — is still the
+      // display's own, and the path is what identifies it.
+      raise(displayId, topmost, LIVE_WAIT_MS);
     },
 
     stop(): void {

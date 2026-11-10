@@ -178,6 +178,8 @@ export interface HostState {
   /** Writes the stream a panel display is fed into the row the host answered,
    *  so the toggle stands on what was stored rather than on the click. */
   readonly replaceRenderMode: (id: string, saved: DisplayRenderMode) => void;
+  /** The always-on-top flag the host stored, for the same reason. */
+  readonly replaceAlwaysOnTop: (id: string, saved: boolean) => void;
   readonly reconnectPanel: (id: string) => Promise<void>;
   readonly disconnectPanel: (id: string) => Promise<void>;
   readonly addPanel: (panel: PanelHint) => void;
@@ -527,6 +529,22 @@ export function useHostSettings(props: {
     );
   };
 
+  const replaceAlwaysOnTop = (id: string, saved: boolean): void => {
+    if (!mounted.current) return;
+    setMap((current) =>
+      current === undefined
+        ? current
+        : {
+            ...current,
+            displays: current.displays.map((row) =>
+              row.id === id
+                ? { ...row, ...(saved ? { alwaysOnTop: true } : {}) }
+                : row,
+            ),
+          },
+    );
+  };
+
   const replaceRenderMode = (id: string, saved: DisplayRenderMode): void => {
     if (!mounted.current) return;
     setMap((current) =>
@@ -694,6 +712,7 @@ export function useHostSettings(props: {
     replaceName,
     replacePresentation,
     replaceRenderMode,
+    replaceAlwaysOnTop,
     reconnectPanel,
     disconnectPanel,
     addPanel,
