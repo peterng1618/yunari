@@ -123,7 +123,7 @@ describe("groupByAsk", () => {
 
     const groups = groupByAsk([
       {
-        display: "this-pc",
+        display: "hallway",
         semanticKeys: ["gpu.temp"],
         assignment: { gpu: "gpu-0" },
       },
@@ -147,7 +147,7 @@ describe("groupByAsk", () => {
     }
 
     expect(groups.map((group) => group.displays)).toEqual([
-      ["this-pc", "desk"],
+      ["hallway", "desk"],
       ["kitchen-tablet"],
     ]);
     expect(os.calls).toHaveLength(2);
@@ -162,7 +162,7 @@ describe("groupByAsk", () => {
   it("asks for the union of what the displays it grouped need", () => {
     const groups = groupByAsk([
       {
-        display: "this-pc",
+        display: "hallway",
         semanticKeys: ["cpu.load", "gpu.temp"],
         assignment: {},
       },

@@ -14,7 +14,7 @@ const reads = vi.hoisted(() => ({ count: 0 }));
 
 const DATA = {
   default: null,
-  displays: [{ id: "this-pc", label: "Host", theme: null }],
+  displays: [{ id: "desk-monitor", label: "Desk monitor", theme: null }],
   templates: [],
   themes: [{ id: "living-room", name: "Living Room" }],
 };

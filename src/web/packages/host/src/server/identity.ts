@@ -6,7 +6,6 @@ import {
   DEFAULT_DISPLAY,
   type DisplayRecord,
   type DisplayStore,
-  LOCAL_DISPLAY_ID,
 } from "../settings/displays.js";
 import type { HostingPeer } from "./options.js";
 
@@ -207,10 +206,10 @@ export function peerOf(record: DisplayRecord): HostingPeer {
  * a request becomes a display, so the credential is checked once.
  *
  * **Loopback answers `undefined` on purpose.** It is trusted admin and never
- * paired, and the reserved `this-pc` has no record to return:
- * the *key* is minted where a key is needed, not fabricated here with a
- * `createdAt` nobody wrote. A credential matching no display is `undefined`
- * too, and the caller refuses it as it refuses a missing credential.
+ * paired, so it has no record to return: the *key* is minted where a key is
+ * needed, not fabricated here with a `createdAt` nobody wrote. A credential
+ * matching no display is `undefined` too, and the caller refuses it as it
+ * refuses a missing credential.
  */
 export async function displayFor(
   request: http.IncomingMessage,
@@ -249,8 +248,8 @@ export async function displayFor(
 
 /**
  * The display a request is served as, which is the key its theme is stored
- * under. Not `displayFor` with a fallback, because loopback is a display of its
- * own: it is this PC, which is never paired and has no record to return.
+ * under. Not `displayFor` with a fallback: a request with no identity of its
+ * own is served as the default, which is a key rather than a display.
  *
  * **`?display=` names local displays only, and that restriction is the security
  * property rather than a nicety.** A local monitor has no credential, so the
@@ -290,7 +289,7 @@ export async function displayKeyFor(
       return record.id;
     }
 
-    return LOCAL_DISPLAY_ID;
+    return DEFAULT_DISPLAY;
   }
 
   return (await displayFor(request, displays))?.id ?? DEFAULT_DISPLAY;
@@ -325,19 +324,16 @@ export function streamLanguage(url: URL): string | undefined {
 /**
  * The glass and mounting angle of the display behind a key.
  *
- * `this-pc` and `default` are not records, so each answers the upright
- * rectangle it is given, and every other key is a record whose own
- * presentation wins. A stored upright angle is answered as `0` because the
- * record omits it.
+ * `default` is not a record, so it answers the upright rectangle it is handed,
+ * and every other key is a record whose own presentation wins. A stored upright
+ * angle is answered as `0` because the record omits it.
  */
 export async function presentationForDisplay(
   key: string,
   displays: DisplayStore | undefined,
 ): Promise<{ readonly shape: DisplayShape; readonly rotation: number }> {
   const record =
-    key === LOCAL_DISPLAY_ID || key === DEFAULT_DISPLAY
-      ? undefined
-      : await displays?.find(key);
+    key === DEFAULT_DISPLAY ? undefined : await displays?.find(key);
 
   return {
     shape: record?.shape ?? "rect",
@@ -349,11 +345,10 @@ export async function presentationForDisplay(
  * Whether a key a loopback request named is one this host can hold a theme or a
  * set of answers for.
  *
- * The two reserved words are keys in their own right — `default` is what a
- * display with no choice of its own falls to, `this-pc` is the machine — so
- * neither is a record and neither is refused for the lack of one. Everything
- * else must be a display this host holds, so a typo is a 404 rather than a key
- * nothing will ever read.
+ * `default` is a key in its own right — it is what a display with no choice of
+ * its own falls to — so it is not a record and is not refused for the lack of
+ * one. Everything else must be a display this host holds, so a typo is a 404
+ * rather than a key nothing will ever read.
  *
  * **Not `displayKeyFor`.** That answers the request a display makes about
  * itself, where `?display=` may name a local record and nothing else, because
@@ -365,7 +360,7 @@ export async function knownDisplayKey(
   key: string,
   displays: DisplayStore | undefined,
 ): Promise<boolean> {
-  if (key === DEFAULT_DISPLAY || key === LOCAL_DISPLAY_ID) return true;
+  if (key === DEFAULT_DISPLAY) return true;
   return ((await displays?.list()) ?? []).some((record) => record.id === key);
 }
 

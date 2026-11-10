@@ -10,7 +10,6 @@ import {
   DEFAULT_DISPLAY,
   type DisplayKind,
   type DisplayStore,
-  LOCAL_DISPLAY_ID,
 } from "../settings/displays.js";
 import { requiredDeviceGroups } from "../settings/required-devices.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
@@ -38,7 +37,7 @@ interface ActiveDisplay {
   readonly label: string;
   readonly kind: DisplayKind;
   readonly theme: string | null;
-  /** The glass and mounting angle; `this-pc` answers rect/0. */
+  /** The glass and mounting angle; every row is a record, so both are stored. */
   readonly shape: DisplayShape;
   readonly rotation: number;
   /** Present for a display this host drives over a panel's own cable: what its
@@ -56,16 +55,6 @@ interface ActiveDisplay {
     readonly renderModes: readonly DisplayRenderMode[];
   };
 }
-
-/**
- * What the map calls `this-pc`, the machine itself.
- *
- * Never read from the display store: `this-pc` is the machine rather than a
- * client anyone paired, so it has no record whose label could be taken. The
- * word matches the one the editor's Settings surface uses for the same row
- * (`uiCopy.hostSettings.displays`).
- */
-const LOCAL_DISPLAY_LABEL = "Host";
 
 export interface ThemeRouteDeps {
   readonly options: HostServerOptions;
@@ -105,9 +94,9 @@ export function createThemeRoutes(
    * The map `/api/themes/active` reads and writes: every display with the theme
    * it holds, and the default a display with no entry of its own falls to.
    *
-   * The Host is always present and always first, because it is the display the
-   * person reading the page is looking at. A stored record with that id is not
-   * possible — the store refuses to mint it — so it is added rather than found.
+   * Only records are listed. The default is the answer's own `default` field
+   * rather than a row here: it is a key, not a display, and each surface draws
+   * it from that field so it cannot appear twice.
    */
   async function activeThemeMap(
     store: ActiveThemeStore,
@@ -132,14 +121,6 @@ export function createThemeRoutes(
       default: holds[DEFAULT_DISPLAY] ?? null,
       displayFileUnreadable: displayState?.unreadable === true,
       displays: [
-        {
-          id: LOCAL_DISPLAY_ID,
-          label: LOCAL_DISPLAY_LABEL,
-          kind: "local",
-          theme: holds[LOCAL_DISPLAY_ID] ?? null,
-          shape: "rect",
-          rotation: 0,
-        },
         ...records.map((record) => {
           const family =
             record.panel === undefined
@@ -313,9 +294,9 @@ export function createThemeRoutes(
         // The key this write reaches. A paired session names no display: its own
         // record is the one it may write, so a `display` in the body is ignored
         // rather than refused — a client sending both gets the safe answer
-        // instead of a distinction it could probe. `default` and `this-pc` are
-        // unreachable from a session by construction, not by a check: the key is
-        // the request's own id, and the store refuses to mint either word.
+        // instead of a distinction it could probe. `default` is unreachable from
+        // a session by construction, not by a check: the key is the request's
+        // own id, and the store refuses to mint it or the retired machine id.
         let key: string;
 
         if (loopback) {

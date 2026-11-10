@@ -2009,7 +2009,7 @@ it("shows the Settings mode's own region, and the store's only in Themes", async
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "Host", theme: null }],
+            displays: [],
           }),
           { status: 200 },
         );
@@ -2088,7 +2088,7 @@ it("puts the Settings mode's line in the status strip, and the editor's readouts
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "Host", theme: null }],
+            displays: [],
           }),
           { status: 200 },
         );
@@ -2139,7 +2139,7 @@ it("puts the Settings mode's line in the status strip, and the editor's readouts
   expect(
     strip().querySelector("[data-yunari-host-display-count]")?.textContent,
     "the strip does not count the displays the host answered",
-  ).toBe(uiCopy.hostSettings.status.displays(1));
+  ).toBe(uiCopy.hostSettings.status.displays(0));
   expect(
     strip().querySelector("[data-yunari-host-status]")?.textContent,
     "the strip does not carry the Settings mode's own line",
@@ -2171,7 +2171,7 @@ it("paints no line from the previous visit when the Settings mode is re-entered"
         return new Response(
           JSON.stringify({
             default: null,
-            displays: [{ id: "this-pc", label: "Host", theme: null }],
+            displays: [],
           }),
           { status: 200 },
         );
@@ -2210,7 +2210,7 @@ it("paints no line from the previous visit when the Settings mode is re-entered"
   await act(async () => modeSegments(root)[2]?.click());
   await act(async () => {});
   expect(count(), "the first visit published no count to leave behind").toBe(
-    uiCopy.hostSettings.status.displays(1),
+    uiCopy.hostSettings.status.displays(0),
   );
 
   await act(async () => modeSegments(root)[1]?.click());
@@ -2245,7 +2245,7 @@ it("paints no line from the previous visit when the Settings mode is re-entered"
   expect(
     count(),
     "the re-entered strip was painted with the previous visit's count",
-  ).toBe(uiCopy.hostSettings.status.displays(1));
+  ).toBe(uiCopy.hostSettings.status.displays(0));
   await act(async () => {});
 
   layout.destroy();

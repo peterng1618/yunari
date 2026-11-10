@@ -78,8 +78,8 @@ describe("discovery tools", () => {
               default: "a",
               displays: [
                 {
-                  id: "this-pc",
-                  label: "Host",
+                  id: "hallway",
+                  label: "Hallway",
                   kind: "local",
                   theme: "a",
                   shape: "rect",
@@ -108,8 +108,8 @@ describe("discovery tools", () => {
       default: "a",
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "hallway",
+          label: "Hallway",
           kind: "local",
           shape: "rect",
           rotation: 0,

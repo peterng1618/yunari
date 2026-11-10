@@ -77,7 +77,6 @@ import {
   type DisplayRecord,
   type DisplayStore,
   hashToken,
-  LOCAL_DISPLAY_ID,
 } from "./settings/displays.js";
 import { createFontFavoritesStore } from "./settings/font-favorites.js";
 import type { HostRecord } from "./settings/host-record.js";
@@ -4758,7 +4757,7 @@ describe("A display's credential outlives the host that minted it", () => {
     }
 
     // Loopback is trusted admin and never paired: it needs no credential, and
-    // `this-pc` has no record for one to have come from.
+    // the default key has no record for one to have come from.
     expect((await request(hosted.server, "GET", "/api/themes")).status).toBe(
       200,
     );
@@ -5139,14 +5138,14 @@ describe("The pairing routes mint, rotate, rename and remove displays (ruling 12
     ]);
   });
 
-  it("refuses to remove the reserved local display", async () => {
+  it("refuses to remove the default row, which is a key and not a display", async () => {
     const refused = await request(
       hosted.server,
       "DELETE",
-      `/api/displays/${LOCAL_DISPLAY_ID}`,
+      `/api/displays/${DEFAULT_DISPLAY}`,
     );
     expect(refused.status).toBe(409);
-    expect(refused.text()).toMatch(/The Host/);
+    expect(refused.text()).toMatch(/The default is not a paired client/);
   });
 
   it("never echoes a stored hash, and carries a token only where it mints one", async () => {
@@ -6726,10 +6725,8 @@ describe("A local monitor is specified rather than paired", () => {
         expect(rows.find((row) => row.id === "strip")?.panel?.geometry).toEqual(
           { width: 464, height: 1920 },
         );
-        // The Host is not host-driven, so it carries no panel key at all.
-        expect(rows.find((row) => row.id === "this-pc")).not.toHaveProperty(
-          "panel",
-        );
+        // The default is a key rather than a device, so no row is added for it.
+        expect(rows.some((row) => row.id === "default")).toBe(false);
       } finally {
         await hosting.close();
       }
@@ -7818,18 +7815,11 @@ describe("The display map", () => {
     };
 
     // An entry with no theme is `theme: null` rather than absent, so the page
-    // can tell "no theme" from "no display". The Host is always present and is
-    // never asked of the store: it has no record to take a label from.
+    // can tell "no theme" from "no display". Only records are listed: the
+    // default is the answer's own field, so a surface draws it from there rather
+    // than from a row that would duplicate it.
     expect(res.status).toBe(200);
     expect(body.displays).toEqual([
-      {
-        id: "this-pc",
-        label: "Host",
-        kind: "local",
-        theme: null,
-        shape: "rect",
-        rotation: 0,
-      },
       {
         id: "kitchen-tablet",
         label: "Kitchen tablet",
@@ -7914,7 +7904,7 @@ describe("The display map", () => {
       hosted.server,
       "PUT",
       "/api/themes/active",
-      json({ display: LOCAL_DISPLAY_ID, id: "nope" }),
+      json({ display: DEFAULT_DISPLAY, id: "nope" }),
     );
     expect(unknownTheme.status).toBe(404);
 
@@ -7977,7 +7967,7 @@ describe("The display map", () => {
       hosted.server,
       "PUT",
       "/api/themes/active",
-      json({ display: LOCAL_DISPLAY_ID, id: "attic-wall" }),
+      json({ display: DEFAULT_DISPLAY, id: "attic-wall" }),
       session,
     );
 
@@ -7987,9 +7977,6 @@ describe("The display map", () => {
     expect(await activeTheme.read("kitchen-tablet", async () => true)).toBe(
       "attic-wall",
     );
-    expect(
-      await activeTheme.read(LOCAL_DISPLAY_ID, async () => true),
-    ).toBeUndefined();
     expect(
       await activeTheme.read(DEFAULT_DISPLAY, async () => true),
     ).toBeUndefined();
@@ -9051,18 +9038,18 @@ describe("A theme's own device answers", () => {
       "/api/devices",
       json({ assigned: { gpu: "gpu-1", "system-disk": "disk-c" } }),
     );
-    await themeSettings.write(LOCAL_DISPLAY_ID, "disk-only", {
+    await themeSettings.write(DEFAULT_DISPLAY, "disk-only", {
       "system-disk": "disk-d",
     });
 
     // Written but not chosen: the machine's own answer is the one served.
     await serves({ gpu: "gpu-1", systemDisk: "disk-c", names: {} });
 
-    await activeTheme.write(LOCAL_DISPLAY_ID, "disk-only");
+    await activeTheme.write(DEFAULT_DISPLAY, "disk-only");
     await serves({ gpu: "gpu-1", systemDisk: "disk-d", names: {} });
 
     // Another theme reads the machine's own answer, not this theme's.
-    await activeTheme.write(LOCAL_DISPLAY_ID, "disk-spare");
+    await activeTheme.write(DEFAULT_DISPLAY, "disk-spare");
     await serves({ gpu: "gpu-1", systemDisk: "disk-c", names: {} });
   });
 
@@ -9187,9 +9174,9 @@ describe("The assignment a display is served", () => {
   it("reads the answering display's override, not another display's", async () => {
     // Both displays hold the same theme; only the answers differ, which is the
     // whole reason they are keyed by display as well as by theme.
-    await themeSettings.write(LOCAL_DISPLAY_ID, THEME, { gpu: "gpu-0" });
+    await themeSettings.write(DEFAULT_DISPLAY, THEME, { gpu: "gpu-0" });
     await themeSettings.write("kitchen-tablet", THEME, { gpu: "gpu-1" });
-    await activeTheme.write(LOCAL_DISPLAY_ID, THEME);
+    await activeTheme.write(DEFAULT_DISPLAY, THEME);
     await activeTheme.write("kitchen-tablet", THEME);
 
     const { here, there } = streams(await paired());
@@ -9208,9 +9195,9 @@ describe("The assignment a display is served", () => {
   });
 
   it("does not leak a deleted display's answers to another display", async () => {
-    await themeSettings.write(LOCAL_DISPLAY_ID, THEME, { gpu: "gpu-0" });
+    await themeSettings.write(DEFAULT_DISPLAY, THEME, { gpu: "gpu-0" });
     await themeSettings.write("kitchen-tablet", THEME, { gpu: "gpu-1" });
-    await activeTheme.write(LOCAL_DISPLAY_ID, THEME);
+    await activeTheme.write(DEFAULT_DISPLAY, THEME);
     await activeTheme.write("kitchen-tablet", THEME);
 
     const { here } = streams(await paired());
@@ -9249,9 +9236,9 @@ describe("The assignment a display is served", () => {
     // Three connections on two displays, two of them on this PC: the machine is
     // polled twice per tick, not three times — a poll is its work, and the
     // devices are what it reads, not the screens.
-    await themeSettings.write(LOCAL_DISPLAY_ID, THEME, { gpu: "gpu-0" });
+    await themeSettings.write(DEFAULT_DISPLAY, THEME, { gpu: "gpu-0" });
     await themeSettings.write("kitchen-tablet", THEME, { gpu: "gpu-1" });
-    await activeTheme.write(LOCAL_DISPLAY_ID, THEME);
+    await activeTheme.write(DEFAULT_DISPLAY, THEME);
     await activeTheme.write("kitchen-tablet", THEME);
 
     const token = await paired();
@@ -11136,7 +11123,7 @@ describe("The published endpoint", () => {
     try {
       await store.write("living-room", createValidPackage());
       await store.write("studio", createValidPackage("studio", "Studio"));
-      await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+      await activeTheme.write(DEFAULT_DISPLAY, "living-room");
 
       const token = newToken();
       await displays.create("Kitchen tablet", token);
@@ -11363,7 +11350,7 @@ describe("The root page resolves the display that asked", () => {
 
   it("gives each display its own theme at the root", async () => {
     await library();
-    await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+    await activeTheme.write(DEFAULT_DISPLAY, "living-room");
 
     const token = await pair();
     await activeTheme.write("kitchen-tablet", "studio");
@@ -11459,7 +11446,7 @@ describe("The root page resolves the display that asked", () => {
 
   it("lets an explicit ?theme= outrank the assignment", async () => {
     await library();
-    await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+    await activeTheme.write(DEFAULT_DISPLAY, "living-room");
 
     expect(await root("/?theme=studio")).toBe("studio");
   });
@@ -11479,7 +11466,7 @@ describe("The root page resolves the display that asked", () => {
 
   it("says where the theme it resolved came from", async () => {
     await library();
-    await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+    await activeTheme.write(DEFAULT_DISPLAY, "living-room");
 
     // The display's own entry, which is what an assignment moves.
     expect(await source()).toBe("map");
@@ -11533,7 +11520,7 @@ describe("The root page resolves the display that asked", () => {
   it("refuses to resolve a *paired* display from loopback by naming it", async () => {
     await library();
     await pair();
-    await activeTheme.write(LOCAL_DISPLAY_ID, "living-room");
+    await activeTheme.write(DEFAULT_DISPLAY, "living-room");
     await activeTheme.write("kitchen-tablet", "studio");
 
     // `?display=` names local displays only, so a paired display is reached by
@@ -11559,7 +11546,7 @@ describe("The root page resolves the display that asked", () => {
         new URL("http://host/"),
         displays,
       ),
-    ).toBe(LOCAL_DISPLAY_ID);
+    ).toBe(DEFAULT_DISPLAY);
 
     expect(
       await displayKeyFor(

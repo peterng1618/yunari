@@ -6,6 +6,7 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import {
   createThemeLibraryClient,
+  DEFAULT_DISPLAY_KEY,
   type ThemedDisplay,
   type ThemeLibraryClient,
   type ThemeLibraryEntry,
@@ -290,7 +291,26 @@ export function useHostSettings(props: {
     };
   }, [client, settings]);
 
-  const displays = map?.displays ?? [];
+  // The default is the answer's fallback field, not a row: this is the one
+  // place it becomes the row an author assigns a theme to, so the list, the
+  // selection and the theme's questions all speak about it the same way. It
+  // leads, because it is what a display with no choice of its own is served and
+  // so the row a person opens the page on. A failed read adds no row: the
+  // fallback is unknown rather than null.
+  const displays: readonly ThemedDisplay[] =
+    map === undefined
+      ? []
+      : [
+          {
+            id: DEFAULT_DISPLAY_KEY,
+            label: uiCopy.hostSettings.displays.defaultDisplay,
+            kind: "default",
+            theme: map.default,
+            shape: "rect",
+            rotation: 0,
+          },
+          ...map.displays,
+        ];
   const selected = chosen ?? displays[0]?.id;
   const selectedRow = displays.find((display) => display.id === selected);
   const fallback = map?.default ?? null;

@@ -7,7 +7,10 @@ import type * as React from "react";
 import { ControlSegmented } from "../components/ui/control-segmented.js";
 import { ControlSlider } from "../components/ui/control-slider.js";
 import { ControlText } from "../components/ui/control-text.js";
-import type { ThemedDisplay } from "../theme-library-client.js";
+import {
+  DEFAULT_DISPLAY_KEY,
+  type ThemedDisplay,
+} from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { Group } from "./section-group.js";
 
@@ -35,10 +38,9 @@ function snapQuarterTurn(rotation: number): number {
  * store them.
  *
  * **The words speak for the chosen display**, so the controls edit only the
- * record the rows above selected. The Host is the machine rather than a record —
- * the host adds its row rather than finding it — so it says why instead of
- * drawing controls that could not write. The host lists no `default` row: it is
- * a theme key, so there is nothing here to present.
+ * record the rows above selected. The `default` row is a theme key rather than a
+ * record — the host adds it rather than finding it — so it says why instead of
+ * drawing controls that could not write.
  *
  * The row is replaced from the host's answer, never optimistically: the store
  * decides the shape and angle together, and a snapped angle it refused must not
@@ -65,7 +67,7 @@ export function DisplayPresentationSection(props: {
   readonly onRenamed: (id: string, label: string) => void;
 }): React.JSX.Element {
   const editable =
-    props.display !== undefined && props.display.id !== "this-pc"
+    props.display !== undefined && props.display.id !== DEFAULT_DISPLAY_KEY
       ? props.display
       : undefined;
 
@@ -119,8 +121,8 @@ export function DisplayPresentationSection(props: {
       name={uiCopy.hostSettings.displays.presentation}
     >
       {/* No selection at all — the read is still out, empty, or failed — draws
-          no body: the absence sentence is about `this-pc`, and stating it with
-          no display read would be a claim nobody made. */}
+          no body: the absence sentence is about the default row, and stating it
+          with no display read would be a claim nobody made. */}
       {props.display === undefined ? null : editable === undefined ? (
         <p className="text-xs text-muted">
           {uiCopy.hostSettings.displays.presentationAbsent}

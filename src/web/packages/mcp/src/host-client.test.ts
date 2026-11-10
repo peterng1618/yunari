@@ -38,8 +38,8 @@ describe("HttpHostClient", () => {
             default: null,
             displays: [
               {
-                id: "this-pc",
-                label: "Host",
+                id: "hallway",
+                label: "Hallway",
                 kind: "local",
                 theme: "a",
                 shape: "rect",

@@ -141,20 +141,22 @@ export const DEFAULT_DISPLAY_KEY = "default";
  * One row of the display map: a display and the theme it holds.
  *
  * The route also sends `kind` for the host page's own warning table, which is
- * the page's question and not this seam's. The default is not a row — it is the
- * theme a display holding none of its own falls to — so it travels beside these.
+ * the page's question and not this seam's. The route lists only records; a
+ * surface that draws the fallback as a row synthesises it with kind `default`,
+ * from the answer's own `default` field.
  */
 export interface ThemedDisplay {
   readonly id: string;
   readonly label: string;
   /** What the host says this display is. The Host mode reads it to draw the
-   *  panel state for a panel even when its device is not attached. */
-  readonly kind: "paired" | "local" | "panel";
+   *  panel state for a panel even when its device is not attached; `default` is
+   *  the fallback row rather than a display. */
+  readonly kind: "paired" | "local" | "panel" | "default";
   /** The theme this display holds, or `null` for one holding none of its own —
    *  which is not the same as showing the default. */
   readonly theme: string | null;
-  /** The glass this display is. The host answers `rect` for this PC and for any
-   *  record whose shape it could not read. */
+  /** The glass this display is. The host answers `rect` for the default row and
+   *  for any record whose shape it could not read. */
   readonly shape: DisplayShape;
   /** Whole degrees clockwise; the host answers `0` for an absent record value. */
   readonly rotation: number;

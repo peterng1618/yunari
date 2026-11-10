@@ -11,7 +11,10 @@ import {
   plainButtonClasses,
   useControlIds,
 } from "../components/ui/control-well.js";
-import type { ThemedDisplay } from "../theme-library-client.js";
+import {
+  DEFAULT_DISPLAY_KEY,
+  type ThemedDisplay,
+} from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import type {
   AutostartAnswer,
@@ -97,122 +100,120 @@ export function DisplaysList(props: {
         </p>
       ) : null}
 
-      {props.displays.length === 0 ? null : (
-        <RadioGroup
-          value={props.selected ?? ""}
-          aria-label={copy.label}
-          onValueChange={(next) => {
-            if (next !== null) props.onSelect(next);
-          }}
-          className="flex flex-col gap-[var(--space-6)]"
-        >
-          {props.displays.map((display) => {
-            const own = display.theme;
-            const shown = shownTheme(display, props.fallback);
-            // The Host is the machine rather than a record, so it has no
-            // record a removal route could delete; the row keeps its choice
-            // and draws no command it would refuse.
-            const removable = display.id !== "this-pc";
+      <RadioGroup
+        value={props.selected ?? ""}
+        aria-label={copy.label}
+        onValueChange={(next) => {
+          if (next !== null) props.onSelect(next);
+        }}
+        className="flex flex-col gap-[var(--space-6)]"
+      >
+        {props.displays.map((display) => {
+          const own = display.theme;
+          const shown = shownTheme(display, props.fallback);
+          // The default is a key rather than a record, so it has no record
+          // a removal route could delete; the row keeps its assignment and
+          // draws no command it would refuse.
+          const removable = display.id !== DEFAULT_DISPLAY_KEY;
 
-            return (
-              <div
-                key={display.id}
-                className="flex flex-col gap-[var(--space-4)]"
-              >
-                <div className="flex items-center gap-[var(--space-6)]">
-                  <div className="min-w-0 flex-1">
-                    <ControlChoiceRow
-                      value={display.id}
-                      label={display.label}
-                      data={{
-                        "data-yunari-host-display": display.id,
-                        "data-shape": display.shape,
-                        "data-rotation": String(display.rotation),
-                      }}
-                      detail={
-                        <>
-                          <span
-                            data-yunari-host-display-theme=""
-                            className={`min-w-0 truncate text-xs ${own === null ? "text-faint" : "text-muted"}`}
-                          >
-                            {shown === null
-                              ? copy.nothing
-                              : props.themeName(shown)}
-                          </span>
-                          {/* A display with no theme of its own is served the
+          return (
+            <div
+              key={display.id}
+              className="flex flex-col gap-[var(--space-4)]"
+            >
+              <div className="flex items-center gap-[var(--space-6)]">
+                <div className="min-w-0 flex-1">
+                  <ControlChoiceRow
+                    value={display.id}
+                    label={display.label}
+                    data={{
+                      "data-yunari-host-display": display.id,
+                      "data-shape": display.shape,
+                      "data-rotation": String(display.rotation),
+                    }}
+                    detail={
+                      <>
+                        <span
+                          data-yunari-host-display-theme=""
+                          className={`min-w-0 truncate text-xs ${own === null ? "text-faint" : "text-muted"}`}
+                        >
+                          {shown === null
+                            ? copy.nothing
+                            : props.themeName(shown)}
+                        </span>
+                        {/* A display with no theme of its own is served the
                               default, so the row names the theme it shows *and*
                               says where that answer came from: a name alone
                               would read as a choice this display made. */}
-                          {own === null && shown !== null ? (
-                            <span
-                              data-yunari-host-display-follows=""
-                              className="flex-none text-2xs text-faint"
-                            >
-                              {copy.follows}
-                            </span>
-                          ) : null}
-                        </>
-                      }
-                    />
-                  </div>
-                  {removable ? (
-                    <button
-                      type="button"
-                      data-yunari-host-display-remove={display.id}
-                      aria-label={copy.removeDisplay(display.label)}
-                      className={plainButtonClasses}
-                      onClick={() =>
-                        setConfirming((current) =>
-                          current === display.id ? undefined : display.id,
-                        )
-                      }
-                    >
-                      {copy.remove}
-                    </button>
-                  ) : null}
+                        {own === null && shown !== null ? (
+                          <span
+                            data-yunari-host-display-follows=""
+                            className="flex-none text-2xs text-faint"
+                          >
+                            {copy.follows}
+                          </span>
+                        ) : null}
+                      </>
+                    }
+                  />
                 </div>
-
-                {confirming === display.id ? (
-                  <div
-                    data-yunari-host-display-confirm={display.id}
-                    className="flex flex-col gap-[var(--space-6)] rounded-md border border-edge p-[var(--space-8)]"
+                {removable ? (
+                  <button
+                    type="button"
+                    data-yunari-host-display-remove={display.id}
+                    aria-label={copy.removeDisplay(display.label)}
+                    className={plainButtonClasses}
+                    onClick={() =>
+                      setConfirming((current) =>
+                        current === display.id ? undefined : display.id,
+                      )
+                    }
                   >
-                    <p className="m-0 text-2xs text-muted">
-                      {copy.removeAsk(display.label)}
-                    </p>
-                    <div className="flex gap-[var(--space-6)]">
-                      {/* The removal's answer is the page's own status; this
-                          control keeps the busy state it can show. */}
-                      <button
-                        type="button"
-                        data-yunari-host-display-confirm-remove={display.id}
-                        className={plainButtonClasses}
-                        disabled={removing === display.id}
-                        {...controlStateAttributes(
-                          removing === display.id ? "busy" : undefined,
-                        )}
-                        onClick={() => void remove(display)}
-                      >
-                        {removing === display.id
-                          ? uiCopy.hostSettings.status.saving
-                          : copy.confirmRemove}
-                      </button>
-                      <button
-                        type="button"
-                        data-yunari-host-display-confirm-cancel={display.id}
-                        className={plainButtonClasses}
-                        onClick={() => setConfirming(undefined)}
-                      >
-                        {copy.keep}
-                      </button>
-                    </div>
-                  </div>
+                    {copy.remove}
+                  </button>
                 ) : null}
               </div>
-            );
-          })}
-        </RadioGroup>
-      )}
+
+              {confirming === display.id ? (
+                <div
+                  data-yunari-host-display-confirm={display.id}
+                  className="flex flex-col gap-[var(--space-6)] rounded-md border border-edge p-[var(--space-8)]"
+                >
+                  <p className="m-0 text-2xs text-muted">
+                    {copy.removeAsk(display.label)}
+                  </p>
+                  <div className="flex gap-[var(--space-6)]">
+                    {/* The removal's answer is the page's own status; this
+                          control keeps the busy state it can show. */}
+                    <button
+                      type="button"
+                      data-yunari-host-display-confirm-remove={display.id}
+                      className={plainButtonClasses}
+                      disabled={removing === display.id}
+                      {...controlStateAttributes(
+                        removing === display.id ? "busy" : undefined,
+                      )}
+                      onClick={() => void remove(display)}
+                    >
+                      {removing === display.id
+                        ? uiCopy.hostSettings.status.saving
+                        : copy.confirmRemove}
+                    </button>
+                    <button
+                      type="button"
+                      data-yunari-host-display-confirm-cancel={display.id}
+                      className={plainButtonClasses}
+                      onClick={() => setConfirming(undefined)}
+                    >
+                      {copy.keep}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </RadioGroup>
     </Group>
   );
 }

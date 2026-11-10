@@ -513,7 +513,7 @@ describe("ThemeLibraryClient", () => {
           JSON.stringify({
             default: "living-room",
             displays: [
-              { id: "this-pc", label: "Host", kind: "local", theme: null },
+              { id: "hallway", label: "Hallway", kind: "local", theme: null },
               {
                 id: "kitchen-tablet",
                 label: "Kitchen Tablet",
@@ -540,8 +540,8 @@ describe("ThemeLibraryClient", () => {
       default: "living-room",
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "hallway",
+          label: "Hallway",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -774,7 +774,7 @@ describe("ThemeLibraryClient", () => {
       client.save("../escape", { envelope, assets: {} }),
     ).rejects.toThrow("Invalid theme id");
     await expect(client.open("../escape")).rejects.toThrow("Invalid theme id");
-    await expect(client.assign("this-pc", "../escape")).rejects.toThrow(
+    await expect(client.assign("hallway", "../escape")).rejects.toThrow(
       "Invalid theme id",
     );
     expect(mockFetch).not.toHaveBeenCalled();

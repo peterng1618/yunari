@@ -81,8 +81,8 @@ describe("draft authoring and verification", () => {
       ),
     ).toBe(true);
 
-    const assigned = payload(await assignTheme(ctx, "this-pc", themeId));
-    expect(assigned).toMatchObject({ display: "this-pc", theme: themeId });
+    const assigned = payload(await assignTheme(ctx, "hallway", themeId));
+    expect(assigned).toMatchObject({ display: "hallway", theme: themeId });
     expect(
       host.requests.some(
         (request) =>
@@ -458,7 +458,7 @@ describe("draft authoring and verification", () => {
       ],
     });
 
-    const preview = payload(await previewTheme(ctx, "this-pc", themeId));
+    const preview = payload(await previewTheme(ctx, "hallway", themeId));
 
     expect(preview.boundSensors).toEqual(
       expect.arrayContaining(["cpu.load", "gpu.load"]),
@@ -480,7 +480,7 @@ describe("draft authoring and verification", () => {
     expect(opened.isError).toBe(true);
     expect(refusalTextOf(opened)).toContain('"ghost"');
 
-    const assigned = await assignTheme(ctx, "this-pc", "ghost");
+    const assigned = await assignTheme(ctx, "hallway", "ghost");
     expect(assigned.isError).toBe(true);
     expect(refusalTextOf(assigned)).toContain('"ghost"');
   });

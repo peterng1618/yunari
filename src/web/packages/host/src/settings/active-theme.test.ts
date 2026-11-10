@@ -34,36 +34,36 @@ describe("the active theme", () => {
   });
 
   it("reads back what one display was given, and nothing for another", async () => {
-    await store.write("this-pc", "attic-wall");
+    await store.write("hall-tv", "attic-wall");
 
-    expect(await store.read("this-pc", yes)).toBe("attic-wall");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
     expect(await store.read("kitchen-tablet", yes)).toBeUndefined();
   });
 
   it("keeps one display's choice when another is written", async () => {
-    await store.write("this-pc", "attic-wall");
+    await store.write("hall-tv", "attic-wall");
     await store.write("kitchen-tablet", "living-room");
 
-    expect(await store.read("this-pc", yes)).toBe("attic-wall");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
     expect(await store.read("kitchen-tablet", yes)).toBe("living-room");
   });
 
   it("reads every display's entry at once", async () => {
-    await store.write("this-pc", "attic-wall");
+    await store.write("hall-tv", "attic-wall");
     await store.write("kitchen-tablet", "living-room");
     await store.write(DEFAULT_DISPLAY, "kitchen-strip");
 
     // One read of the file rather than one per display: this is the whole map a
     // list of every display is drawn from.
     expect(await store.readAll(yes)).toEqual({
-      "this-pc": "attic-wall",
+      "hall-tv": "attic-wall",
       "kitchen-tablet": "living-room",
       [DEFAULT_DISPLAY]: "kitchen-strip",
     });
   });
 
   it("leaves out of that map a theme that is gone", async () => {
-    await store.write("this-pc", "deleted-theme");
+    await store.write("hall-tv", "deleted-theme");
     await store.write("kitchen-tablet", "living-room");
 
     // The same rule a single read makes: an entry naming a theme the library no
@@ -75,26 +75,26 @@ describe("the active theme", () => {
 
   it("keeps both when two displays are written at once", async () => {
     await Promise.all([
-      store.write("this-pc", "attic-wall"),
+      store.write("hall-tv", "attic-wall"),
       store.write("kitchen-tablet", "living-room"),
     ]);
 
     // Each write is a read-modify-write of the whole map, so an unserialized
     // pair reads the same map and the later save drops the earlier entry.
-    expect(await store.read("this-pc", yes)).toBe("attic-wall");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
     expect(await store.read("kitchen-tablet", yes)).toBe("living-room");
   });
 
   it("does not serve the default's theme to a display with no entry", async () => {
     await store.write(DEFAULT_DISPLAY, "living-room");
 
-    expect(await store.read("this-pc", yes)).toBeUndefined();
+    expect(await store.read("hall-tv", yes)).toBeUndefined();
   });
 
   it("treats a theme that is gone as no choice", async () => {
-    await store.write("this-pc", "deleted-theme");
+    await store.write("hall-tv", "deleted-theme");
 
-    expect(await store.read("this-pc", async () => false)).toBeUndefined();
+    expect(await store.read("hall-tv", async () => false)).toBeUndefined();
   });
 
   it("reads the old single-theme file as the default", async () => {
@@ -106,35 +106,67 @@ describe("the active theme", () => {
   it("reads a file holding a display beside `id` as the map it is", async () => {
     await writeFile(
       settingsFile(dir),
-      '{"id":"living-room","this-pc":"attic-wall"}',
+      '{"id":"living-room","hall-tv":"attic-wall"}',
       "utf8",
     );
 
     // `id` is a legal display id, so a second key makes this a map rather than
     // the old single-theme shape — and reading it as the old shape would take
-    // `this-pc`'s theme with it.
+    // `hall-tv`'s theme with it.
     expect(await store.read(DEFAULT_DISPLAY, yes)).toBeUndefined();
-    expect(await store.read("this-pc", yes)).toBe("attic-wall");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
 
     await store.write("kitchen-tablet", "living-room");
 
-    expect(await store.read("this-pc", yes)).toBe("attic-wall");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
+  });
+
+  it("reads the machine's old entry as the default's", async () => {
+    await writeFile(
+      settingsFile(dir),
+      '{"this-pc":"living-room","hall-tv":"attic-wall"}',
+      "utf8",
+    );
+
+    // The machine was a row of its own before an assignment belonged to a
+    // display. What it was served is what a display with no choice of its own
+    // is served now, and the other display keeps its own.
+    expect(await store.read(DEFAULT_DISPLAY, yes)).toBe("living-room");
+    expect(await store.read("hall-tv", yes)).toBe("attic-wall");
+
+    await store.write("kitchen-tablet", "attic-wall");
+
+    expect(JSON.parse(await readFile(settingsFile(dir), "utf8"))).toEqual({
+      [DEFAULT_DISPLAY]: "living-room",
+      "hall-tv": "attic-wall",
+      "kitchen-tablet": "attic-wall",
+    });
+  });
+
+  it("keeps a default already written over the machine's old entry", async () => {
+    await writeFile(
+      settingsFile(dir),
+      '{"this-pc":"living-room","default":"attic-wall"}',
+      "utf8",
+    );
+
+    expect(await store.read(DEFAULT_DISPLAY, yes)).toBe("attic-wall");
   });
 
   it("writes the map once it writes, so the old key is not written again", async () => {
     await writeFile(settingsFile(dir), '{"id":"living-room"}', "utf8");
-    await store.write("this-pc", "attic-wall");
+    await store.write("hall-tv", "attic-wall");
 
     // The default's own choice survives the migration and is spelled the way
     // the map spells it.
     expect(JSON.parse(await readFile(settingsFile(dir), "utf8"))).toEqual({
       [DEFAULT_DISPLAY]: "living-room",
-      "this-pc": "attic-wall",
+      "hall-tv": "attic-wall",
     });
   });
 
   it("refuses an id that is not a theme id, on write", async () => {
-    await expect(store.write("this-pc", "../etc")).rejects.toThrow();
+    await expect(store.write("hall-tv", "../etc")).rejects.toThrow();
   });
 
   it("treats a corrupt file as nothing chosen", async () => {
@@ -148,7 +180,7 @@ describe("the active theme", () => {
 
     // Every mutator rewrites the whole map, so a write that started from a file
     // it could not read would take the other displays' choices with it.
-    await expect(store.write("this-pc", "attic-wall")).rejects.toThrow(
+    await expect(store.write("hall-tv", "attic-wall")).rejects.toThrow(
       "could not be read",
     );
     expect(await readFile(settingsFile(dir), "utf8")).toBe("{ not json");
@@ -157,17 +189,17 @@ describe("the active theme", () => {
   it("refuses to clear over a file it could not read", async () => {
     await writeFile(settingsFile(dir), "{ not json", "utf8");
 
-    await expect(store.clear("this-pc")).rejects.toThrow("could not be read");
+    await expect(store.clear("hall-tv")).rejects.toThrow("could not be read");
     expect(await readFile(settingsFile(dir), "utf8")).toBe("{ not json");
   });
 
   it("clears one display without touching another", async () => {
-    await store.write("this-pc", "attic-wall");
+    await store.write("hall-tv", "attic-wall");
     await store.write("kitchen-tablet", "living-room");
 
-    await store.clear("this-pc");
+    await store.clear("hall-tv");
 
-    expect(await store.read("this-pc", yes)).toBeUndefined();
+    expect(await store.read("hall-tv", yes)).toBeUndefined();
     expect(await store.read("kitchen-tablet", yes)).toBe("living-room");
   });
 });

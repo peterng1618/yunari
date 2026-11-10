@@ -1444,8 +1444,8 @@ function twoDisplays(): ActiveThemeHost {
       default: null,
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "desk-monitor",
+          label: "Desk monitor",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1568,8 +1568,8 @@ it("offers the default beside the displays rather than as one of them", async ()
       default: "porch-strip",
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "desk-monitor",
+          label: "Desk monitor",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1592,7 +1592,7 @@ it("offers the default beside the displays rather than as one of them", async ()
   expect(
     await offeredDisplays(),
     "the choice does not offer the default first, beside the displays it was answered",
-  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
+  ).toEqual(["default", "desk-monitor", "kitchen-tablet", "pair"]);
 
   await chooseDisplay("default");
   await pressAssign();
@@ -1609,7 +1609,7 @@ it("ends the display list with a route to pair a new display", async () => {
   expect(
     await offeredDisplays(),
     "the pair route is not the last row of the list",
-  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
+  ).toEqual(["default", "desk-monitor", "kitchen-tablet", "pair"]);
 
   // The test host answers no `/api/hosting`, so the route has no address to
   // open; the refusal names the one thing the author can do about it.
@@ -1703,8 +1703,8 @@ it("reads the displays each time the choice opens rather than keeping a list", a
       default: null,
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "desk-monitor",
+          label: "Desk monitor",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1716,8 +1716,8 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   await mountOver(host);
 
   await openAssign("living-room");
-  expect(await offeredDisplays()).toEqual(["default", "this-pc", "pair"]);
-  await chooseDisplay("this-pc");
+  expect(await offeredDisplays()).toEqual(["default", "desk-monitor", "pair"]);
+  await chooseDisplay("desk-monitor");
   expect(
     host.reads,
     "the choice read the displays more than once per opening",
@@ -1731,8 +1731,8 @@ it("reads the displays each time the choice opens rather than keeping a list", a
     default: null,
     displays: [
       {
-        id: "this-pc",
-        label: "Host",
+        id: "desk-monitor",
+        label: "Desk monitor",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -1753,7 +1753,7 @@ it("reads the displays each time the choice opens rather than keeping a list", a
   expect(
     await offeredDisplays(),
     "the choice offered a display list it had kept rather than the host's answer",
-  ).toEqual(["default", "this-pc", "kitchen-tablet", "pair"]);
+  ).toEqual(["default", "desk-monitor", "kitchen-tablet", "pair"]);
   expect(host.reads, "the second opening did not read the displays again").toBe(
     2,
   );
@@ -1771,8 +1771,8 @@ it("reports where the theme already is as the choice's own value", async () => {
       default: null,
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "desk-monitor",
+          label: "Desk monitor",
           kind: "local",
           theme: "porch-strip",
           shape: "rect",
@@ -1813,8 +1813,8 @@ it("tells a theme no display holds apart from the theme that is the default", as
       default: null,
       displays: [
         {
-          id: "this-pc",
-          label: "Host",
+          id: "desk-monitor",
+          label: "Desk monitor",
           kind: "local",
           theme: null,
           shape: "rect",
@@ -1838,8 +1838,8 @@ it("tells a theme no display holds apart from the theme that is the default", as
     default: "living-room",
     displays: [
       {
-        id: "this-pc",
-        label: "Host",
+        id: "desk-monitor",
+        label: "Desk monitor",
         kind: "local",
         theme: null,
         shape: "rect",
@@ -1893,7 +1893,7 @@ it("opens the choice inside the modal's own page", async () => {
   ).toBe(1);
   expect(await offeredDisplays()).toEqual([
     "default",
-    "this-pc",
+    "desk-monitor",
     "kitchen-tablet",
   ]);
 });

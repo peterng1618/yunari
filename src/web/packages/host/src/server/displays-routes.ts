@@ -9,7 +9,7 @@ import {
 } from "../settings/display-presentation.js";
 import type { DisplayPatch, DisplayRecord } from "../settings/displays.js";
 import {
-  LOCAL_DISPLAY_ID,
+  DEFAULT_DISPLAY,
   MonitorAlreadyHeldError,
   mintedDisplayId,
   normalizeMonitor,
@@ -371,11 +371,11 @@ export function createDisplayRoutes(
     }
 
     if (id !== undefined && request.method === "DELETE") {
-      // The Host is the display the host *is*, not a client anyone paired: it
-      // has no credential to remove, and it is the one display that cannot be
-      // re-paired if it goes.
-      if (id === LOCAL_DISPLAY_ID) {
-        sendText(response, 409, "The Host is not a paired client.");
+      // The default is a key, not a record: it is what a display with no
+      // assignment of its own is served, and removing it would be removing a
+      // fallback rather than a display.
+      if (id === DEFAULT_DISPLAY) {
+        sendText(response, 409, "The default is not a paired client.");
         return true;
       }
 

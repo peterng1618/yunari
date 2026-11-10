@@ -105,12 +105,12 @@ export async function assignedSystemDisk(
 }
 
 /** One theme's answers, for the display the Settings surface answers for.
- *  The editor's list always leads with the Host, and it is the row the surface
- *  selects until another is pressed. */
+ *  The editor's list always leads with the default row, and it is the row the
+ *  surface selects until another is pressed. */
 export async function answersFor(
   request: APIRequestContext,
   id: string,
-  display = "this-pc",
+  display = "default",
 ): Promise<Record<string, string>> {
   const response = await request.get(
     `${HOST}/api/themes/${id}/answers?display=${display}`,

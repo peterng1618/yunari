@@ -371,10 +371,10 @@ test.describe("the settings page a consumer configures", () => {
 
     await openSettings(page);
     await expect(questions(page)).toBeVisible();
-    // The question belongs to the display the list has selected, and the Host
-    // is the first row.
+    // The question belongs to the display the list has selected, and the
+    // default row is the first one.
     await expect(
-      page.locator('[data-yunari-host-display="this-pc"]'),
+      page.locator('[data-yunari-host-display="default"]'),
     ).toBeVisible();
     await expect(questions(page).locator("p").first()).toContainText(
       "reads hardware that has no answer yet",
@@ -476,22 +476,23 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
       await expect(rows.first()).toHaveAttribute("data-display", "default");
       await expect(rows.first()).toHaveAttribute("aria-pressed", "true");
       await expect(rows.first()).toContainText("Nothing chosen");
-      await expect(rows.nth(1)).toHaveAttribute("data-display", "this-pc");
-      await expect(rows.nth(1)).toContainText("Host");
+      await expect(rows.nth(1)).toHaveAttribute(
+        "data-display",
+        PAIRED_DISPLAY_ID,
+      );
+      await expect(rows.nth(1)).toContainText("Kitchen tablet");
       await expect(rows.nth(1)).toContainText("Uses the default");
 
       // One display's theme is not another's: choosing for the tablet leaves the
-      // default and this PC where they were, and the row says which theme it now
-      // holds. The row pressed is the tablet's because the page comes back on
-      // the default row after the write, and this PC's own press would have sent
-      // this browser to its dashboard instead.
+      // default where it was, and the row says which theme it now holds. The row
+      // pressed is the tablet's because the default's own press would send this
+      // browser to the dashboard the default now names.
       await chooseTheme(page, HOST_THEME_ID, PAIRED_DISPLAY_ID);
 
       await expect(
         page.locator(`#themes [data-display="${PAIRED_DISPLAY_ID}"]`),
       ).toContainText("E2E hosted");
       await expect(rows.first()).toContainText("Nothing chosen");
-      await expect(rows.nth(1)).toContainText("Uses the default");
 
       const after = (await (
         await request.get(`${HOST}/api/themes/active`)
@@ -503,20 +504,18 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
       expect(
         after.displays.find((row) => row.id === PAIRED_DISPLAY_ID)?.theme,
       ).toBe(HOST_THEME_ID);
-      expect(
-        after.displays.find((row) => row.id === "this-pc")?.theme,
-      ).toBeNull();
     } finally {
       restoreDisplays(previous);
     }
   });
 
   /**
-   * Pressing this PC's own row is the one press that leaves the chooser: `/` is
-   * one-shot for the caller's own screen, so the write makes the reload resolve
-   * to that screen's dashboard instead of the chooser again. Every other chooser
-   * case avoids this press — they need to stay on the page — which is why the
-   * write and the hand-off are asserted here, together.
+   * Pressing the default row is the one press that leaves the chooser: it is the
+   * row the caller's own screen falls to, so `/` is one-shot for it, and the
+   * write makes the reload resolve to that screen's dashboard instead of the
+   * chooser again. Every other chooser case avoids this press — they need to
+   * stay on the page — which is why the write and the hand-off are asserted
+   * here, together.
    *
    * The assignment is read from the host rather than the row, because the reload
    * is the thing under test and it throws the page's own copy away. The landing
@@ -541,13 +540,13 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
     // case on a dashboard. This line says so instead of a row locator.
     await expect(page.locator("h1")).toHaveText("Choose a theme");
     await expect(
-      page.locator('#themes [data-display="this-pc"]'),
+      page.locator('#themes [data-display="default"]'),
     ).toBeVisible();
     await expect(
-      page.locator('#themes [data-display="this-pc"]'),
-    ).toContainText("Uses the default");
+      page.locator('#themes [data-display="default"]'),
+    ).toContainText("Nothing chosen");
 
-    await chooseTheme(page, HOST_THEME_ID, "this-pc");
+    await chooseTheme(page, HOST_THEME_ID, "default");
 
     // The page reloads on a successful write; this is that reload following the
     // host's redirect to the theme the assignment named.
@@ -561,10 +560,7 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
       default: string | null;
       displays: { id: string; theme: string | null }[];
     };
-    expect(after.displays.find((row) => row.id === "this-pc")?.theme).toBe(
-      HOST_THEME_ID,
-    );
-    expect(after.default).toBeNull();
+    expect(after.default).toBe(HOST_THEME_ID);
   });
 
   /**
@@ -597,9 +593,9 @@ test.describe("the chooser a browser with no theme of its own reaches", () => {
         `.theme-row:has([data-theme="${HOST_VIDEO_THEME_ID}"]) .theme-cost-note`,
       );
 
-      // The Host is a host monitor, and the note is on the row before anything
-      // is pressed: it describes the pair a press would commit.
-      await page.locator('#themes [data-display="this-pc"]').click();
+      // The default row is the host's own screen, and the note is on the row
+      // before anything is pressed: it describes the pair a press would commit.
+      await page.locator('#themes [data-display="default"]').click();
       await expect(note).toBeVisible();
       await expect(note).toContainText(/idle/i);
 
@@ -667,7 +663,7 @@ test.describe("the settings page in a screenshot", () => {
       "Changes apply to every display immediately.",
     );
     await expect(
-      page.locator('[data-yunari-host-display="this-pc"]'),
+      page.locator('[data-yunari-host-display="default"]'),
     ).toBeVisible();
 
     await expect(questions(page)).toBeVisible();

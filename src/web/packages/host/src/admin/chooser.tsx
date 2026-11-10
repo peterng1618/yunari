@@ -172,7 +172,7 @@ export function Chooser({
             onClick={() => setSelected(DEFAULT_KEY)}
           >
             <span className="theme-text">
-              Default
+              Unassigned displays
               <span className="by">{heldText(fallback, true, nameOf)}</span>
             </span>
           </button>

@@ -259,8 +259,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
     // The default's answers stand in where the display gave none of its own, for
     // the reason its theme does: answers an older page stored under `default`
     // still apply to every display showing that theme (ruling 44). The Settings
-    // surface writes under the display it speaks for (the Host row), so a fresh
-    // answer is not shared.
+    // surface writes under the display it speaks for, so a fresh answer is not
+    // shared.
     const shared =
       chosen === undefined ||
       themeSettings === undefined ||

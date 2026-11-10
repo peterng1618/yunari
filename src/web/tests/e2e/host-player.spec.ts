@@ -3030,9 +3030,9 @@ test.describe("the display's own controls", () => {
  *
  * **Why this file starts a host at all.** Three of the boundary's claims are
  * about a *paired* display, and the shared host cannot serve one: `displayKeyFor`
- * answers a loopback request as `this-pc` whatever credential it carries, and
+ * answers a loopback request as the default whatever credential it carries, and
  * the host on 4175 is bound to loopback — so the only displays it resolves are
- * this PC and a local monitor. The chooser is the case that makes this
+ * the default and a local monitor. The chooser is the case that makes this
  * unavoidable (a session-less reader is offered no control at all, and a
  * loopback write names no display and is refused), so the display has to arrive
  * from a non-loopback origin. `host-pwa.spec.ts` and `host-secure-origin.spec.ts`
@@ -3800,7 +3800,7 @@ test.describe("a paired display and the theme it is given", () => {
     // because the host is bound to `0.0.0.0` and so answers across the loopback
     // block.
     //
-    // **What this case is, and is not.** The display it loads is `this-pc`: a
+    // **What this case is, and is not.** The display it loads is the default: a
     // loopback request resolves as this PC whatever credential it presents. The
     // cookie change removed the token from the URL and `/api/host` answers a
     // loopback caller no token, so a loopback page can no longer *learn* the
@@ -3810,7 +3810,7 @@ test.describe("a paired display and the theme it is given", () => {
     // hop; the credential-authorised path — a paired display resolving as its
     // own record — is not what runs here. The second address answering at all
     // rests on the source address of a connection to `127.0.0.2` being loopback
-    // too, which is why the host serves it as `this-pc` and not as the display
+    // too, which is why the host serves it as the default and not as the display
     // the token names.
     const known = `http://127.0.0.1:${port}`;
     const elsewhereAddress = new URL(secondAddress).hostname;
@@ -3886,9 +3886,9 @@ test.describe("a paired display and the theme it is given", () => {
     const display = await pairDisplay(request, "E2E refind");
 
     try {
-      // The Host's own theme, because the address the display loads at is
-      // loopback and the host resolves a loopback request as `this-pc`.
-      await assign(request, "this-pc", HOST_CHART_THEME_ID);
+      // The default's own theme, because the address the display loads at is
+      // loopback and the host resolves a loopback request as the default.
+      await assign(request, "default", HOST_CHART_THEME_ID);
       // The pairing the display would already hold from a LAN load: its
       // last-known address is the LAN one, not the loopback address this page
       // loads at. Seeded before the first document, and only at the address it
@@ -4548,9 +4548,9 @@ test.describe("a paired display and the theme it is given", () => {
     test.skip(origin === "", "this machine has no LAN address");
 
     // A loopback request resolves as this PC whatever credential it carries.
-    // The unpaired default is not reachable as a page at all — a non-loopback
+    // The unpaired fallback is not reachable as a page at all — a non-loopback
     // read without a credential is refused, which the report names — so this
-    // case can only prove the `this-pc` half of acceptance 10.
+    // case can only prove the default row's half of acceptance 10.
     await page.setViewportSize({ width: 600, height: 800 });
     await page.goto(`${admin}/?theme=${TWO_TONE_THEME_BOUNDS}`);
     await waitForRotation(page, 0);
@@ -4569,7 +4569,7 @@ test.describe("a paired display and the theme it is given", () => {
     expect(clip, "this PC's board is clipped to a shape").toBe("none");
 
     await openHostSettings(page);
-    const row = page.locator('[data-yunari-host-display="this-pc"]');
+    const row = page.locator('[data-yunari-host-display="default"]');
     await expect(row).toBeVisible({ timeout: 20_000 });
     await row.click();
     await expect(

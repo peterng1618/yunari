@@ -1,6 +1,6 @@
 import { STABLE_ID_PATTERN } from "@yunari/renderer-core";
 import { themeForDisplay } from "../../public/theme-fallback.js";
-import { DEFAULT_DISPLAY } from "./displays.js";
+import { DEFAULT_DISPLAY, RETIRED_MACHINE_DISPLAY_ID } from "./displays.js";
 import { createJsonFile } from "./json-file.js";
 
 /**
@@ -73,6 +73,10 @@ export async function assignedThemeFor(
  * Only a file holding nothing else is that old shape. `id` is a legal display
  * id, so a file carrying it beside real entries is a map, and reading it as the
  * old shape would eat the displays it holds.
+ *
+ * The machine's entry migrates the same way. It was its own row before an
+ * assignment belonged to a display, so the theme it held is the one an
+ * unassigned display used to be served; a `default` entry written since wins.
  */
 function asMap(parsed: unknown): Record<string, unknown> | undefined {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -81,9 +85,17 @@ function asMap(parsed: unknown): Record<string, unknown> | undefined {
 
   const map = parsed as Record<string, unknown>;
 
-  return Object.keys(map).length === 1 && typeof map["id"] === "string"
-    ? { [DEFAULT_DISPLAY]: map["id"] }
-    : map;
+  if (Object.keys(map).length === 1 && typeof map["id"] === "string") {
+    return { [DEFAULT_DISPLAY]: map["id"] };
+  }
+
+  if (!(RETIRED_MACHINE_DISPLAY_ID in map)) return map;
+
+  const { [RETIRED_MACHINE_DISPLAY_ID]: machine, ...rest } = map;
+
+  return rest[DEFAULT_DISPLAY] === undefined
+    ? { ...rest, [DEFAULT_DISPLAY]: machine }
+    : rest;
 }
 
 /**

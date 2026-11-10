@@ -34,7 +34,7 @@ beforeAll(() => {
 
 const DATA: ChooserData = {
   default: "living-room",
-  displays: [{ id: "this-pc", label: "Host", kind: "local", theme: null }],
+  displays: [{ id: "hallway", label: "Hallway", kind: "local", theme: null }],
   templates: [{ id: "starter", name: "Starter" }],
   themes: [
     { id: "living-room", name: "Living Room", thumbnail: true },
@@ -107,8 +107,8 @@ it("draws the default first, then every display the host holds", async () => {
   expect(rows[0]?.dataset["display"]).toBe("default");
   expect(rows[0]?.getAttribute("aria-pressed")).toBe("true");
   expect(rows[0]?.textContent).toContain("Living Room");
-  expect(rows[1]?.dataset["display"]).toBe("this-pc");
-  expect(rows[1]?.textContent).toContain("Host");
+  expect(rows[1]?.dataset["display"]).toBe("hallway");
+  expect(rows[1]?.textContent).toContain("Hallway");
   expect(rows[1]?.textContent).toContain("Uses the default");
 });
 
@@ -135,7 +135,7 @@ it("chooses for the display row that was pressed and reloads", async () => {
 
   await act(async () => {
     page
-      .querySelector<HTMLElement>('#themes [data-display="this-pc"]')
+      .querySelector<HTMLElement>('#themes [data-display="hallway"]')
       ?.click();
   });
   await act(async () => {
@@ -146,7 +146,7 @@ it("chooses for the display row that was pressed and reloads", async () => {
       ?.click();
   });
 
-  expect(calls.chosen).toEqual([["this-pc", "attic-wall"]]);
+  expect(calls.chosen).toEqual([["hallway", "attic-wall"]]);
   expect(reloaded).toBe(1);
 });
 

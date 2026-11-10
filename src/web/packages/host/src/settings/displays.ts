@@ -31,10 +31,18 @@ import {
  * for a tired reader.
  */
 
-/** The display this machine is. Minted, never paired. */
-export const LOCAL_DISPLAY_ID = "this-pc";
-/** The display an unpaired client is served as. Never minted. */
+/** The key an unpaired client is served as, and the fallback for a display with
+ *  no assignment of its own. A key rather than a record: never minted. */
 export const DEFAULT_DISPLAY = "default";
+
+/**
+ * The machine's old theme key, before an assignment belonged to a display.
+ *
+ * Never minted: a display labelled "This PC" would otherwise take the word and
+ * inherit whatever the old machine row was served. `active-theme.ts` reads the
+ * one entry that can still carry it and moves it to the default.
+ */
+export const RETIRED_MACHINE_DISPLAY_ID = "this-pc";
 
 export type DisplayKind = "paired" | "local" | "panel";
 
@@ -241,7 +249,7 @@ export function displayIdFrom(label: string, suffix: string): string {
 export function mintedDisplayId(label: unknown): string {
   const id = displayIdFrom(normalizeLabel(label), "");
 
-  if (id === LOCAL_DISPLAY_ID || id === DEFAULT_DISPLAY) {
+  if (id === DEFAULT_DISPLAY || id === RETIRED_MACHINE_DISPLAY_ID) {
     throw new Error(`"${id}" is a reserved display id.`);
   }
 

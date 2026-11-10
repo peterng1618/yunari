@@ -12,7 +12,7 @@ describe("the panel page's glass default", () => {
   });
 
   it("leaves a browser display on the live default", () => {
-    expect(panelGlassSampling("?display=this-pc")).toBeUndefined();
+    expect(panelGlassSampling("?display=hallway")).toBeUndefined();
     expect(panelGlassSampling("?panel=0")).toBeUndefined();
     expect(panelGlassSampling("")).toBeUndefined();
   });
@@ -59,7 +59,7 @@ describe("the panel page's background source", () => {
   });
 
   it("answers nothing for a browser display", () => {
-    expect(panelBackgroundSource("?display=this-pc", "theme", viewport)).toBe(
+    expect(panelBackgroundSource("?display=hallway", "theme", viewport)).toBe(
       undefined,
     );
   });

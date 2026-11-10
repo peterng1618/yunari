@@ -547,9 +547,8 @@ export const uiCopy = {
    * Each names the *surface* rather than the mechanism behind it.
    *
    * **The machine and the mode that manages it are one name: `Host`.** The
-   * mode value, the query value and this key are `host`; the persisted display
-   * id stays `this-pc`, because it is stored in per-display assignments rather
-   * than shown to anyone.
+   * mode value, the query value and this key are `host`. It is a surface over
+   * the machine, not a display: assignments are stored per display.
    */
   modes: {
     /** The switch's own name. The three labels inside are the options, so a
@@ -575,6 +574,10 @@ export const uiCopy = {
   hostSettings: {
     displays: {
       heading: "Displays",
+      /** The fallback row's name. Not a display: it is the theme a display
+       *  with no assignment of its own is served, so the word says who the row
+       *  speaks for rather than naming a screen. */
+      defaultDisplay: "Unassigned displays",
       /** The list column's own eyebrow. The page heading already says
        *  "Displays", so the list names what it holds rather than repeating it. */
       listHeading: "All displays",
@@ -587,7 +590,7 @@ export const uiCopy = {
       /** A display holding no theme of its own is served the default. The row
        *  names the theme it shows and says where that answer came from, because
        *  a name alone would read as a choice this display made. */
-      follows: "Follows Host",
+      follows: "Follows the default",
       /** Neither a theme of its own nor a default: nothing falls back to. */
       nothing: "No theme",
       /** The file the host keeps its displays and their credentials in could not
@@ -609,11 +612,11 @@ export const uiCopy = {
       /** What the section says about the two rules they write under. */
       rotationSnapHint:
         "A round display turns by any whole degree; a rectangular one turns in quarter turns. Changing the shape snaps the angle to the new rule.",
-      /** The Host has no record to present, and the unpaired default is served
-       *  rather than owned: the section says why instead of drawing a control
-       *  that cannot write. */
+      /** The default row is a key rather than a record, so it has no glass or
+       *  mounting angle to edit: the section says why instead of drawing a
+       *  control that cannot write. */
       presentationAbsent:
-        "The Host's screen has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
+        "The default row has no shape or rotation to set. Pair a display to choose its glass and mounting angle.",
       savedPresentation: "Saved the display's shape and rotation.",
       /** The stream a panel's device is fed. Mode A is the full-colour frame;
        *  Mode B is the paletted one the vendor app streams, which buys frame

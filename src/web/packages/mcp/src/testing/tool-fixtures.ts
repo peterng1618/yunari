@@ -71,8 +71,8 @@ export const panelDisplay = {
 };
 
 export const localDisplay = {
-  id: "this-pc",
-  label: "Host",
+  id: "hallway",
+  label: "Hallway",
   kind: "local",
   theme: null,
   shape: "rect",

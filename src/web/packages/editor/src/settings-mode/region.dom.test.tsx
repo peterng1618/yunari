@@ -475,19 +475,12 @@ function sourcesClient(fixture: Fixture): {
   };
 }
 
-/** Two displays, one of them holding no theme of its own, and the two themes the
- *  library calls them. Host leads, as the route always answers it first. */
+/** One display of its own and the two themes the library calls them. The
+ *  default row is not in the fixture: the host answers it as the map's
+ *  fallback field, and the surface draws the row from that field. */
 const TWO_DISPLAYS: Fixture = {
   fallback: "kitchen-strip",
   displays: [
-    {
-      id: "this-pc",
-      label: "Host",
-      kind: "local",
-      theme: null,
-      shape: "rect",
-      rotation: 0,
-    },
     {
       id: "hallway",
       label: "Hallway panel",
@@ -887,8 +880,8 @@ it("names each display, and the default for the ones with none", async () => {
     container.querySelectorAll<HTMLElement>("[data-yunari-host-display]"),
   );
   expect(
-    rows.map((row) => row.textContent?.startsWith("Host") ?? false),
-    "the route's own order is not kept, Host first",
+    rows.map((row) => row.textContent?.startsWith("Unassigned") ?? false),
+    "the default row does not lead the list",
   ).toEqual([true, false]);
 
   const own = displayRow(container, "hallway");
@@ -900,20 +893,20 @@ it("names each display, and the default for the ones with none", async () => {
     "a display with a theme of its own is said to be following this PC",
   ).toBe(false);
 
-  const local = displayRow(container, "this-pc");
+  const local = displayRow(container, "default");
   expect(
     shownOn(local),
     "a display with no theme of its own is not shown the default",
   ).toBe("Kitchen strip");
   expect(
     follows(local),
-    "a display with no theme of its own does not say where its theme came from",
-  ).toBe(true);
+    "the default row is said to follow itself rather than to hold its theme",
+  ).toBe(false);
 
   expect(
     statusLine(published).displays,
     "the line published does not count the displays the route answered",
-  ).toBe(uiCopy.hostSettings.status.displays(2));
+  ).toBe(uiCopy.hostSettings.status.displays(1));
   expect(
     statusLine(published).status,
     "the line published does not rest on the page's own sentence",
@@ -943,14 +936,14 @@ it("draws the displays as one radiogroup, with the chosen row checked", async ()
         `${radio.getAttribute("data-yunari-host-display")}:${radio.getAttribute("aria-checked")}`,
     );
 
-  expect(checkedOf()).toEqual(["this-pc:true", "hallway:false"]);
+  expect(checkedOf()).toEqual(["default:true", "hallway:false"]);
 
   await act(async () => displayRow(container, "hallway").click());
 
   expect(
     checkedOf(),
     "choosing a display did not move the group's checked row",
-  ).toEqual(["this-pc:false", "hallway:true"]);
+  ).toEqual(["default:false", "hallway:true"]);
 });
 
 /**
@@ -973,7 +966,7 @@ it("writes a rect display's quarter-turn rotation", async () => {
   });
   await act(async () => displayRow(container, "tv").click());
   // The snap note belongs to the controls it describes: an editable display
-  // reads it, a recordless selection does not (see the this-pc case).
+  // reads it, a recordless selection does not (see the default case).
   expect(container.textContent).toContain(
     uiCopy.hostSettings.displays.rotationSnapHint,
   );
@@ -1147,8 +1140,8 @@ it("removes a display after a confirmation that names it", async () => {
   const { container, wrote, published } = await mountHost(TWO_DISPLAYS);
 
   expect(
-    container.querySelector('[data-yunari-host-display-remove="this-pc"]'),
-    "the Host is offered a removal the route refuses",
+    container.querySelector('[data-yunari-host-display-remove="default"]'),
+    "the default row is offered a removal the route refuses",
   ).toBeNull();
 
   await act(async () =>
@@ -1368,10 +1361,11 @@ it("draws no rendering control for a family with one stream", async () => {
   ).toBeNull();
 });
 
-/** No row has been read, so no display is the selection: the absence sentence
- *  states a fact about `this-pc` and would be a claim nobody made. */ it("says nothing about presentation while no display has been read", async () => {
+/** The absence sentence is a fact about the default row, so it appears only
+ *  where that row is drawn. A failed read draws no row: the fallback is unknown
+ *  rather than null, and the sentence would claim a display nobody read. */ it("says nothing about presentation while no display has been read", async () => {
   const empty = await mountHost({ displays: [] });
-  expect(empty.container.textContent).not.toContain(
+  expect(empty.container.textContent).toContain(
     uiCopy.hostSettings.displays.presentationAbsent,
   );
 
@@ -1403,13 +1397,13 @@ it("names the display file when the host could not read it", async () => {
 
 /** Host is the machine, not a paired screen: it has no record to present, so
  *  the section says why rather than drawing a disabled control. */
-it("draws no presentation controls for the Host", async () => {
+it("draws no presentation controls for the default row", async () => {
   const { container } = await mountHost({
     displays: [
       {
-        id: "this-pc",
-        label: "Host",
-        kind: "local",
+        id: "default",
+        label: "Unassigned displays",
+        kind: "default",
         theme: null,
         shape: "rect",
         rotation: 0,
@@ -1432,8 +1426,8 @@ it("draws no presentation controls for the Host", async () => {
  * The plan's first case, and the one that carries the per-display model: **a
  * theme that binds only `cpu.load` offers no GPU row for that display**.
  *
- * Three facts in one run, because they are one decision. Host holds no theme
- * of its own, so the region asks about the default's — the fallback reaches the
+ * Three facts in one run, because they are one decision. The default row holds
+ * no theme of its own, so the region asks about the fallback's — it reaches the
  * route, which is what makes the questions the answers of a display's use of a
  * theme. That theme raises nothing, so no section is drawn at all. And the
  * hallway's theme raises two slots while only one is unanswered, so the row that
@@ -1443,7 +1437,7 @@ it("asks only the questions the theme on that display raises", async () => {
   const { container, wrote } = await mountHost({
     ...TWO_DISPLAYS,
     questions: {
-      "this-pc/kitchen-strip": { required: [], answers: {} },
+      "default/kitchen-strip": { required: [], answers: {} },
       "hallway/hallway-clock": {
         required: ["gpu", "data-disk"],
         answers: { gpu: "gpu-0" },
@@ -1455,7 +1449,7 @@ it("asks only the questions the theme on that display raises", async () => {
   expect(
     wrote.asked,
     "the region did not ask about the theme this display falls back to",
-  ).toEqual([{ display: "this-pc", theme: "kitchen-strip" }]);
+  ).toEqual([{ display: "default", theme: "kitchen-strip" }]);
   expect(
     container.querySelector("[data-yunari-host-section='questions']"),
     "a theme that reads no assignable hardware is asked a question anyway",
@@ -1558,7 +1552,7 @@ it("states a slot's only device instead of offering it", async () => {
  */
 it("does not ask a theme's slot the host has one device for", async () => {
   const questions = {
-    "this-pc/kitchen-strip": { required: ["gpu"] as const, answers: {} },
+    "default/kitchen-strip": { required: ["gpu"] as const, answers: {} },
   };
 
   const { container } = await mountHost({
@@ -2114,7 +2108,7 @@ it("withdraws its line when the region leaves, so the next visit paints none", a
   expect(
     statusLine(published).displays,
     "the visit published no line to withdraw",
-  ).toBe(uiCopy.hostSettings.status.displays(2));
+  ).toBe(uiCopy.hostSettings.status.displays(1));
 
   await unmount();
 
@@ -2651,9 +2645,9 @@ const ONE_PANEL: Fixture = {
   fallback: null,
   displays: [
     {
-      id: "this-pc",
-      label: "Host",
-      kind: "local",
+      id: "default",
+      label: "Unassigned displays",
+      kind: "default",
       theme: null,
       shape: "rect",
       rotation: 0,
