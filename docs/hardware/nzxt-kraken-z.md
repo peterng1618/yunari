@@ -58,6 +58,15 @@ orientation is carried into the write so a brightness change does not turn the
 glass. The Status control reports the firmware and the LCD's brightness and
 orientation.
 
+**Screen reuses that brightness report.** The family declares Brightness, Screen
+and Status. Screen off writes the same `30 02` report with level 0, and Screen on
+restores the level this host last wrote (full before the first write); asking for
+a brightness also brings the glass back. No separate screen-off report is known:
+zero brightness draws nothing and leaves the cable open, which is the same
+tradeoff the Turzx driver made when its sleep opcode turned out to drop the
+device off the bus. Stored settings and Restart stay undeclared because no
+proven report carries them.
+
 - **The firmware emits unsolicited `75 01` status reports.** A reader must match
   the exact expected reply prefix (`33 02`, `37 01`, …) rather than "the next
   report", or a stray `75 01` is read as a failed command. They arrive about

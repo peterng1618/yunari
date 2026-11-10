@@ -523,9 +523,13 @@ describe("TurUsbPanel", () => {
 
   it("declares the controls the editor can draw for every listed model", () => {
     const panel = opened(fakePanel());
-    expect(panel.controls?.commands).toEqual(["brightness", "status"]);
+    expect(panel.controls?.commands).toEqual([
+      "brightness",
+      "screen",
+      "status",
+    ]);
     for (const family of TUR_FAMILIES) {
-      expect(family.commands).toEqual(["brightness", "status"]);
+      expect(family.commands).toEqual(["brightness", "screen", "status"]);
     }
   });
 
@@ -553,6 +557,44 @@ describe("TurUsbPanel", () => {
     await expect(
       panel.controls.run({ kind: "brightness", level: 101 }),
     ).rejects.toThrow(/from 0 to 100/);
+  });
+
+  it("turns the screen off at zero and back on at the level last written", async () => {
+    const fake = fakePanel();
+    const panel = opened(fake);
+    await panel.open();
+    fake.reset();
+    fake.reply(14, new Uint8Array(512));
+
+    if (panel.controls === undefined) throw new Error("no controls");
+    await panel.controls.run({ kind: "brightness", level: 30 });
+    await panel.controls.run({ kind: "screen", on: false });
+    expect(commandOf(fake.writes[1]!)?.[8]).toBe(0);
+
+    await panel.controls.run({ kind: "screen", on: true });
+    expect(commandOf(fake.writes[2]!)?.[8]).toBe(30);
+  });
+
+  it("starts a screen-on at full brightness before a level is written", async () => {
+    const fake = fakePanel();
+    const panel = opened(fake);
+    await panel.open();
+    fake.reset();
+    fake.reply(14, new Uint8Array(512));
+
+    if (panel.controls === undefined) throw new Error("no controls");
+    await panel.controls.run({ kind: "screen", on: false });
+    await panel.controls.run({ kind: "screen", on: true });
+    expect(commandOf(fake.writes[1]!)?.[8]).toBe(100);
+  });
+
+  it("refuses a screen command without a boolean", async () => {
+    const panel = opened(fakePanel());
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(
+      panel.controls.run({ kind: "screen", on: "yes" as never }),
+    ).rejects.toThrow(/true or false/);
   });
 
   it("answers status with the firmware name the panel reports", async () => {

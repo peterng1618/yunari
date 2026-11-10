@@ -151,7 +151,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: ["lianli92_0001_2026041401"],
       updatedAt: "2026-10-31",
     },
-    commands: ["brightness", "status"],
+    commands: ["brightness", "screen", "status"],
     geometry: modelGeometry("lianli-9-2"),
     attached: () => attachedPanels(),
     open: () => {
@@ -171,7 +171,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: [],
       updatedAt: "2026-10-28",
     },
-    commands: ["brightness", "status"],
+    commands: ["brightness", "screen", "status"],
     geometry: modelGeometry("lianli-8-8"),
     attached: () => attachedPanels(),
     open: () => {

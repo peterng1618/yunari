@@ -146,6 +146,14 @@ Three facts from the same decompilation:
 No vendor command blanks the glass: brightness 0 is the only off switch, and
 `FB1_State` (105) hides the overlay layer, not the picture.
 
+**The control surface declares Brightness, Screen and Status.** Screen is that
+one-switch fact: off writes brightness 0, on restores the level this host last
+wrote (full before the first write), and asking for a brightness also brings the
+glass back. It uses opcode 14 only, so a screen turned off this way can still be
+turned back on — unlike the opcodes that take the device off the bus. Stored
+settings and Restart stay undeclared: no proven opcode carries them on these
+models, and the UI renders nothing for a command the family does not list.
+
 Vendor firmware/storage opcodes (38/39/40, 98, 100, 110, 113) are omitted from
 the driver rather than merely unused: this host never writes the device's
 storage.

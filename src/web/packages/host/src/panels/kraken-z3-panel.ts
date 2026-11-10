@@ -250,9 +250,13 @@ class KrakenPanel implements PanelDevice {
   private shown: number | undefined;
   /** Hardware controls, percent in and the LCD query kept here. */
   readonly controls: PanelControls = {
-    commands: ["brightness", "status"],
+    commands: ["brightness", "screen", "status"],
     run: (command) => this.runControl(command),
   };
+  /** The level a screen-on restores: the last brightness this host wrote. Full
+   *  before the first write, so turning the glass back on shows a picture. */
+  private brightnessLevel = 100;
+  private screenOff = false;
   /** One writer at a time: a manual control must not interleave with the ring. */
   private lock: Promise<void> = Promise.resolve();
 
@@ -504,6 +508,28 @@ class KrakenPanel implements PanelDevice {
     return this.control.readUntil(0x39, 0x01)?.report[14];
   }
 
+  /**
+   * liquidctl's brightness write: the current orientation travels with the
+   * level, because the firmware takes both fields in one report.
+   */
+  private writeBrightness(level: number): void {
+    const lcd = this.lcdInfo();
+    if (lcd === undefined) {
+      throw new Error("The Kraken did not answer its LCD query.");
+    }
+
+    this.control.write([
+      0x30,
+      0x02,
+      0x01,
+      level,
+      0x00,
+      0x00,
+      0x01,
+      lcd[0x1a] ?? 0,
+    ]);
+  }
+
   private async runControl(command: PanelControlCommand): Promise<string> {
     switch (command.kind) {
       case "brightness": {
@@ -520,25 +546,28 @@ class KrakenPanel implements PanelDevice {
         }
 
         return await this.exclusive(async () => {
-          const lcd = this.lcdInfo();
-          if (lcd === undefined) {
-            throw new Error("The Kraken did not answer its LCD query.");
-          }
-
-          // liquidctl's brightness write: the current orientation travels with
-          // the level, because the firmware takes both fields in one report.
-          this.control.write([
-            0x30,
-            0x02,
-            0x01,
-            level,
-            0x00,
-            0x00,
-            0x01,
-            lcd[0x1a] ?? 0,
-          ]);
+          // Asking for a level is also asking for the screen back.
+          this.brightnessLevel = level;
+          this.screenOff = false;
+          this.writeBrightness(level);
 
           // The write draws no reply, so there is no device text to show.
+          return "";
+        });
+      }
+      case "screen": {
+        const on = command.on;
+        // A route that lost the field would otherwise read as "off": blanking
+        // the panel is a state change nobody asked for.
+        if (typeof on !== "boolean") {
+          throw new Error("The screen command needs on to be true or false.");
+        }
+
+        return await this.exclusive(async () => {
+          // Brightness is the only off switch this panel documents: zero draws
+          // nothing and leaves the cable open.
+          this.screenOff = !on;
+          this.writeBrightness(this.screenOff ? 0 : this.brightnessLevel);
           return "";
         });
       }
@@ -717,7 +746,7 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: ["5.11.0"],
       updatedAt: "2026-11-06",
     },
-    commands: ["brightness", "status"],
+    commands: ["brightness", "screen", "status"],
     geometry: { width: SIZE, height: SIZE },
     renderModes: ["mode-a", "mode-b"],
     attached: () => Promise.resolve(attachedKrakens()),

@@ -87,14 +87,27 @@ code lands.
 ## Decision
 
 Extend `PanelControls` on `KrakenPanel` and `TurUsbPanel` and declare
-`"brightness"` and `"status"` on their `PanelFamily` rows. Lian Li sends the
-0–100 percent directly at byte 8 and reads GetVer's ASCII body for status.
-Kraken reads the current orientation from `31 01` and carries it into the
+`"brightness"`, `"screen"` and `"status"` on their `PanelFamily` rows. Lian Li
+sends the 0–100 percent directly at byte 8 and reads GetVer's ASCII body for
+status. Kraken reads the current orientation from `31 01` and carries it into the
 brightness write, and both controls are serialized behind the frame writer so a
 manual command cannot interleave with the bucket ring. The Lian Li control
 channel lives in its own module so the streaming driver stays under the size
 stop; it takes the driver's own locked `request`/`exclusive` rather than a
-second transport. No new command kind, no
-route change and no editor change. The 9.2" brightness range is inferred from
-the sibling 8.8" firmware and L-Connect's constants; if the glass behaves wrong,
-that mapping is the first suspect.
+second transport.
+
+**Screen is the brightness opcode, not a second one.** Neither family documents a
+report that blanks the glass, so off writes level 0 and on restores the level
+this host last wrote — the tradeoff `TurzxPanel` already made when its sleep
+opcode turned out to take the device off the bus. That reuses the one write path
+the panels have proved, stays recoverable across a level request, and fills the
+screen control the editor already draws for a family that declares it. The two
+remaining Turzx controls, `panel-settings` and `restart`, stay undeclared: no
+proven opcode carries them on these models, and a declared command with no
+correct bytes is worse than an absent one, because the dialog draws it.
+
+No new command kind, no route change and no editor change — `screen` is already
+in the union, the route's `panelCommand` already admits it, and
+`PanelControlsSection` already draws its two buttons. The 9.2" brightness range
+is inferred from the sibling 8.8" firmware and L-Connect's constants; if the
+glass behaves wrong, that mapping is the first suspect.

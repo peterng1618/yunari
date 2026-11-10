@@ -57,14 +57,17 @@ describe("BUILTIN_PANEL_FAMILIES", () => {
   it("declares the controls each family accepts", () => {
     expect(builtins.forDevice(0x1cbe, 0xa092)?.commands).toEqual([
       "brightness",
+      "screen",
       "status",
     ]);
     expect(builtins.forDevice(0x1cbe, 0xa088)?.commands).toEqual([
       "brightness",
+      "screen",
       "status",
     ]);
     expect(builtins.forDevice(0x1e71, 0x3008)?.commands).toEqual([
       "brightness",
+      "screen",
       "status",
     ]);
   });

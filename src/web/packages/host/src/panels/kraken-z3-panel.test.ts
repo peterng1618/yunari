@@ -303,11 +303,19 @@ describe("KrakenPanel controls", () => {
     fake.state.lcdOrientation = 2;
   });
 
-  it("declares brightness and status on the family", async () => {
+  it("declares the controls the editor can draw", async () => {
     const panel = await openKraken("The NZXT Kraken");
 
-    expect(panel.controls?.commands).toEqual(["brightness", "status"]);
-    expect(KRAKEN_FAMILIES[0]?.commands).toEqual(["brightness", "status"]);
+    expect(panel.controls?.commands).toEqual([
+      "brightness",
+      "screen",
+      "status",
+    ]);
+    expect(KRAKEN_FAMILIES[0]?.commands).toEqual([
+      "brightness",
+      "screen",
+      "status",
+    ]);
 
     await panel.close();
   });
@@ -346,6 +354,53 @@ describe("KrakenPanel controls", () => {
     await expect(
       panel.controls.run({ kind: "brightness", level: -1 }),
     ).rejects.toThrow(/from 0 to 100/);
+
+    await panel.close();
+  });
+
+  it("turns the screen off at zero and back on at the level last written", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await panel.controls.run({ kind: "brightness", level: 40 });
+    await panel.controls.run({ kind: "screen", on: false });
+    await panel.controls.run({ kind: "screen", on: true });
+
+    const writes = fake.state.writes.filter(
+      ([first, second]) => first === 0x30 && second === 0x02,
+    );
+    expect(writes.at(-2)?.slice(0, 8)).toEqual([
+      0x30, 0x02, 0x01, 0, 0, 0, 1, 2,
+    ]);
+    expect(writes.at(-1)?.slice(0, 8)).toEqual([
+      0x30, 0x02, 0x01, 40, 0, 0, 1, 2,
+    ]);
+
+    await panel.close();
+  });
+
+  it("starts a screen-on at full brightness before a level is written", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await panel.controls.run({ kind: "screen", on: false });
+    await panel.controls.run({ kind: "screen", on: true });
+
+    const writes = fake.state.writes.filter(
+      ([first, second]) => first === 0x30 && second === 0x02,
+    );
+    expect(writes.at(-1)?.[3]).toBe(100);
+
+    await panel.close();
+  });
+
+  it("refuses a screen command without a boolean", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(
+      panel.controls.run({ kind: "screen", on: "yes" as never }),
+    ).rejects.toThrow(/true or false/);
 
     await panel.close();
   });

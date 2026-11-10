@@ -22,15 +22,20 @@ export function turUsbControls(
   channel: TurUsbControlChannel,
   readTimeoutMs: number,
 ): PanelControls {
+  /** The level a screen-on restores: the last brightness this host wrote. Full
+   *  before the first write, so turning the glass back on shows a picture. */
+  const screen = { level: 100, off: false };
+
   return {
-    commands: ["brightness", "status"],
-    run: (command) => runControl(channel, readTimeoutMs, command),
+    commands: ["brightness", "screen", "status"],
+    run: (command) => runControl(channel, readTimeoutMs, screen, command),
   };
 }
 
 async function runControl(
   channel: TurUsbControlChannel,
   readTimeoutMs: number,
+  screen: { level: number; off: boolean },
   command: PanelControlCommand,
 ): Promise<string> {
   switch (command.kind) {
@@ -53,9 +58,31 @@ async function runControl(
         await channel.request("brightness", readTimeoutMs, {
           parameter: level,
         });
+        // Asking for a level is also asking for the screen back.
+        screen.level = level;
+        screen.off = false;
 
         // The ack carries no text, so a host sentence would be read as the
         // panel's reply.
+        return "";
+      });
+    }
+    case "screen": {
+      const on = command.on;
+      // A route that lost the field would otherwise read as "off": blanking
+      // the panel is a state change nobody asked for.
+      if (typeof on !== "boolean") {
+        throw new Error("The screen command needs on to be true or false.");
+      }
+
+      return await channel.exclusive(async () => {
+        // Brightness is the only off switch this panel documents: zero draws
+        // nothing and leaves the cable open, while a level the owner asks for
+        // turns the glass back on.
+        screen.off = !on;
+        await channel.request("brightness", readTimeoutMs, {
+          parameter: screen.off ? 0 : screen.level,
+        });
         return "";
       });
     }
