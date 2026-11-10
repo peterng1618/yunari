@@ -270,6 +270,20 @@ describe("the new-document chooser", () => {
     });
   });
 
+  it("names a typed size's ratio, and says Custom only when none names it", async () => {
+    // The three dropdowns cannot name a typed size, but the ratio it is at is
+    // still a fact: 1080 × 1920 is 16:9, not Custom.
+    void open();
+
+    await type("width", "1080");
+    await type("height", "1920");
+    expect(read("ratio")).toBe("16:9");
+
+    await type("width", "1000");
+    await type("height", "1001");
+    expect(read("ratio"), "an unnamed aspect keeps Custom").toBe("");
+  });
+
   it("refuses a size that is not a dimension, rather than creating one", async () => {
     const pending = open();
     await type("height", "2000");
@@ -304,13 +318,15 @@ describe("the new-document chooser", () => {
     await type("width", "3000");
     await type("height", "3000");
 
-    // The controls stop claiming a preset the document is not at — except
-    // orientation, which the numbers always name: a square reads landscape.
+    // The controls stop claiming a *preset* the document is not at, except the
+    // ratio the shape itself names (3000 × 3000 is 1:1) and orientation, which
+    // the numbers always name: a square reads landscape. Resolution stays
+    // Custom, because no resolution preset is that size.
     expect({
       ratio: read("ratio"),
       orientation: read("orientation"),
       resolution: read("resolution"),
-    }).toEqual({ ratio: "", orientation: "landscape", resolution: "" });
+    }).toEqual({ ratio: "1:1", orientation: "landscape", resolution: "" });
 
     await chooseIn("resolution", "4k");
     expect(size(), "the author's own size is still on screen").toContain(

@@ -11,6 +11,7 @@ import {
   type ArtboardOrientation,
   artboardOrientation,
   artboardPresetFor,
+  artboardRatioFor,
   artboardSize,
   nearestArtboardPreset,
 } from "@yunari/theme-kit";
@@ -141,7 +142,7 @@ export function ArtboardFields(props: ArtboardFieldsProps): React.JSX.Element {
             label={uiCopy.panels.ratio}
             data={{ "data-yunari-artboard-ratio": "" }}
             describedById={noteId}
-            value={matching?.ratio ?? ""}
+            value={artboardRatioFor(artboard) ?? ""}
             options={ratioOptions()}
             onChange={(id) => commitPreset("ratio", id)}
           />

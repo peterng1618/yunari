@@ -4,14 +4,13 @@ import { ControlWell } from "../../components/ui/control-well.js";
 import { ACTION_BUTTON } from "../../components/ui/dialog.js";
 import {
   activePreviewRatioTokens,
+  addPreviewRatioToken,
   DEFAULT_PREVIEW_RATIO_TOKENS,
   type DisplayLens,
   normalisePreviewRatioTokens,
-  type PreviewRatio,
   parsePreviewRatio,
   previewCatalogueKey,
   previewLenses,
-  previewRatioKey,
   setActivePreviewRatios,
   sortPreviewTokens,
   subscribeLenses,
@@ -65,37 +64,27 @@ function PreviewsSection(props: {
   };
 
   const add = (): void => {
-    let ratio: PreviewRatio;
-    try {
-      ratio = parsePreviewRatio(draft);
-    } catch (error) {
-      // The parser's only refusal is a `RangeError`; anything else is a defect
-      // and belongs in the console rather than in the row.
-      if (!(error instanceof RangeError)) throw error;
-      setReason(uiCopy.settings.previewRatioInvalid);
-      return;
+    const result = addPreviewRatioToken(draft, props.storage);
+    switch (result.kind) {
+      case "invalid":
+        setReason(uiCopy.settings.previewRatioInvalid);
+        return;
+      case "duplicate":
+        setReason(uiCopy.settings.previewRatioDuplicate);
+        return;
+      case "equivalent":
+        setReason(
+          uiCopy.settings.previewRatioEquivalent(
+            result.entered,
+            result.existing,
+          ),
+        );
+        return;
+      case "added":
+        setReason(undefined);
+        setDraft("");
+        setPersisted(result.persisted);
     }
-    if (tokens.some((token) => parsePreviewRatio(token).id === ratio.id)) {
-      setReason(uiCopy.settings.previewRatioDuplicate);
-      return;
-    }
-    const equivalent =
-      ratio.shape === "rect"
-        ? tokens.find((token) => {
-            const existing = parsePreviewRatio(token);
-            return (
-              existing.shape === "rect" &&
-              previewRatioKey(existing) === previewRatioKey(ratio)
-            );
-          })
-        : undefined;
-    if (equivalent !== undefined) {
-      setReason(uiCopy.settings.previewRatioEquivalent(ratio.id, equivalent));
-      return;
-    }
-    setReason(undefined);
-    setDraft("");
-    commit(sortPreviewTokens([...tokens, ratio.id]));
   };
 
   const removeRatio = (id: string): void => {

@@ -390,17 +390,70 @@ export function previewRatioTokenFor(size: {
   return `${width / divisor}:${height / divisor}`;
 }
 
-/** Adds a ratio the catalogue does not already express and makes it live. The
- *  store is written first and the live list after it, as the previews page
- *  writes: a refused store still leaves this session's list changed. */
+/** Why an add did or did not reach the catalogue, so a surface can word the
+ *  refusal instead of guessing from a boolean. */
+export type PreviewRatioAddResult =
+  | { readonly kind: "added"; readonly persisted: boolean }
+  | { readonly kind: "duplicate" }
+  | {
+      readonly kind: "equivalent";
+      readonly entered: string;
+      readonly existing: string;
+    }
+  | { readonly kind: "invalid" };
+
+/** The stored spelling of a rect token: long edge first, so one token derives
+ *  both orientations in `previewLenses`. A circle is its own picture. */
+function wideRatioId(ratio: PreviewRatio): string {
+  if (ratio.shape === "circle" || ratio.width >= ratio.height) return ratio.id;
+
+  const [width = "", height = ""] = ratio.id.split(":");
+  return `${height}:${width}`;
+}
+
+/**
+ * Adds a ratio the catalogue does not already express and makes it live. The
+ * one add path, so the settings page and a new document cannot refuse or pair
+ * differently: parse, canonicalise a rect to its wide spelling, refuse a
+ * duplicate or an equivalent aspect, then write the store before the live list
+ * (a refused store still leaves this session's list changed).
+ */
 export function addPreviewRatioToken(
   token: string,
   storage: Storage | undefined,
-): void {
-  const tokenId = parsePreviewRatio(token).id;
-  const next = sortPreviewTokens([...activeTokens, tokenId]);
-  writePreviewRatioTokens(storage, next);
+): PreviewRatioAddResult {
+  let ratio: PreviewRatio;
+  try {
+    ratio = parsePreviewRatio(token);
+  } catch (error) {
+    // The parser's only refusal is a `RangeError`; anything else is a defect.
+    if (!(error instanceof RangeError)) throw error;
+    return { kind: "invalid" };
+  }
+
+  const id = wideRatioId(ratio);
+  if (activeTokens.some((entry) => parsePreviewRatio(entry).id === id)) {
+    return { kind: "duplicate" };
+  }
+
+  const equivalent =
+    ratio.shape === "rect"
+      ? activeTokens.find((entry) => {
+          const existing = parsePreviewRatio(entry);
+          return (
+            existing.shape === "rect" &&
+            previewRatioKey(existing) === previewRatioKey(ratio)
+          );
+        })
+      : undefined;
+  if (equivalent !== undefined) {
+    return { kind: "equivalent", entered: ratio.id, existing: equivalent };
+  }
+
+  const next = sortPreviewTokens([...activeTokens, id]);
+  const persisted = writePreviewRatioTokens(storage, next);
   setActivePreviewRatios(next);
+  return { kind: "added", persisted };
 }
 
 /** Long over short, the one form that ignores which way up a rect sits. */

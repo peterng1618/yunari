@@ -13,6 +13,7 @@ import {
   type ArtboardSize,
   artboardOrientation,
   artboardPresetFor,
+  artboardRatioFor,
   artboardSize,
   nearestArtboardPreset,
 } from "@yunari/theme-kit";
@@ -217,7 +218,7 @@ export function NewDocumentChooser({
               <ControlSelect
                 label={uiCopy.panels.ratio}
                 data={{ "data-yunari-new-document-ratio": "" }}
-                value={preset?.ratio ?? CUSTOM}
+                value={artboardRatioFor(chosen) ?? CUSTOM}
                 options={ratioOptions()}
                 onChange={(id) => derive("ratio", id)}
               />

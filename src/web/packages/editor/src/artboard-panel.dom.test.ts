@@ -848,14 +848,15 @@ describe("artboard presets in the panel", () => {
  * The chooser can reach these two sizes and the panel can display them, but
  * neither fact is this claim. What is missing is the whole cycle — create,
  * load, edit, save — for a size no preset names, because each of those is a
- * place that could quietly round a 3:1 back to 16:9. The controls reading
- * Custom is the panel's existing behaviour for a typed size, pinned here
- * because it is what makes the edit step below meaningful rather than a guess.
+ * place that could quietly round a 3:1 back to 16:9. The panel names the ratio
+ * the numbers are actually at — a square board reads 1:1 — and leaves
+ * resolution custom, pinned here because it is what makes the edit step below
+ * meaningful rather than a guess.
  */
 describe.each([
-  ["a 3:1 board", { width: 3000, height: 1000 }],
-  ["a 4000 × 4000 theme", { width: 4000, height: 4000 }],
-])("%s", (_label, size) => {
+  ["a 3:1 board", { width: 3000, height: 1000 }, ""],
+  ["a 4000 × 4000 theme", { width: 4000, height: 4000 }, "1:1"],
+])("%s", (_label, size, ratio) => {
   it("creates, loads, edits and saves without leaving its shape", async () => {
     const created = createBlankFabricTheme(size);
     expect(validateFabricThemeEnvelope(created)).toEqual({
@@ -863,13 +864,13 @@ describe.each([
       envelope: created,
     });
 
-    // Load: the panel reads a size no preset names as Custom on ratio and
-    // resolution, rather than claiming a preset the document is not at. The
-    // orientation is the numbers' own, so it names one.
+    // Load: the panel names the ratio the size is at, and reads a resolution no
+    // preset names as Custom rather than claiming a preset the document is not
+    // at. The orientation is the numbers' own, so it names one.
     const { change } = await mount();
     await draw(created.artboard);
-    for (const hook of ["artboard-ratio", "artboard-resolution"])
-      expect(choiceOf(`[data-yunari-${hook}]`), hook).toBe("");
+    expect(choiceOf("[data-yunari-artboard-ratio]")).toBe(ratio);
+    expect(choiceOf("[data-yunari-artboard-resolution]")).toBe("");
     expect(choiceOf("[data-yunari-artboard-orientation]")).toBe(
       artboardOrientation(size),
     );

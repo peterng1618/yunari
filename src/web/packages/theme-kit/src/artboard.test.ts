@@ -8,6 +8,7 @@ import {
   type ArtboardResolutionId,
   artboardOrientation,
   artboardPresetFor,
+  artboardRatioFor,
   artboardSize,
   DEFAULT_ARTBOARD_PRESET,
   nearestArtboardPreset,
@@ -237,5 +238,21 @@ describe("the preset a new document should open on", () => {
 
   it("falls back to the default when there is no document to carry over", () => {
     expect(nearestArtboardPreset()).toEqual(DEFAULT_ARTBOARD_PRESET);
+  });
+});
+
+describe("the named ratio a size is at", () => {
+  it("names the ratio of a typed size, whichever way up it is", () => {
+    // A typed size is not a preset, but its shape still has a name. The
+    // portrait size resolves through the long-over-short comparison.
+    expect(artboardRatioFor({ width: 1920, height: 1080 })).toBe("16:9");
+    expect(artboardRatioFor({ width: 1080, height: 1920 })).toBe("16:9");
+    expect(artboardRatioFor({ width: 1440, height: 1080 })).toBe("4:3");
+    expect(artboardRatioFor({ width: 1080, height: 1080 })).toBe("1:1");
+  });
+
+  it("answers undefined for a shape no ratio names", () => {
+    expect(artboardRatioFor({ width: 1920, height: 2000 })).toBeUndefined();
+    expect(artboardRatioFor({ width: 0, height: 1080 })).toBeUndefined();
   });
 });

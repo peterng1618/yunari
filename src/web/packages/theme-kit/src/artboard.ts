@@ -120,6 +120,28 @@ export function artboardPresetFor(
 }
 
 /**
+ * The named ratio a size is at, whatever resolution or orientation derived it.
+ *
+ * Distinct from `artboardPresetFor`, which answers all three ids and refuses a
+ * size no preset names. A typed 1080 × 1920 is not a preset, but its shape is
+ * still 16:9; a control showing the ratio must say so rather than fall back to
+ * Custom. The long-over-short comparison is what makes a portrait size match
+ * the landscape ratio it is the turned twin of.
+ */
+export function artboardRatioFor(
+  size: ArtboardSize,
+): ArtboardRatioId | undefined {
+  if (!(size.width > 0) || !(size.height > 0)) return undefined;
+
+  const aspect =
+    Math.max(size.width, size.height) / Math.min(size.width, size.height);
+
+  return ARTBOARD_RATIOS.find(
+    (entry) => Math.abs(entry.ratio - aspect) <= aspect * 1e-9,
+  )?.id;
+}
+
+/**
  * Which way up a size is.
  *
  * **One predicate, in the one place that has to know.** `nearestArtboardPreset`

@@ -366,4 +366,57 @@ describe("the catalogue's answer for a new theme's size", () => {
 
     expect(activePreviewRatioTokens()).toContain("8:5");
   });
+
+  it("stores a portrait token wide, so the catalogue offers both orientations", () => {
+    const written: string[] = [];
+    const storage = {
+      getItem: () => null,
+      setItem: (_key: string, value: string) => {
+        written.push(value);
+      },
+      removeItem: () => {},
+    } as unknown as Storage;
+    setActivePreviewRatios([]);
+
+    expect(addPreviewRatioToken("9:16", storage)).toEqual({
+      kind: "added",
+      persisted: true,
+    });
+    // One wide token derives the pair; storing the tall spelling would offer
+    // only the portrait lens.
+    expect(activePreviewRatioTokens()).toEqual(["16:9"]);
+    expect(activePreviewLenses().map((lens) => lens.id)).toEqual([
+      "16:9",
+      "9:16",
+    ]);
+    expect(JSON.parse(written[0] ?? "[]")).toEqual(["16:9"]);
+  });
+
+  it("refuses a duplicate or an equivalent before touching the store", () => {
+    const writes: string[] = [];
+    const storage = {
+      getItem: () => null,
+      setItem: (_key: string, value: string) => {
+        writes.push(value);
+      },
+      removeItem: () => {},
+    } as unknown as Storage;
+    setActivePreviewRatios(["16:9"]);
+
+    // The tall spelling canonicalises to the stored token.
+    expect(addPreviewRatioToken("9:16", storage)).toEqual({
+      kind: "duplicate",
+    });
+    // A different spelling of the same shape is the equivalent refusal.
+    setActivePreviewRatios(["21:9"]);
+    expect(addPreviewRatioToken("7:3", storage)).toEqual({
+      kind: "equivalent",
+      entered: "7:3",
+      existing: "21:9",
+    });
+    expect(addPreviewRatioToken("not-a-ratio", storage)).toEqual({
+      kind: "invalid",
+    });
+    expect(writes).toEqual([]);
+  });
 });
