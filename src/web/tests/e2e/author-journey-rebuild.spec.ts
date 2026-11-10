@@ -58,7 +58,7 @@ test.describe("the reference composition, built from blank", () => {
     // desktop surface — `surface.ts` says so in its own doc comment, and this is
     // the guard its callers use.
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto("/");
+    await page.goto("/?mode=editor");
     await page.waitForSelector("#canvas-host canvas");
   });
 
@@ -419,7 +419,7 @@ async function reading(
 test.describe("the rest of the composition", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto("/");
+    await page.goto("/?mode=editor");
     await page.waitForSelector("#canvas-host canvas");
     await openBlank(page);
     for (const [name, hex] of DEVICE_COLOURS) await addColour(page, name, hex);
@@ -865,7 +865,7 @@ test("what the rebuild authored survives the save", async ({
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   // Its own document: a top-level test rather than a region, so it navigates
   // for itself instead of inheriting a describe's `beforeEach`.
-  await page.goto("/");
+  await page.goto("/?mode=editor");
   await page.waitForSelector("#canvas-host canvas");
   await openBlank(page);
   for (const [name, hex] of DEVICE_COLOURS) await addColour(page, name, hex);

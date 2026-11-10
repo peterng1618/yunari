@@ -187,7 +187,7 @@ test.describe("the rebuilt composition, on a display", () => {
     test.setTimeout(600_000);
 
     // ---- the editor half: build it the way an author would ----
-    await page.goto("/");
+    await page.goto("/?mode=editor");
     await page.waitForSelector("#canvas-host canvas");
     await openBlankComposition(page);
     await buildComposition(page);
@@ -226,7 +226,7 @@ test.describe("the rebuilt composition, on a display", () => {
     // player is a finding about the round trip; a difference between this and
     // what was just on screen is a finding about the save.
     const reopened = await context.newPage();
-    await reopened.goto("/");
+    await reopened.goto("/?mode=editor");
     await reopened.waitForSelector("#canvas-host canvas");
     await openThemeFromStore(
       reopened,
