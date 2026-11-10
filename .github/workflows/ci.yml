@@ -127,6 +127,10 @@ jobs:
         # error can.
         run: |
           xvfb-run --auto-servernum dbus-run-session -- bash -euo pipefail -c '
+            # This whole block is one single-quoted shell string. An apostrophe
+            # anywhere below, comments included, ends it early: the rest of the
+            # block then runs outside the session bus and the display, and the
+            # host cannot reach the keyring the keyring step unlocked.
             eval "$(printf "\n" | gnome-keyring-daemon --unlock --components=secrets)"
 
             out=$(mktemp)
@@ -152,8 +156,9 @@ jobs:
             # put several hosts and browsers beside the preview specs, and the
             # load surfaced as 60 s locator timeouts across the editor specs
             # rather than as a product failure (issue #426). Two workers are
-            # pinned for the same reason: the default follows the runner's core
-            # count, which is not the machine the timings were measured on.
+            # pinned for the same reason: the default follows the core count of
+            # whatever machine runs it, which is not where the timings were
+            # measured.
             status=0
             npx playwright test --workers=2 \
               --project=desktop-chromium --project=phone-chromium || status=1
