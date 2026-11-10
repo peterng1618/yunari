@@ -63,7 +63,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
     "add_text",
     {
       description:
-        "Add a text object with literal and value runs. A value run names a binding supplied in bindings. A run may name a type token (heading, body or mono); its size is the fallback role.",
+        "Add a text object with literal and value runs. A value run names a binding supplied in bindings. A run may name a type token (heading, body or mono); its size is the fallback role. Vertical stacks the characters upright, one per line.",
       inputSchema: z.object({
         box: boxSchema,
         name: nameSchema,
@@ -84,6 +84,7 @@ export function registerComposeTools(server: McpServer, context: ToolContext) {
         align: z.enum(["left", "center", "right"]).optional(),
         verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
         overflow: z.enum(["clip", "ellipsis", "visible"]).optional(),
+        vertical: z.boolean().optional(),
         bindings: z.array(bindingSchema).optional(),
         themeId: themeIdSchema,
       }),

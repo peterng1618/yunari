@@ -416,13 +416,14 @@ export function writeBindingZone(
   return true;
 }
 
-/** Alignment, overflow and vertical alignment, in the same authored content the runs live in. */
+/** Alignment, overflow, vertical alignment and stacked layout, in the same authored content the runs live in. */
 export function writeTextLayout(
   target: RunTarget,
   patch: {
     readonly align?: string;
     readonly verticalAlign?: string;
     readonly overflow?: string;
+    readonly vertical?: boolean;
   },
 ): boolean {
   target.object.set(YUNARI_TEXT_PROPERTY, {

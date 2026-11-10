@@ -125,6 +125,7 @@ function textNode(
         overflow: wrap ? "clip" : "visible",
         align: "left",
         verticalAlign: "top",
+        vertical: false,
       },
     },
   });

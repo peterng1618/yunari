@@ -150,6 +150,7 @@ export function authoredAlignment(
     overflow: wraps ? (authored.overflow ?? "clip") : "visible",
     align: authored.align ?? "left",
     verticalAlign: wraps ? (authored.verticalAlign ?? "top") : "top",
+    vertical: authored.vertical === true,
   };
 }
 
@@ -219,6 +220,16 @@ function runtimeLayout(
     layout,
     style: styleFor(object),
   };
+}
+
+/** The layout with the pass's stacking override, when it supplied one. */
+function withVertical(
+  state: RuntimeTextLayout,
+  vertical: boolean | undefined,
+): RuntimeTextLayout {
+  if (vertical === undefined || vertical === state.layout.vertical)
+    return state;
+  return { ...state, layout: { ...state.layout, vertical } };
 }
 
 function styleFor(object: PlanTextObject): PlanNode["style"] {
@@ -330,6 +341,13 @@ interface ApplyAuthoredTextOptions {
    * canvas for that would flash every other token for a frame.
    */
   readonly only?: (object: object) => boolean;
+  /**
+   * Forces the stacking for this pass, overriding the authored content. The
+   * editor's authoring view passes `false` so the caret and the hidden textarea
+   * hold ordinary flat text; the repaint when the edit ends restores the
+   * authored answer.
+   */
+  readonly vertical?: boolean;
 }
 
 /**
@@ -405,8 +423,11 @@ export function applyAuthoredText(
                   options.bindings?.[id] ?? [],
                   object,
                 );
-          const shape = textShapeFor(segments, {}, (value) =>
-            object.graphemeSplit(value),
+          const shape = textShapeFor(
+            segments,
+            {},
+            (value) => object.graphemeSplit(value),
+            options.vertical ?? authored.vertical === true,
           );
           // Authored layout belongs to the same content, so reapplying the
           // text must reapply it: alignment lives only here and at construction,
@@ -430,7 +451,11 @@ export function applyAuthoredText(
           // `refreshLayout` restores the box, places by both alignments and
           // clips; it has to follow this last measure, which widens to the
           // longest run and would otherwise be what it reads.
-          refreshLayout(object, segments, runtimeLayout(object, authored));
+          refreshLayout(
+            object,
+            segments,
+            withVertical(runtimeLayout(object, authored), options.vertical),
+          );
         }
       }
 
@@ -482,8 +507,11 @@ export function refreshBoundText(
           [],
         );
         const layoutState = runtimeLayout(object, authored);
-        const shape = textShapeFor(segments, {}, (value) =>
-          object.graphemeSplit(value),
+        const shape = textShapeFor(
+          segments,
+          {},
+          (value) => object.graphemeSplit(value),
+          layoutState.layout.vertical,
         );
         const paint = runTypePaint(segments[0]?.style);
         // **Only a change to what it paints repaints.** A clock sampled once a
@@ -530,7 +558,12 @@ function refreshLayout(
 ): void {
   const { box, layout, style } = state;
   if (layout.overflow === "ellipsis" && !fits(object, box, layout)) {
-    write(object, ellipsised(object, segments, style, box, layout), style);
+    write(
+      object,
+      ellipsised(object, segments, style, box, layout),
+      style,
+      layout.vertical,
+    );
   }
 
   // After the ellipsis rewrite too: that `write` is a `set` and re-enters
@@ -553,13 +586,14 @@ function applyText(object: PlanTextObject, node: PlanNode, box: PlanBox): void {
 
   const { layout, segments } = node.content;
 
-  write(object, segments, node.style);
+  write(object, segments, node.style, layout.vertical);
 
   if (layout.overflow === "ellipsis" && !fits(object, box, layout)) {
     write(
       object,
       ellipsised(object, segments, node.style, box, layout),
       node.style,
+      layout.vertical,
     );
   }
 
@@ -581,9 +615,13 @@ function write(
   object: PlanTextObject,
   segments: readonly PlanTextSegment[],
   nodeStyle: PlanNode["style"],
+  vertical = false,
 ): void {
-  const shape = textShapeFor(segments, nodeStyle, (value) =>
-    object.graphemeSplit(value),
+  const shape = textShapeFor(
+    segments,
+    nodeStyle,
+    (value) => object.graphemeSplit(value),
+    vertical,
   );
 
   object.set({ text: shape.text, styles: shape.styles });
@@ -625,7 +663,12 @@ function ellipsised(
   while (low < high) {
     const probe = Math.ceil((low + high) / 2);
 
-    write(object, truncate(object, segments, probe), nodeStyle);
+    write(
+      object,
+      truncate(object, segments, probe),
+      nodeStyle,
+      layout.vertical,
+    );
 
     if (fits(object, box, layout)) {
       low = probe;

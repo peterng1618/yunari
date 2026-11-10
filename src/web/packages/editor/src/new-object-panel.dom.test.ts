@@ -538,9 +538,8 @@ describe("new object panel", () => {
     expect(editor.canvas.add).not.toHaveBeenCalled();
   });
 
-  it("puts a vertical text on its end, from the tile through to the object", () => {
-    // The object does not exist when the tile is pressed, so the quarter turn
-    // travels with the placement request and lands as Fabric's own `angle`.
+  it("stacks a vertical text upright, from the tile through to the object", () => {
+    // The mode travels with the placement request and lands in the content.
     const addText = vi.fn();
     const editor = editorStub();
     const panel = createNewObjectPanel(
@@ -563,8 +562,10 @@ describe("new object panel", () => {
     );
     const options = editor.textManager.addText.mock.calls[0]?.[0] as {
       angle?: number;
+      [YUNARI_TEXT_PROPERTY]?: { readonly vertical?: boolean };
     };
-    expect(options.angle).toBe(-90);
+    expect(options.angle).toBeUndefined();
+    expect(options[YUNARI_TEXT_PROPERTY]?.vertical).toBe(true);
   });
 
   it("refuses the text tile rather than doing nothing when there is no session", () => {

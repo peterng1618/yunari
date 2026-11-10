@@ -421,6 +421,42 @@ describe("binding a text run to a sensor", () => {
     return box.dispose();
   });
 
+  it("reads unset vertical layout as horizontal, which is what the renderer assumes", async () => {
+    const box = mountRunEditor({ runs: literalClock });
+
+    const toggle = box.host.querySelector<HTMLElement>(
+      "[data-yunari-text-vertical]",
+    );
+    expect(toggle?.getAttribute("aria-checked")).toBe("false");
+    return box.dispose();
+  });
+
+  it("writes a vertical layout into the object's authored text", async () => {
+    const box = mountRunEditor({ runs: literalClock });
+    expect(box.content()["vertical"]).toBeUndefined();
+
+    await click(
+      box.host.querySelector<HTMLElement>("[data-yunari-text-vertical]")!,
+    );
+
+    // Authored content rather than an angle: the character stacking is the
+    // renderer's, so a bound run stacks as it re-resolves every sample.
+    expect(box.content()["vertical"]).toBe(true);
+    return box.dispose();
+  });
+
+  it("turns a vertical layout back to horizontal", async () => {
+    const box = mountRunEditor({ runs: literalClock });
+    const toggle = (): HTMLElement =>
+      box.host.querySelector<HTMLElement>("[data-yunari-text-vertical]")!;
+    await click(toggle());
+    await click(toggle());
+
+    expect(box.content()["vertical"]).toBe(false);
+    expect(toggle().getAttribute("aria-checked")).toBe("false");
+    return box.dispose();
+  });
+
   it("does not offer a text object's own alignment under arrange's vocabulary", async () => {
     const box = mountRunEditor({ runs: literalClock });
 
@@ -1247,8 +1283,12 @@ describe("how a run's controls are named", () => {
       sourceLabel("date.today"),
     );
 
+    // A switch's hidden form mirror is `aria-hidden` and out of the tab order,
+    // so it is not a control a name could reach; the button beside it is.
     const unnamed = [
-      ...box.host.querySelectorAll<HTMLElement>('input, [role="combobox"]'),
+      ...box.host.querySelectorAll<HTMLElement>(
+        'input:not([aria-hidden="true"]), [role="combobox"]',
+      ),
     ]
       .filter((control) => control.id === "")
       .map(

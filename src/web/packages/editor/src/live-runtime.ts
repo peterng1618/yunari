@@ -78,6 +78,9 @@ export class LiveRuntime {
         bindings: this.#bindings,
         transform: toAuthoringSegments,
         only: (candidate) => candidate === object,
+        // Flat, so the caret and the native text editing behave as typed and
+        // the token a run shows stays editable. Leaving the edit restacks it.
+        vertical: false,
         ...(this.#artboardHeight === undefined
           ? {}
           : { artboardHeight: this.#artboardHeight() }),

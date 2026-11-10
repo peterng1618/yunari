@@ -55,10 +55,9 @@ interface NewTextDefaults extends NewPaintDefaults {
   readonly originY: "top";
   readonly fontFamily: string;
   readonly fontWeight?: string | number;
-  /** The quarter turn a vertical text stands on. Fabric's own scene state, so
-   *  nothing beyond the angle is persisted for the type. */
-  readonly angle?: number;
   readonly [YUNARI_TEXT_PROPERTY]: {
+    /** Upright characters, one per line. Absent means ordinary horizontal flow. */
+    readonly vertical?: boolean;
     readonly runs: readonly [
       {
         readonly kind: "literal";
@@ -556,9 +555,9 @@ export function newInk(globals: FabricGlobals | undefined): {
 
 /** Supplies the paint and per-run typography required by a new text object. A
  *  `box` is the gesture's drag rectangle: it names the object `Text box` and
- *  travels to `addText`, which constructs a `Textbox` from it. `vertical` turns
- *  the object a quarter turn counter-clockwise, so it reads from the bottom up:
- *  a label along a chart's side is still one text with one set of runs. */
+ *  travels to `addText`, which constructs a `Textbox` from it. `vertical` stacks
+ *  its characters upright, one per line, as authored content rather than an
+ *  angle, so a dynamic run stacks the same way. */
 export function createNewTextDefaults(
   globals: FabricGlobals | undefined,
   text: string,
@@ -582,10 +581,10 @@ export function createNewTextDefaults(
     // must too — and from the same cascade, not its own inset.
     ...placed(placement),
     ...(box === undefined ? {} : { box }),
-    ...(vertical ? { angle: -90 } : {}),
     fontFamily: preset.family,
     ...(preset.weight === undefined ? {} : { fontWeight: preset.weight }),
     [YUNARI_TEXT_PROPERTY]: {
+      ...(vertical ? { vertical: true } : {}),
       runs: [
         { kind: "literal", text, typeToken, style: { color: { ref: color } } },
       ],

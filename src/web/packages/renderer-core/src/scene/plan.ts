@@ -81,6 +81,9 @@ export interface PlanTextLayout {
   readonly overflow: "clip" | "ellipsis" | "visible";
   readonly align: "left" | "center" | "right";
   readonly verticalAlign: "top" | "middle" | "bottom";
+  /** Each grapheme occupies its own line, upright. Derived from the authored
+   *  content; never a Fabric angle. */
+  readonly vertical: boolean;
   /** Computed wrapped-line capacity when font metrics are knowable. */
   readonly maxLines?: number;
 }

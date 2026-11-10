@@ -47,18 +47,40 @@ const PER_RUN_STYLE_PROPERTIES: readonly string[] = Object.values(
 
 type MutableStyles = Record<number, Record<number, Record<string, unknown>>>;
 
+/**
+ * The runs rewritten so each grapheme is its own line. A break follows every
+ * run but the last, so two runs never share a line; authored line breaks are
+ * dropped because the break is implicit in this mode.
+ */
+function stackedSegments(
+  segments: readonly PlanTextSegment[],
+  splitGraphemes: GraphemeSplitter,
+): readonly PlanTextSegment[] {
+  return segments.map((segment, index) => ({
+    ...segment,
+    text:
+      splitGraphemes(segment.text)
+        .filter((grapheme) => grapheme !== "\n" && grapheme !== "\r")
+        .join("\n") + (index < segments.length - 1 ? "\n" : ""),
+  }));
+}
+
 export function textShapeFor(
   segments: readonly PlanTextSegment[],
   nodeStyle: ResolvedStyle,
   splitGraphemes: GraphemeSplitter,
+  vertical = false,
 ): FabricTextShape {
-  const text = segments.map((segment) => segment.text).join("");
+  const shaped = vertical
+    ? stackedSegments(segments, splitGraphemes)
+    : segments;
+  const text = shaped.map((segment) => segment.text).join("");
 
-  if (segments.length <= 1) {
+  if (shaped.length <= 1) {
     // One run needs no per-character styles *when it agrees with the object*.
     // An author who styled that single run differently from its object must
     // still see it, so the authored keys are emitted rather than dropped.
-    const only = segments[0];
+    const only = shaped[0];
     if (only === undefined) {
       return { text, styles: {}, unsupported: [] };
     }
@@ -113,7 +135,7 @@ export function textShapeFor(
   let line = 0;
   let grapheme = 0;
 
-  for (const segment of segments) {
+  for (const segment of shaped) {
     const paint = paintFor(segment.style, "text");
     // Per-character styles override object paint, so include authored keys only.
     const perRun = Object.fromEntries(

@@ -258,6 +258,8 @@ export async function addText(
     readonly align?: "left" | "center" | "right" | undefined;
     readonly verticalAlign?: "top" | "middle" | "bottom" | undefined;
     readonly overflow?: "clip" | "ellipsis" | "visible" | undefined;
+    /** Upright characters, one per line. */
+    readonly vertical?: boolean | undefined;
     readonly bindings?: readonly BindingInput[] | undefined;
     readonly themeId?: string | undefined;
   },
@@ -310,6 +312,7 @@ export async function addText(
         ? {}
         : { verticalAlign: input.verticalAlign }),
       ...(input.overflow === undefined ? {} : { overflow: input.overflow }),
+      ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
       ...(bindings.length === 0 ? {} : { bindings: bindingsOf(bindings) }),
       palette,
     });

@@ -50,8 +50,8 @@ export interface NewObjectActions {
    * Arms the session's one placement gesture. The tile does not construct: the
    * pointer, not the menu, decides whether this is a Text or a Text box and
    * where it lands, and an object made here would appear before that decision.
-   * `vertical` asks for it standing on its end, and travels with the gesture
-   * because the object does not exist yet.
+   * `vertical` asks for its characters stacked upright, one per line, and
+   * travels with the gesture because the object does not exist yet.
    */
   readonly addText: (vertical?: boolean) => void;
   readonly addChart: (family: ChartFamily) => void;
@@ -72,10 +72,9 @@ export type InsertableObject =
   | {
       readonly kind: "text";
       readonly label: string;
-      /** The text stands on its end: the placement gesture still decides where
-       *  and whether it is a box, and this turns the object a quarter turn once
-       *  it exists. Nothing about the type is persisted, only the angle Fabric
-       *  already stores. */
+      /** Upright characters, one per line: the placement gesture still decides
+       *  where and whether it is a box, and this travels into the authored
+       *  content once it exists. Nothing is rotated and no angle is stored. */
       readonly vertical?: true;
     }
   | {

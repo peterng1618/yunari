@@ -71,6 +71,7 @@ function textNode(
         overflow: "visible",
         align: "left",
         verticalAlign: "top",
+        vertical: false,
         ...layout,
       },
     },
@@ -128,6 +129,24 @@ describe("the Fabric class is the width mode", () => {
       overflow: "visible",
       align: "right",
       verticalAlign: "top",
+      vertical: false,
+    });
+  });
+
+  it("derives the stacked layout from the authored content", () => {
+    const object = new IText("AB", { id: "label" });
+
+    expect(
+      authoredAlignment(object, {
+        vertical: true,
+        runs: [{ kind: "literal", text: "AB", typeToken: "typeTokens.body" }],
+      }),
+    ).toEqual({
+      wrap: false,
+      overflow: "visible",
+      align: "left",
+      verticalAlign: "top",
+      vertical: true,
     });
   });
 
@@ -146,6 +165,7 @@ describe("the Fabric class is the width mode", () => {
       overflow: "ellipsis",
       align: "left",
       verticalAlign: "middle",
+      vertical: false,
     });
   });
 
@@ -159,6 +179,45 @@ describe("the Fabric class is the width mode", () => {
     expect(auto).toBeInstanceOf(IText);
     expect(auto).not.toBeInstanceOf(Textbox);
     expect(fixed).toBeInstanceOf(Textbox);
+  });
+});
+
+describe("a vertical layout", () => {
+  it("stands the characters upright, one per line", async () => {
+    const object = new Textbox("AB", { width: 120 });
+    object.set("id", "label");
+    object.set(YUNARI_TEXT_PROPERTY, {
+      vertical: true,
+      runs: [{ kind: "literal", text: "AB" }],
+    } as unknown as TextContent);
+    const canvas = new Canvas(document.createElement("canvas"));
+    canvas.add(object);
+
+    applyAuthoredText(canvas, undefined, { bindings: {} });
+
+    expect(object.text).toBe("A\nB");
+    await canvas.dispose();
+  });
+
+  it("paints flat while the author edits it, so the caret behaves", async () => {
+    // The authoring view is one run of token text with a caret in it; a line
+    // break per grapheme would move that caret onto a line of its own. The
+    // authored pass that follows the edit restacks it.
+    const object = new Textbox("AB", { width: 120 });
+    object.set("id", "label");
+    object.set(YUNARI_TEXT_PROPERTY, {
+      vertical: true,
+      runs: [{ kind: "literal", text: "AB" }],
+    } as unknown as TextContent);
+    const canvas = new Canvas(document.createElement("canvas"));
+    canvas.add(object);
+
+    applyAuthoredText(canvas, undefined, { bindings: {}, vertical: false });
+    expect(object.text).toBe("AB");
+
+    applyAuthoredText(canvas, undefined, { bindings: {} });
+    expect(object.text).toBe("A\nB");
+    await canvas.dispose();
   });
 });
 

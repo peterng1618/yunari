@@ -64,6 +64,8 @@ export interface AddTextObjectInput {
   readonly align?: "left" | "center" | "right";
   readonly verticalAlign?: "top" | "middle" | "bottom";
   readonly overflow?: "clip" | "ellipsis" | "visible";
+  /** Upright characters, one per line. */
+  readonly vertical?: boolean;
   /** The semantic readings the value runs name. */
   readonly bindings?: readonly Binding[];
   /** The theme palette runs resolve their tokens against. */
@@ -87,6 +89,7 @@ export function addTextObject(input: AddTextObjectInput): {
         ? {}
         : { verticalAlign: input.verticalAlign }),
       ...(input.overflow === undefined ? {} : { overflow: input.overflow }),
+      ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
     },
     input.palette,
   );

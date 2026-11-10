@@ -315,6 +315,8 @@ export interface RunsView {
     readonly align: string;
     readonly verticalAlign: string;
     readonly overflow: string;
+    /** Upright characters, one per line. */
+    readonly vertical: boolean;
   };
   readonly presets: readonly RunOptionView[];
   readonly palettes: readonly RunOptionView[];
@@ -418,6 +420,7 @@ interface TextLayoutPatch {
   readonly align?: string;
   readonly verticalAlign?: string;
   readonly overflow?: string;
+  readonly vertical?: boolean;
 }
 
 /**

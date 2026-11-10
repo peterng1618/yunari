@@ -272,6 +272,10 @@ describe("editor panels", () => {
       "INPUT[type=radio][aria-hidden]", // Aqua Spray
       "INPUT[type=radio][aria-hidden]", // Mello Yellow
       "INPUT[type=radio][aria-hidden]", // Dusty Cactus
+      // The run editor's vertical-layout switch, a `ControlToggle`: its Base UI
+      // switch carries the checked state on the same hidden checkbox the glass
+      // one does.
+      "INPUT[type=checkbox][aria-hidden]", // Vertical text
       // The run editor's five: four `ControlSelect`s and one `ControlSwatch`,
       // which is `SelectControl` with an adornment — each a Base UI select's
       // value carrier.

@@ -27,6 +27,7 @@ import {
 } from "../components/ui/control-select.js";
 import { ControlSwatch } from "../components/ui/control-swatch.js";
 import { ControlText } from "../components/ui/control-text.js";
+import { ControlToggle } from "../components/ui/control-toggle.js";
 import {
   ControlRow,
   ControlWell,
@@ -400,6 +401,7 @@ export function projectRuns(
           : "top",
       overflow:
         typeof content["overflow"] === "string" ? content["overflow"] : "clip",
+      vertical: content["vertical"] === true,
     },
     presets,
     palettes: palettes.map(({ id, name }) => ({ id, name })),
@@ -842,6 +844,14 @@ export function RunEditor(props: {
         value={view.layout.align}
         options={ALIGN_OPTIONS}
         onChange={(align: string) => edits.writeLayout({ align })}
+      />
+      {/* A layout mode, not a rotation: the characters stay upright and each
+          takes its own line, so a bound run stacks as it re-resolves. */}
+      <ControlToggle
+        label={uiCopy.inspectorFields.verticalText}
+        data={{ "data-yunari-text-vertical": "" }}
+        checked={view.layout.vertical}
+        onChange={(vertical: boolean) => edits.writeLayout({ vertical })}
       />
       {/* Overflow and vertical placement are the box's contract: a point text
           has no authored height to clip or place inside, so the two controls

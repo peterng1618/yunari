@@ -140,6 +140,7 @@ export function text(
     readonly align?: "left" | "center" | "right";
     readonly verticalAlign?: "top" | "middle" | "bottom";
     readonly overflow?: "clip" | "ellipsis" | "visible";
+    readonly vertical?: boolean;
   },
   palette: Palette = starterPalette,
 ): ObjectJson {
@@ -184,6 +185,8 @@ export function text(
       ...(options?.verticalAlign === undefined
         ? {}
         : { verticalAlign: options.verticalAlign }),
+      // Upright characters, one per line: a layout mode rather than an angle.
+      ...(options?.vertical === true ? { vertical: true } : {}),
       // A reading that outgrows its box is truncated, not clipped to nothing:
       // an author has to be able to see that it did not fit. A prose label has
       // no reading to truncate and keeps the default clip.

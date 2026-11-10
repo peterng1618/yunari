@@ -461,6 +461,12 @@ export interface TextContent {
   readonly align?: "left" | "center" | "right";
   /** Text box only; an auto text is placed at the top of its measured height. */
   readonly verticalAlign?: "top" | "middle" | "bottom";
+  /**
+   * The characters stand upright, one per line, in reading order. Absent means
+   * the ordinary horizontal flow. A layout mode, not a rotation: the object's
+   * Fabric `angle` is untouched, so a quarter-turned text still reads sideways.
+   */
+  readonly vertical?: boolean;
 }
 
 /** Chart settings stay discriminated by family and share adapter-owned setting types. */

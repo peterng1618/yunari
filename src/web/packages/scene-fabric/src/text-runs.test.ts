@@ -118,6 +118,43 @@ describe("several runs", () => {
   });
 });
 
+describe("vertical layout", () => {
+  it("stands each grapheme on its own line, upright", () => {
+    const shape = textShapeFor(
+      [segment("A1", { fill: "#fff" })],
+      { fill: "#fff" },
+      splitGraphemes,
+      true,
+    );
+
+    expect(shape.text).toBe("A\n1");
+    // Nothing was authored on the run beyond the object's own paint, so the
+    // object still paints it and no per-character map is needed.
+    expect(shape.styles).toEqual({});
+  });
+
+  it("never lets two runs share a line", () => {
+    // A run is a chunk of reading, and in this mode a chunk ends its line, so
+    // the value starts below the label rather than beside its last character.
+    const shape = textShapeFor(
+      [segment("CPU ", { fill: "#888" }), segment("42", { fill: "#fff" })],
+      { fill: "#888" },
+      splitGraphemes,
+      true,
+    );
+
+    expect(shape.text).toBe("C\nP\nU\n \n4\n2");
+    expect(shape.styles[3]?.[0]).toMatchObject({ fill: "#888" });
+    expect(shape.styles[4]?.[0]).toMatchObject({ fill: "#fff" });
+  });
+
+  it("drops authored line breaks, because the break is implicit here", () => {
+    const shape = textShapeFor([segment("a\r\nb")], {}, splitGraphemes, true);
+
+    expect(shape.text).toBe("a\nb");
+  });
+});
+
 describe("what a run cannot carry", () => {
   it("reports an object-level property that differs per run", () => {
     // Fabric's per-character keys are fill, stroke, strokeWidth, the font

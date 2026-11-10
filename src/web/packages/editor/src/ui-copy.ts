@@ -519,11 +519,13 @@ export const uiCopy = {
         The canvas's own `align-top` / `align-center-y` / `align-bottom` move
         selected *objects*, and both surfaces are reachable from one selection,
         so this one names its own subject rather than borrowing the verb. */
-    verticalAlign: "Vertical text align",
+    verticalAlign: "Vertical align",
     verticalTop: "Top",
     verticalMiddle: "Middle",
     verticalBottom: "Bottom",
     overflow: "Overflow",
+    /** Upright characters, one per line: a layout mode, not a rotation. */
+    verticalText: "Vertical text",
     clip: "Clip",
     ellipsis: "Ellipsis",
     overflowVisible: "Visible",
@@ -629,6 +631,12 @@ export const uiCopy = {
       renderModeHint:
         "Mode A sends full-colour frames and is the default. Mode B sends paletted frames the way NZXT CAM does: a higher frame rate, with 256 colours.",
       savedRenderMode: "Saved the display's rendering mode.",
+      /** A local display's window: the host opened it, so the host can keep it
+       *  above the others. Paired displays and panels have no such window. */
+      alwaysOnTop: "Always on top",
+      alwaysOnTopHint:
+        "Keeps this display's window above other windows on this PC.",
+      savedAlwaysOnTop: "Saved the display's always-on-top setting.",
       /** The local display the owner adds by choosing a monitor the Host
        *  reports. The route needs both a name and a monitor, so the form offers
        *  both and says nothing when no monitor was found. */
@@ -2380,8 +2388,7 @@ export const uiCopy = {
     enter: "Enter",
     leave: "Leave",
     text: "Text",
-    /** A text standing on its end: the same object turned a quarter turn, so a
-     *  label can run up the side of a chart or a column. */
+    /** Upright characters, one per line: a layout mode, not a turned text. */
     verticalText: "Vertical text",
     /** A fixed text, whose row must say which of the two elements it is: both
      *  share the `text` layer kind, so the name is the only place the class
