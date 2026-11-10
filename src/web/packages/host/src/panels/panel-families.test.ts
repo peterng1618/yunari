@@ -54,10 +54,19 @@ describe("BUILTIN_PANEL_FAMILIES", () => {
     }
   });
 
-  it("declares no controls for the rows that have none", () => {
-    expect(builtins.forDevice(0x1cbe, 0xa092)?.commands).toEqual([]);
-    expect(builtins.forDevice(0x1cbe, 0xa088)?.commands).toEqual([]);
-    expect(builtins.forDevice(0x1e71, 0x3008)?.commands).toEqual([]);
+  it("declares the controls each family accepts", () => {
+    expect(builtins.forDevice(0x1cbe, 0xa092)?.commands).toEqual([
+      "brightness",
+      "status",
+    ]);
+    expect(builtins.forDevice(0x1cbe, 0xa088)?.commands).toEqual([
+      "brightness",
+      "status",
+    ]);
+    expect(builtins.forDevice(0x1e71, 0x3008)?.commands).toEqual([
+      "brightness",
+      "status",
+    ]);
   });
 
   it("declares each family's raster geometry", () => {

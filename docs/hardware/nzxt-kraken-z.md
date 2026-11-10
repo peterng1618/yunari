@@ -47,12 +47,16 @@ Open probes the firmware before anything is written:
 
 | Send | Expected reply | Meaning |
 |---|---|---|
-| `10 01` | `11 01` | Firmware version |
-| `30 01` | `31 01` | LCD information |
+| `10 01` | `11 01` | Firmware version — major/minor/patch at bytes `0x11..0x13` |
+| `30 01` | `31 01` | LCD information — brightness at `0x18`, mount quarter turns at `0x1A` |
+| `30 02 01 <pct> 00 00 01 <orientation>` | — | Sets LCD brightness; the current orientation travels in the same report |
 
-`31 01` carries the mount's quarter turns in byte `0x1A` and the brightness. The
-driver does not read either: the display record owns rotation, and brightness is
-not implemented for this family.
+The driver does not rotate the picture: the display record owns rotation and the
+`31 01` quarter turns are only read, never applied to frames. Brightness is the
+Brightness control, written with liquidctl's own sequence; the current
+orientation is carried into the write so a brightness change does not turn the
+glass. The Status control reports the firmware and the LCD's brightness and
+orientation.
 
 - **The firmware emits unsolicited `75 01` status reports.** A reader must match
   the exact expected reply prefix (`33 02`, `37 01`, …) rather than "the next
@@ -62,6 +66,42 @@ not implemented for this family.
   with a passive second handle and with a 60 s silent run.
 
 Reads use a 120 ms timeout and 8 attempts.
+
+## What CAM exposes beyond these reports
+
+Recovered 2026-11-10 from the shipped `@nzxt/cam-core` addon and the packed
+application code (no hardware was touched). These are the surfaces NZXT's own
+software has that this driver does not use.
+
+- **`LcdApi` methods:** `previewGraphic`, `renderGraphic`, `setBrightness`,
+  `setStandbyClock`, `startLcdStreaming`, `stopRendering`, `watchLcdData`. The
+  rendering and streaming methods are the content path this driver replaces with
+  its own PNG decode and bucket ring.
+- **`DisplayConfig { backlight, sleep, orientation }`.** The three settings CAM
+  keeps per LCD device. `backlight` and `orientation` are the two values
+  `31 01`/`30 02` already carry. `sleep` has no observed non-zero value: the
+  `30 02` report is always written `30 02 01 <pct> 00 00 01 <orient>` by every
+  driver, so bytes 4 and 5 have never been varied.
+- **`setStandbyClock(device, boolean)`.** CAM wires this to a lighting-profile
+  `Standby Clock` toggle and applies it to every capable device, including the
+  Kraken Z. The boolean is passed into the addon; what the addon does with it is
+  not recovered.
+- **Device information fields.** CAM's reader names `display_backlight_level`,
+  `sleep_mode`, `screen_orientation`, `number_of_buckets`, `max_flash_size` and
+  `device_busy` in the LCD information response, and
+  `current_graphics_mode_on_lcd_screen` in a separate state response. This is
+  consistent with every value `31 01` already gives up; the status response's
+  exact bytes are unmapped.
+- **`0x30 0x04 <bucket>` queries a bucket.** It is the content path's query, not
+  a control; this driver tracks its ring in memory instead.
+
+**Standby clock and display sleep stay unimplemented.** The addon is a 48 MB
+stripped Rust binary: its NAPI class registers the method names above, but the
+callback dispatches the actual write through a trait vtable, so the report bytes
+are not recoverable from the binary. Writing a guessed `sleep` byte into an LCD
+controller is exactly the class of command this document's "known opcodes only"
+rule excludes. A USB capture of CAM toggling the toggle is the cheap way to
+close it (see *Open questions*).
 
 ## Buckets
 
@@ -246,8 +286,22 @@ length, the slot count and the settle differ.
 ## Open questions
 
 - Firmware versions other than 5.11.0 and any command differences.
-- The rest of `31 01`'s field layout (brightness encoding is known to exist,
-  but the byte's scale is unread).
+- The rest of `31 01`'s field layout beyond brightness (`0x18`) and orientation
+  (`0x1A`). CAM's reader names a `sleep_mode` and a `current_graphics_mode` for
+  this device, so both live in one of the unread reports.
+- **Bytes 4 and 5 of the `30 02` report.** Every known driver writes them `00`,
+  and `DisplayConfig` carries a `sleep` field, so a sleep setting plausibly
+  lives in one of them. That is a guess, not a fact: no non-zero value has ever
+  been observed, and sending one is refused until a capture shows what CAM
+  writes.
+- **The standby-clock report.** `LcdApi.setStandbyClock(device, bool)` exists
+  and CAM's UI drives it, but the bytes are behind dynamic dispatch in a
+  stripped 48 MB addon. Capture with CAM running, the Standby Clock toggle
+  flipped, filtering USB `1e71:3008` interface 1; the 64-byte report is the
+  answer.
+- The brightness write (`30 02 01 …`) is liquidctl's captured sequence; it has
+  not been exercised on the attached Z73 since the control was added
+  (2026-11-10).
 - Whether mode `0x03` has a bucket-size rule of its own, and whether other
   Kraken models share this exact bucket table.
 - Why CAM's paced stream shows ~110 ms intervals when this firmware drops a

@@ -5640,7 +5640,7 @@ describe("A local monitor is specified rather than paired", () => {
             {
               ...ATTACHED_PANEL,
               held: false,
-              commands: [],
+              commands: ["brightness", "status"],
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',
@@ -5678,7 +5678,7 @@ describe("A local monitor is specified rather than paired", () => {
               ...ATTACHED_PANEL,
               held: true,
               heldId: "strip",
-              commands: [],
+              commands: ["brightness", "status"],
               support: {
                 maker: "Lian Li",
                 hardwareRevision: '9.2"',

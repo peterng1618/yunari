@@ -1,7 +1,7 @@
 import forge from "node-forge";
 import { describe, expect, it, vi } from "vitest";
 import { PACKET_KEY } from "./panel-protocol.js";
-import { TurUsbPanel } from "./tur-usb-panel.js";
+import { TUR_FAMILIES, TurUsbPanel } from "./tur-usb-panel.js";
 import { type encodePanelH264, H264_BLOCK_BYTES } from "./tur-usb-video.js";
 
 /** The encrypted command block inside a 512-byte frame. */
@@ -519,5 +519,66 @@ describe("TurUsbPanel", () => {
     expect(fake.writes).toHaveLength(2);
     expect(fake.writes[0]).toHaveLength(512);
     expect(fake.writes[1]?.length).toBe(512 + 2);
+  });
+
+  it("declares the controls the editor can draw for every listed model", () => {
+    const panel = opened(fakePanel());
+    expect(panel.controls?.commands).toEqual(["brightness", "status"]);
+    for (const family of TUR_FAMILIES) {
+      expect(family.commands).toEqual(["brightness", "status"]);
+    }
+  });
+
+  it("writes brightness as a whole percent at the opcode's parameter byte", async () => {
+    const fake = fakePanel();
+    const panel = opened(fake);
+    await panel.open();
+    fake.reset();
+    fake.reply(14, new Uint8Array(512));
+
+    if (panel.controls === undefined) throw new Error("no controls");
+    await expect(
+      panel.controls.run({ kind: "brightness", level: 30 }),
+    ).resolves.toBe("");
+
+    const command = commandOf(fake.writes[0]!);
+    expect(command?.[0]).toBe(14);
+    expect(command?.[8]).toBe(30);
+  });
+
+  it("refuses a brightness outside the percent range", async () => {
+    const panel = opened(fakePanel());
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(
+      panel.controls.run({ kind: "brightness", level: 101 }),
+    ).rejects.toThrow(/from 0 to 100/);
+  });
+
+  it("answers status with the firmware name the panel reports", async () => {
+    const fake = fakePanel();
+    const panel = opened(fake);
+    await panel.open();
+    fake.reset();
+    const reply = new Uint8Array(512);
+    reply.set(new TextEncoder().encode("lianli92_0001_2026041401"), 8);
+    fake.reply(10, reply);
+
+    if (panel.controls === undefined) throw new Error("no controls");
+    await expect(panel.controls.run({ kind: "status" })).resolves.toBe(
+      "lianli92_0001_2026041401",
+    );
+  });
+
+  it("refuses a status the panel did not answer", async () => {
+    const fake = fakePanel();
+    const panel = opened(fake);
+    await panel.open();
+    fake.reset();
+
+    if (panel.controls === undefined) throw new Error("no controls");
+    await expect(panel.controls.run({ kind: "status" })).rejects.toThrow(
+      /did not answer/,
+    );
   });
 });

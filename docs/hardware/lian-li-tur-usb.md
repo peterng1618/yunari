@@ -67,10 +67,10 @@ frame**.
 
 | Opcode | Name | Fields and effect |
 |---|---|---|
-| 10 | `version` | Sync/keep-alive. Every driver sends it first after opening; some firmware ignores frames before it. |
+| 10 | `version` | Sync/keep-alive. Every driver sends it first after opening; some firmware ignores frames before it. The reply body `[8..]` is the zero-terminated ASCII firmware name, which the Status control returns. |
 | 11 | `restart` | Not used. |
 | 13 | `rotate` | Parameter byte 8. The panel's own quarter-turn state, **persists across power cycles**. Mode 2 is upright for the 9.2" with the display record's 90° rotation. |
-| 14 | `brightness` | Parameter byte 8. Exists; this driver does not expose it. |
+| 14 | `brightness` | Parameter byte 8, **0–100 percent**. The Brightness control writes it; any later level changes it back. L-Connect's own constants are 0 and 100, and lian-li-linux sends the raw percent. |
 | 15 | `frame-rate` | Parameter byte 8. Sent as 30 on open, as the vendor does. **Not sent before playback**: a 15 immediately before the blocks makes the decoder leave ghost trails of moving parts (measured 2026-10-31); the stream's own timing is used instead. |
 | 17 | `h264-block` | Asks the block size this panel wants. Answer: big-endian uint32 at reply bytes 8–11; fall back to 202,752 when it is zero or unanswered. |
 | 38/39/40 | file open/write/delete | **Deliberately not used.** Storage writes are destructive and unneeded: this host never uploads a file. |
@@ -81,6 +81,70 @@ frame**.
 | 121 | `play-block` | One H.264 block: length big-endian at 8–11, final-block byte at 12. |
 | 122 | `buffer-level` | The decoder's depth in reply byte 8. |
 | 123 | `stop-play` | Ends playback. A block written after it starts a new playback nobody feeds. |
+
+## Vendor opcode inventory
+
+The complete `CmdType : byte` enum, recovered 2026-11-10 from the managed
+`lianli.lcd207.dll` and `lianli.slv3.dll` that L-Connect 3 ships (decompiled with
+`ilspycmd`; no hardware was touched). The table exists so a future driver does
+not re-discover it: every value is classified, and only the `used` rows are
+reachable from this host.
+
+| Value | Name | Class |
+|---|---|---|
+| 10 | `GetVer` | used — `version` |
+| 11 | `Reboot` | **destructive** — reboots the panel |
+| 13 | `Rotate` | used — `rotate`, module-private |
+| 14 | `BrigthSet` | used — `brightness` |
+| 15 | `SetFrameRate` | used — `frame-rate` |
+| 17 | `GetH264Block` | used — `h264-block` |
+| 40 | `UpdateFireWare` | **destructive** — enters firmware update |
+| 42 | `DelFile` | **destructive** — deletes stored media |
+| 43 | `OTA` | **destructive** |
+| 44 | `RebootApp` | **destructive** |
+| 51 | `SetClock` | unknown semantics |
+| 52 | `StopClock` | unknown semantics |
+| 96 | `GetTemperature` | read-only, unexercised |
+| 97 | `SetPumpSpeed` | writes a pump this host does not own |
+| 98 | `GetPumpSpeed` | read-only, unexercised |
+| 99 | `QueryDir` | read-only, unexercised |
+| 101 | `PushJpg` | used — `push-jpeg` |
+| 105 | `FB1_State` | used — `overlay-layer` |
+| 118 | `GetH264Frame` | unused — decoding lives in the panel |
+| 119 | `StartPlay1` | unused — legacy variant |
+| 120 | `StartPlay2` | unused — legacy variant |
+| 121 | `StartPlay` | used — `play-block` |
+| 122 | `QueryBlock` | used — `buffer-level` |
+| 123 | `StopPlay` | used — `stop-play` |
+| 150 | `SwitchToDesktop` | **destructive** — hands the panel to the OS |
+| 151 | `Test` | **factory test** — never send |
+| 201 | `GetPosIndex` | read-only, unexercised |
+| 202 | `SetScreenOffset` | unknown semantics |
+| 249 | `SetWthemeIndex` | unknown semantics — selects a stored theme |
+| 250 | `GetH2Params` | read-only, unexercised |
+| 251 | `SyncPumpFan` | writes a pump this host does not own |
+| 252 | `PushRgbData` | drives the LED MCU, not the display |
+| 253 | `FactoryH264Test` | **factory test** — never send |
+
+Three facts from the same decompilation:
+
+- **`Rotate(int r = -1)`.** `-1` re-sends the stored state; `0..3` are quarter
+  turns, sent as one parameter byte. With a theme loaded, the vendor method
+  re-pushes the background JPEG after the rotate, so the panel's own rotate and
+  the picture's upright direction are changed together. This driver pins mode 2
+  at open and never exposes the opcode; the display record's rotation is the
+  owner.
+- **`SetBrightness(int l)` casts to `byte` without a clamp.** The 0–100 percent
+  range therefore comes from L-Connect's UI constants and lian-li-linux, not
+  from the vendor setter. The host refuses >100 rather than sending the cast
+  value.
+- **`WinUsbLcd92.USB_CMD` is a second enum.** `Usb_SendRf=16`, `USB_GetMac=17`,
+  `USB_SendHeart=18`, `USB_ResetAnother=21`, and firmware commands 32–37 drive
+  the RF/LED MCU beside the panel. Its numbers overlap `CmdType` values and the
+  two are not interchangeable.
+
+No vendor command blanks the glass: brightness 0 is the only off switch, and
+`FB1_State` (105) hides the overlay layer, not the picture.
 
 Vendor firmware/storage opcodes (38/39/40, 98, 100, 110, 113) are omitted from
 the driver rather than merely unused: this host never writes the device's
@@ -256,8 +320,20 @@ loop.
 ## Open questions
 
 - Firmware versions other than the 9.2"'s and their differences.
-- `brightness` (14) and `clock` (51) field semantics: declared from vendor code,
-  never exercised.
+- `SetClock`/`StopClock` (51/52) field semantics: declared by the vendor enum,
+  no call site recovered, never exercised.
+- `SetScreenOffset` (202) and `SetWthemeIndex` (249) parameters: no call site
+  recovered. `SetWthemeIndex` selects a theme already stored on the panel, so it
+  would also re-show whatever L-Connect left there.
+- Whether the read-only queries answer on these models, and what their replies
+  carry: `GetTemperature` (96), `GetPumpSpeed` (98), `QueryDir` (99),
+  `GetPosIndex` (201), `GetH2Params` (250). None adds a user-facing control; a
+  probe would have to show the panel answering before any of them is used.
+- The 9.2" brightness range (14) is taken from L-Connect's 0/100 constants and
+  lian-li-linux; the vendor setter casts to `byte` with no clamp, so it proves
+  nothing. It has not been exercised on the attached 9.2" since the control was
+  added (2026-11-10); a wrong mapping is the first suspect if the glass responds
+  oddly.
 - The exact payload cap per firmware. 512,000 bytes is the vendor's measured
   limit; it may differ on other models.
 - Whether the 8.8" accepts the same `transpose`/rotate-mode pairing.

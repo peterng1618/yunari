@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { openKraken } from "./kraken-z3-panel.js";
+import { KRAKEN_FAMILIES, openKraken } from "./kraken-z3-panel.js";
 
 /**
  * The firmware's transfer lifecycle, which the wire cannot report.
@@ -27,6 +27,11 @@ const fake = vi.hoisted(() => {
     bulkWrites: [] as Uint8Array[],
     /** Every control report the driver wrote, for assertions. */
     writes: [] as number[][],
+    /** What `11 01` reports as the firmware version. */
+    firmware: [5, 11, 0] as [number, number, number],
+    /** What `31 01` reports as the LCD state. */
+    lcdBrightness: 55,
+    lcdOrientation: 2,
   };
 
   const reply = (first: number, second: number, status = 1): number[] => {
@@ -53,9 +58,18 @@ const fake = vi.hoisted(() => {
       const [first, second, value] = report;
 
       if (first === 0x10 && second === 0x01) {
-        state.queue.push(reply(0x11, 0x01));
+        const info = reply(0x11, 0x01);
+        info[0x11] = state.firmware[0];
+        info[0x12] = state.firmware[1];
+        info[0x13] = state.firmware[2];
+        state.queue.push(info);
       } else if (first === 0x30 && second === 0x01) {
-        state.queue.push(reply(0x31, 0x01));
+        const info = reply(0x31, 0x01);
+        info[0x18] = state.lcdBrightness;
+        info[0x1a] = state.lcdOrientation;
+        state.queue.push(info);
+      } else if (first === 0x30 && second === 0x02) {
+        // A brightness write draws no reply, as liquidctl's path assumes.
       } else if (first === 0x36 && second === 0x03) {
         // Liquid mode also ends whatever transfer was open.
         state.transferOpen = false;
@@ -275,6 +289,63 @@ describe("KrakenPanel mode B", () => {
       ([first, second]) => first === 0x36 && second === 0x02,
     );
     expect(frameWrites[end + 1]?.slice(0, 2)).toEqual([0x38, 0x01]);
+
+    await panel.close();
+  });
+});
+
+describe("KrakenPanel controls", () => {
+  beforeEach(() => {
+    fake.state.writes.length = 0;
+    fake.state.queue.length = 0;
+    fake.state.firmware = [5, 11, 0];
+    fake.state.lcdBrightness = 55;
+    fake.state.lcdOrientation = 2;
+  });
+
+  it("declares brightness and status on the family", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+
+    expect(panel.controls?.commands).toEqual(["brightness", "status"]);
+    expect(KRAKEN_FAMILIES[0]?.commands).toEqual(["brightness", "status"]);
+
+    await panel.close();
+  });
+
+  it("carries the panel's own orientation into a brightness write", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(
+      panel.controls.run({ kind: "brightness", level: 40 }),
+    ).resolves.toBe("");
+
+    const write = fake.state.writes
+      .filter(([first, second]) => first === 0x30 && second === 0x02)
+      .at(-1);
+    expect(write?.slice(0, 8)).toEqual([0x30, 0x02, 0x01, 40, 0, 0, 1, 2]);
+
+    await panel.close();
+  });
+
+  it("answers status with the firmware and LCD state", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(panel.controls.run({ kind: "status" })).resolves.toBe(
+      "Firmware 5.11.0, LCD brightness 55%, orientation 180°",
+    );
+
+    await panel.close();
+  });
+
+  it("refuses a brightness outside the percent range", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    if (panel.controls === undefined) throw new Error("no controls");
+
+    await expect(
+      panel.controls.run({ kind: "brightness", level: -1 }),
+    ).rejects.toThrow(/from 0 to 100/);
 
     await panel.close();
   });

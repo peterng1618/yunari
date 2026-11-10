@@ -4,6 +4,8 @@ import { usb } from "usb";
 import { reportedSerial } from "../settings/displays.js";
 import { toPalettedFrame } from "./kraken-palette.js";
 import type {
+  PanelControlCommand,
+  PanelControls,
   PanelDevice,
   PanelFamily,
   PanelGeometry,
@@ -246,6 +248,13 @@ class KrakenPanel implements PanelDevice {
   private ready = false;
   /** The bucket on the glass, or undefined before the first frame. */
   private shown: number | undefined;
+  /** Hardware controls, percent in and the LCD query kept here. */
+  readonly controls: PanelControls = {
+    commands: ["brightness", "status"],
+    run: (command) => this.runControl(command),
+  };
+  /** One writer at a time: a manual control must not interleave with the ring. */
+  private lock: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly control: KrakenControl,
@@ -269,15 +278,32 @@ class KrakenPanel implements PanelDevice {
   async open(): Promise<void> {
     this.control.drain();
 
-    this.control.write([0x10, 0x01]);
-    if (this.control.readUntil(0x11, 0x01) === undefined) {
+    if (this.firmware() === undefined) {
       throw new Error("The Kraken did not answer its firmware query.");
     }
 
-    this.control.write([0x30, 0x01]);
-    if (this.control.readUntil(0x31, 0x01) === undefined) {
+    if (this.lcdInfo() === undefined) {
       throw new Error("The Kraken did not answer its LCD query.");
     }
+  }
+
+  /** The `11 01` reply's version numbers, or undefined when it drew no answer. */
+  private firmware(): [number, number, number] | undefined {
+    this.control.write([0x10, 0x01]);
+    const reply = this.control.readUntil(0x11, 0x01);
+    if (reply === undefined) return undefined;
+
+    return [
+      reply.report[0x11] ?? 0,
+      reply.report[0x12] ?? 0,
+      reply.report[0x13] ?? 0,
+    ];
+  }
+
+  /** The `31 01` reply: brightness at 0x18, orientation at 0x1A. */
+  private lcdInfo(): Uint8Array | undefined {
+    this.control.write([0x30, 0x01]);
+    return this.control.readUntil(0x31, 0x01)?.report;
   }
 
   /**
@@ -288,40 +314,42 @@ class KrakenPanel implements PanelDevice {
    * object there would be overwritten.
    */
   async present(image: Uint8Array): Promise<void> {
-    const rgba = decodePngRgba(image, SIZE, SIZE);
+    await this.exclusive(async () => {
+      const rgba = decodePngRgba(image, SIZE, SIZE);
 
-    if (!this.ready) {
-      await this.prepare();
-      this.ready = true;
-    }
+      if (!this.ready) {
+        await this.prepare();
+        this.ready = true;
+      }
 
-    // `prepare` leaves bucket 0 on the glass (in liquid mode), and every later
-    // frame targets the bucket `shown` is not.
-    const target = this.nextBucket();
-
-    try {
-      await this.writeFrame(target, rgba);
-      this.shown = target;
-    } catch (error) {
-      if (!(error instanceof FrameRefused) || error.status !== 9) throw error;
-
-      // **Status 9 means `shown` is wrong, and the ring can repair itself.**
-      // The firmware refuses the bucket it is displaying, so a refused delete,
-      // setup or switch to `target` is the firmware saying that bucket is on
-      // the glass. The bucket `shown` names is therefore the one not displayed:
-      // write it again, which recovers without liquefying the glass.
-      const other = this.bucketAfter(target);
+      // `prepare` leaves bucket 0 on the glass (in liquid mode), and every later
+      // frame targets the bucket `shown` is not.
+      const target = this.nextBucket();
 
       try {
-        await this.writeFrame(other, rgba);
-        this.shown = other;
-      } catch (retry) {
-        // Neither bucket takes a frame: the table itself changed under us, so
-        // the next frame rebuilds it.
-        this.ready = false;
-        throw retry;
+        await this.writeFrame(target, rgba);
+        this.shown = target;
+      } catch (error) {
+        if (!(error instanceof FrameRefused) || error.status !== 9) throw error;
+
+        // **Status 9 means `shown` is wrong, and the ring can repair itself.**
+        // The firmware refuses the bucket it is displaying, so a refused delete,
+        // setup or switch to `target` is the firmware saying that bucket is on
+        // the glass. The bucket `shown` names is therefore the one not displayed:
+        // write it again, which recovers without liquefying the glass.
+        const other = this.bucketAfter(target);
+
+        try {
+          await this.writeFrame(other, rgba);
+          this.shown = other;
+        } catch (retry) {
+          // Neither bucket takes a frame: the table itself changed under us, so
+          // the next frame rebuilds it.
+          this.ready = false;
+          throw retry;
+        }
       }
-    }
+    });
   }
 
   /** The bucket this frame goes into: the one not on the glass. Mode A keeps a
@@ -476,6 +504,83 @@ class KrakenPanel implements PanelDevice {
     return this.control.readUntil(0x39, 0x01)?.report[14];
   }
 
+  private async runControl(command: PanelControlCommand): Promise<string> {
+    switch (command.kind) {
+      case "brightness": {
+        const level = command.level;
+        if (!Number.isInteger(level)) {
+          throw new Error(
+            `The brightness must be a whole percent; received ${level}.`,
+          );
+        }
+        if (level < 0 || level > 100) {
+          throw new Error(
+            `The brightness must be from 0 to 100; received ${level}.`,
+          );
+        }
+
+        return await this.exclusive(async () => {
+          const lcd = this.lcdInfo();
+          if (lcd === undefined) {
+            throw new Error("The Kraken did not answer its LCD query.");
+          }
+
+          // liquidctl's brightness write: the current orientation travels with
+          // the level, because the firmware takes both fields in one report.
+          this.control.write([
+            0x30,
+            0x02,
+            0x01,
+            level,
+            0x00,
+            0x00,
+            0x01,
+            lcd[0x1a] ?? 0,
+          ]);
+
+          // The write draws no reply, so there is no device text to show.
+          return "";
+        });
+      }
+      case "status":
+        return await this.exclusive(async () => {
+          const firmware = this.firmware();
+          if (firmware === undefined) {
+            throw new Error("The Kraken did not answer its firmware query.");
+          }
+
+          const lcd = this.lcdInfo();
+          const parts = [
+            `Firmware ${firmware[0]}.${firmware[1]}.${firmware[2]}`,
+          ];
+          if (lcd !== undefined) {
+            parts.push(`LCD brightness ${lcd[0x18] ?? 0}%`);
+            parts.push(`orientation ${(lcd[0x1a] ?? 0) * 90}°`);
+          }
+
+          return parts.join(", ");
+        });
+      default:
+        throw new Error("That is not a command this panel accepts.");
+    }
+  }
+
+  /** One writer at a time: a control must not interleave with a frame's ring. */
+  private async exclusive<T>(work: () => Promise<T>): Promise<T> {
+    const previous = this.lock;
+    let release: () => void = () => {};
+    this.lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+    }
+  }
+
   async close(): Promise<void> {
     await this.bulk.close();
     // A HID handle is a file; closing it is the release.
@@ -612,7 +717,7 @@ export const KRAKEN_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: ["5.11.0"],
       updatedAt: "2026-11-06",
     },
-    commands: [],
+    commands: ["brightness", "status"],
     geometry: { width: SIZE, height: SIZE },
     renderModes: ["mode-a", "mode-b"],
     attached: () => Promise.resolve(attachedKrakens()),

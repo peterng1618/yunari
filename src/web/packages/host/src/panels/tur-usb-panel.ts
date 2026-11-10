@@ -1,5 +1,6 @@
 import { usb } from "usb";
 import type {
+  PanelControls,
   PanelDevice,
   PanelFamily,
   PanelGeometry,
@@ -8,6 +9,7 @@ import type {
   PanelVideoPlacement,
 } from "./panel-device.js";
 import { commandPacket, type PanelCommand } from "./panel-protocol.js";
+import { turUsbControls } from "./tur-usb-control.js";
 import { transparentPng } from "./tur-usb-overlay.js";
 import { encodePanelH264, H264_BLOCK_BYTES } from "./tur-usb-video.js";
 
@@ -149,7 +151,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: ["lianli92_0001_2026041401"],
       updatedAt: "2026-10-31",
     },
-    commands: [],
+    commands: ["brightness", "status"],
     geometry: modelGeometry("lianli-9-2"),
     attached: () => attachedPanels(),
     open: () => {
@@ -169,7 +171,7 @@ export const TUR_FAMILIES: readonly PanelFamily[] = [
       supportedFirmware: [],
       updatedAt: "2026-10-28",
     },
-    commands: [],
+    commands: ["brightness", "status"],
     geometry: modelGeometry("lianli-8-8"),
     attached: () => attachedPanels(),
     open: () => {
@@ -213,6 +215,15 @@ export class TurUsbPanel implements PanelDevice {
   readonly geometry: { readonly width: number; readonly height: number };
   /** The panel decodes H.264 itself, so it can play a video background. */
   readonly video: PanelVideo;
+  /** Hardware controls, over this panel's own locked exchange. */
+  readonly controls: PanelControls = turUsbControls(
+    {
+      request: (command, timeoutMs, fields) =>
+        this.request(command, timeoutMs, fields),
+      exclusive: (work) => this.exclusive(work),
+    },
+    READ_TIMEOUT_MS,
+  );
   private readonly device: PanelUsbDevice;
   private readonly started = Date.now() - 86_400_000;
   private opened = false;
