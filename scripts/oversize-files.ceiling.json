@@ -40,6 +40,7 @@
   "src/web/packages/editor/src/text-manager/index.ts",
   "src/web/packages/editor/src/ui-copy-surfaces.test.ts",
   "src/web/packages/editor/src/ui-copy.ts",
+  "src/web/packages/editor/src/viewport-manager/viewport.test.ts",
   "src/web/packages/host/src/extensions/providers.test.ts",
   "src/web/packages/host/src/main.ts",
   "src/web/packages/host/src/panels/turzx-panel.test.ts",

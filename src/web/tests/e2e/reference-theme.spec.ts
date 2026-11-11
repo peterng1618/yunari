@@ -11,6 +11,7 @@ import {
   captureVisualReview,
   chooseAssetFile,
   clientOfScene,
+  dismissPlacement,
   enterLayer,
 } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
@@ -795,11 +796,25 @@ test.describe("the reference composition, authored", () => {
     // carries the face, so the author can replace it rather than start again.
     const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
-    expect(saved.envelope["assets"]).toEqual(
+    // **The export carries no file nothing references** (`#outputCopy`): an
+    // unused declaration stays in the author's document but is never part of
+    // what they send. The cleanup sheet offered it, and the answer above kept
+    // it, so its absence here is the output rule rather than a loss.
+    expect(
+      saved.envelope["assets"],
+      "the package carries a declaration nothing references",
+    ).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "broken", family: "Broken Test Face" }),
       ]),
     );
+    // **And the author's document still holds it**, so the refused face can be
+    // replaced rather than imported again.
+    await openPane(page, "Assets");
+    await expect(
+      page.locator('[data-yunari-asset-card="broken"]'),
+      "the document dropped the face the browser refused to load",
+    ).toBeVisible();
     expect(
       objectsOf(saved.envelope).find((object) => object["id"] === "authoring"),
     ).toMatchObject({ yunariGlass: { blurRadius: expect.any(Number) } });
@@ -2433,6 +2448,11 @@ test.describe("background media", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
+    // The import asks where the picture goes; this case repoints the artboard
+    // at the declaration through its own control, so the question is answered
+    // by closing it. Left open, the shell behind it leaves the accessibility
+    // tree and every `getByRole` for a rail slot resolves to nothing.
+    await dismissPlacement(page);
     // The picture is the background layer's, so the control is in the selection
     // inspector, which renders while that layer is selected. The Assets pane was
     // showing, so selecting the layer is a real pane swap.
@@ -2456,6 +2476,7 @@ test.describe("background media", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
+    await dismissPlacement(page);
     // The declared ids, read from the media control's own opened list: it is
     // plan 1's select, so it has no `option` elements to evaluate.
     //
@@ -2630,6 +2651,10 @@ test.describe("known gaps, pinned", () => {
       mimeType: "image/png",
       buffer: PIXEL_PNG,
     });
+    // Declared is all this case needs: the export is about the declaration's
+    // use from the scene, and the open placement question would hide the
+    // toolbar the export sits in.
+    await dismissPlacement(page);
     const saved = await exportPackage(page);
     expect(forbiddenKeys(saved.envelope)).toEqual([]);
   });

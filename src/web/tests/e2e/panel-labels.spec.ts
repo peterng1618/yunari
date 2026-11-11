@@ -214,19 +214,24 @@ test.describe("the settings panels name every control", () => {
     const presetRow = page.locator('[data-yunari-type-preset-row="type"]');
     await expect(presetRow).toBeVisible();
     await presetRow.click();
-    // Revealed rather than always drawn, exactly as the paint section's is.
-    await page.locator("[data-yunari-token-delete]").click();
+    // The weight is drawn as a reading when the minted token's family declares
+    // no faces, and as a named select when the package holds some; either way
+    // it reports the seeded weight. Read before the delete below, because the
+    // minted token is unreferenced: its first press removes it rather than
+    // revealing a reassignment, and the inspector then has no subject. The
+    // reading carries no accessible name and needs none — it is text, not a
+    // control, which is why it is not in PRESET_CONTROLS.
+    const weight = page.locator("[data-yunari-token-weight]");
+    await expect(weight).toBeVisible();
+    await expect(weight).toContainText("300");
+    // The delete pair is measured while the token it belongs to is still the
+    // inspector's subject.
     await audit(PRESET_CONTROLS);
-    // The weight is drawn as a reading in this scenario, not skipped: the fresh
-    // theme declares no faces for the minted token's family, so the row prints
-    // the seeded weight rather than a select (the comment on PRESET_CONTROLS).
-    // A silent `count === 0` skip would let the row vanish unmeasured. The
-    // element is named a span because that is what makes it a reading: a select
-    // would put the same hook on a button's trigger, where this fails and a bare
-    // `toHaveText` on the hook would still pass.
-    await expect(page.locator("span[data-yunari-token-weight]")).toHaveText(
-      "300",
-    );
+    await page.locator("[data-yunari-token-delete]").click();
+    await expect(
+      page.locator("[data-yunari-token-weight]"),
+      "the unreferenced token the delete pressed was not removed",
+    ).toBeHidden();
     await openPane(page, "Theme settings");
     await audit(DOCUMENT_CONTROLS);
     // The background's controls are the selection inspector's, which renders

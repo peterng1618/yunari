@@ -397,6 +397,7 @@ export function createViewportManager({
     // should perform one — which is exactly the disagreement that made an
     // author's pan vanish on the window nudge that was meant to keep it.
     const next = fitTransformIn(viewport);
+    fittedViewport = viewport;
     if (rememberPrevious && !wasFitted) unfitted = current;
     commit(next.scale, next.translateX, next.translateY);
     notify();
@@ -432,17 +433,26 @@ export function createViewportManager({
     fit(false);
   });
 
+  /** The box the camera was last fitted in. A host resize and the observer
+   *  that reports it are not one event: a fit can run in between (`setArtboard`
+   *  fits as the new board mounts), so `resize` cannot ask the canvas — whose
+   *  dimensions still describe the previous box — whether the camera it is
+   *  holding was fitted. Remembering the box the last fit actually framed is
+   *  the one fact that answers it. */
+  let fittedViewport: Viewport | undefined;
+
   function resize(): void {
     const viewport = viewportSize();
     if (viewport === undefined) return;
-    // The host already reports its new size by the time an observer runs, so
-    // the box the camera was framed in is the canvas' own dimensions — the
-    // value `setDimensions` has not overwritten yet. Reading the host here
-    // would compare the camera against a box it was never fitted to.
-    const wasFitted = isFittedIn({
-      width: canvas.getWidth(),
-      height: canvas.getHeight(),
-    });
+    // The box the camera was framed in, not the canvas' current one: the canvas
+    // is updated just below, and a fit that ran between the host changing and
+    // this callback leaves `canvas` describing the box before it.
+    const wasFitted = isFittedIn(
+      fittedViewport ?? {
+        width: canvas.getWidth(),
+        height: canvas.getHeight(),
+      },
+    );
     canvas.setDimensions(viewport);
     if (wasFitted) {
       // A fitted view follows its window. A camera the author has moved is

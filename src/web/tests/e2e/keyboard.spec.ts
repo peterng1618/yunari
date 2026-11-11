@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { shortcutLabel } from "../../packages/editor/src/shortcut-manager/display.js";
+import { productShortcutIds } from "../../packages/editor/src/shortcut-manager/index.js";
 import { SHORTCUT_LABELS } from "../../packages/editor/src/shortcut-manager/reference.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { captureVisualReview, enterLayer } from "./editor-canvas.js";
@@ -564,13 +565,11 @@ test("? opens the sheet, and the document behind it does not change", async ({
     name: uiCopy.shortcuts.reference,
   });
   await expect(sheet).toBeVisible();
-  // Every action is listed, which is the sheet's whole promise: the figure for
-  // the table is eighteen, Task 3.3's `?` row makes it nineteen, Task 3.1's
-  // `publish.surface` row makes it twenty, and the asset finder's
-  // `file.findAssets` row makes it twenty-one. The row count is a property of
-  // the projection rather than of this test — one `kbd` per action, joined
-  // aliases and all.
-  await expect(sheet.locator("kbd")).toHaveCount(21);
+  // Every action is listed, which is the sheet's whole promise. The row count is
+  // the projection's own length rather than a figure copied into this test: one
+  // `kbd` per action, joined aliases and all, so a new binding cannot leave the
+  // sheet silently short of it.
+  await expect(sheet.locator("kbd")).toHaveCount(productShortcutIds().length);
 
   // The capture is taken **here, with the sheet open**, because a shot named
   // for the reference that shows no reference is not evidence of one. Its

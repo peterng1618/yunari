@@ -144,24 +144,41 @@ export async function openThemeFromStore(
 ): Promise<number> {
   await seedStoreLibrary(page, [theme]);
   await switchMode(page, uiCopy.modes.themes);
-  await answerDialogIfShown(page, "Discard", 1_000);
-  const cell = page.locator(
-    `[data-yunari-store-cell="${theme.envelope.id}"] [data-yunari-store-cell-action="open"]`,
-  );
+  await answerDialogIfShown(page, "Discard", 5_000);
+  const cell = page.locator(`[data-yunari-store-cell="${theme.envelope.id}"]`);
   await expect(cell, "the store lists no theme to open").toBeVisible();
-  // The cell's controls are revealed by the card's hover state and stay
-  // `pointer-events: none` until it is attended, so a press aimed straight at
-  // the control is intercepted by the name button beneath it. Playwright checks
-  // the hit target before its own hover lands, so the control can never be the
-  // point that attends the card; the card is. Attending it first is the gesture
-  // an author makes.
-  await page.locator(`[data-yunari-store-cell="${theme.envelope.id}"]`).hover();
+  // **The picture, then the item's own Open in editor.** The cell's four
+  // controls are revealed by the card's hover state and stay `pointer-events:
+  // none` until it is attended, which a touch surface never does: nothing ever
+  // matches `:hover` there, so a press aimed at the control is intercepted by
+  // the name button beneath it. The name press cannot carry the gesture either
+  // — the controls' own strip is laid over that row and covers its centre once
+  // the card is attended. The picture's press is reachable on both surfaces and
+  // opens the item's own surface, whose footer draws the same four actions
+  // ungated.
+  await cell.locator("[data-yunari-store-cell-surface]").click();
+  const opened = page.locator("[data-yunari-store-item-action='open']");
+  await expect(opened, "the item's surface draws no open action").toBeVisible();
   const started = Date.now();
-  await cell.click();
-  await answerDialogIfShown(page, "Discard", 1_000);
-  await expect(page.locator("#status-message")).toHaveText(
-    status ?? `Opened ${nameOf(theme.envelope)}`,
-  );
+  await opened.click();
+  // **Answer every question the open raises, until it reports.** The item's
+  // surface adds a layer of its own: leaving it can raise the editor's dirty
+  // guard and the open raises its replacement question, and which of the two
+  // arrives first is the gesture's race rather than a rule a case can depend
+  // on. One bounded poll answers whichever is showing and stops on the status
+  // line the open writes.
+  await expect
+    .poll(
+      async () => {
+        await answerDialogIfShown(page, "Discard", 1_000);
+        return page
+          .locator("#status-message")
+          .textContent({ timeout: 250 })
+          .catch(() => null);
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(status ?? `Opened ${nameOf(theme.envelope)}`);
   const elapsed = Date.now() - started;
   await switchMode(page, uiCopy.modes.editor);
   return elapsed;

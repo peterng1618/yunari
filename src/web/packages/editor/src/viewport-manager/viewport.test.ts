@@ -111,6 +111,12 @@ function setup(options: { lens?: string; fitted?: boolean } = {}) {
     canvas,
     camera,
     host,
+    /** The host's box changing without the observer firing yet — the window
+     *  a pointer of code can fit in between the two. */
+    setHostSize(width: number, height: number): void {
+      size.width = width;
+      size.height = height;
+    },
     /** The seam the ResizeObserver drives, driven directly instead. */
     resizeHost(width: number, height: number): void {
       size.width = width;
@@ -292,6 +298,31 @@ describe("viewport camera on a host resize", () => {
       resizeHost(width, 800);
       expect(camera.zoom()).toBeCloseTo((width - 20) / 1280, 5);
     }
+  });
+
+  it("re-fits after a fit landed between the host changing and its observer", () => {
+    // A document mount calls `setArtboard`, which fits against the host it can
+    // see right then. The observer for that same size change has not run yet,
+    // so the canvas still describes the box before it: asking the canvas
+    // whether the camera was fitted answered for a frame the camera was never
+    // in, and the stale fit was then held as if the author had chosen it.
+    const { camera, resizeHost, setHostSize } = setup();
+    camera.zoomToFit();
+
+    setHostSize(400, 610);
+    camera.zoomToFit();
+    expect(camera.zoom()).toBeCloseTo(380 / 1280, 5);
+
+    resizeHost(400, 771);
+
+    expect(camera.isFitted()).toBe(true);
+    const scale = 380 / 1280;
+    expect(camera.artboardScreenRect()).toEqual({
+      left: 10,
+      top: (771 - 720 * scale) / 2,
+      width: 380,
+      height: 720 * scale,
+    });
   });
 
   it("keeps the zoom an author chose", () => {

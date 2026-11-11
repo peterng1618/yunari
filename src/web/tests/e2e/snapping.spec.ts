@@ -560,40 +560,15 @@ test("layer-panel object actions match canvas dock", async ({
   const footer = panel.locator("[data-yunari-layer-actions]");
   const dock = page.locator("[data-yunari-canvas-toolbar]");
   await expect(panel).toBeVisible();
-  await expect(footer).toBeVisible();
   await expect(dock).toBeVisible();
 
-  // Nothing is selected yet, and the footer is a row anyway: the registry's own
-  // commands, every one of them disabled (`vg-570`, ruled 2026-10-17). `vg-460`'s
-  // ask was that the toolbar always be *visible*; the Add pane's constructions
-  // built to answer it were never asked for, so what the no-selection footer
-  // carries is the commands and no constructions. A footer that emptied itself
-  // reddens on the count, and one that went back to the constructions reddens on
-  // the comparison with the dock below.
-  const idle = await footer.getByRole("button").evaluateAll((buttons) =>
-    buttons.map((button) => ({
-      label: button.getAttribute("aria-label") ?? "",
-      disabled: (button as HTMLButtonElement).disabled,
-      destructive: button.hasAttribute("data-yunari-destructive"),
-      // The **paint**, not the attribute. `vg-226`'s failure class is the mark
-      // present and the paint wrong, and it is invisible to a `disabled` read:
-      // `[data-yunari-destructive]` is unlayered and outranks the `text-faint`
-      // a blocked control computes, so a dead Delete painted `--hot` while the
-      // other eleven painted `--faint`. Nothing but a computed colour sees it.
-      colour: getComputedStyle(button).color,
-    })),
-  );
-  console.log(`IDLE_FOOTER=${JSON.stringify(idle)}`);
-  expect(idle.length).toBeGreaterThan(0);
-  expect(idle.every((button) => button.disabled)).toBe(true);
-  // Delete is in the row, so the comparison below is about the mark and not
-  // about a footer that happened to draw no destructive action at all.
-  expect(idle.some((button) => button.destructive)).toBe(true);
+  // **The footer belongs to a selection** (`c3335673`): with nothing selected
+  // the registry has nothing to act on, so the pane keeps the pixels for its
+  // tree rather than drawing a grey row. A footer drawn at rest fails here.
   expect(
-    [...new Set(idle.map((button) => button.colour))],
-    "a blocked control keeps the tone the control computed, whatever mark it " +
-      "carries: one colour across the idle footer, and it is not Delete's --hot",
-  ).toHaveLength(1);
+    await footer.count(),
+    "a footer drawn before anything is selected",
+  ).toBe(0);
 
   const centre = await clientOfScene(page, "mover", ARTBOARD_WIDTH);
   await page.mouse.click(centre.x, centre.y);

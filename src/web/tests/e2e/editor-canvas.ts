@@ -469,6 +469,22 @@ export async function chooseAssetFile(
 }
 
 /**
+ * Dismisses the placement question a just-declared picture asks.
+ *
+ * The modal is a real `Dialog`, so while it is up the shell behind it is out
+ * of the accessibility tree — a `getByRole` for a rail slot or toolbar control
+ * resolves to nothing, which reads as a missing control rather than an open
+ * question. A case that imports only to *declare* a file answers the question
+ * by closing it; one that means to place the picture presses its own control.
+ */
+export async function dismissPlacement(page: Page): Promise<void> {
+  const modal = page.locator("[data-yunari-place-image-modal]");
+  await expect(modal).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeHidden();
+}
+
+/**
  * Answers a modal if it turns up, and reports whether it did.
  *
  * `isVisible()` answers about *now*, and these prompts are not up *now*: the
@@ -486,7 +502,12 @@ export async function answerDialogIfShown(
   button: string,
   timeout = 3_000,
 ): Promise<boolean> {
-  const dialog = page.locator('[role="dialog"]');
+  // **The last dialog, not all of them.** A modal opened from another one
+  // (an item's surface raising the replacement question) leaves two in the
+  // tree, and a bare `[role="dialog"]` locator is then a strict-mode violation
+  // — which the `catch` below would report as "no prompt", leaving the newest
+  // question unanswered and every later step waiting behind it.
+  const dialog = page.locator('[role="dialog"]').last();
   const shown = await dialog
     .waitFor({ state: "visible", timeout })
     .then(() => true)
