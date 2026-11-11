@@ -114,7 +114,12 @@ afterEach(async () => {
   // React schedules follow-up work through a macrotask; unmounting and then
   // letting that task run is what keeps it from firing after the worker has
   // torn the jsdom environment down, where it reads `window` and throws.
+  //
+  // The inspectors are destroyed for that same reason: one of their rows ticks a
+  // `setInterval`, and a root left mounted still fires it after the environment
+  // is gone.
   await act(async () => {
+    for (const inspector of mountedInspectors.splice(0)) inspector.destroy();
     settingsRoot?.unmount();
     chromeRoot?.unmount();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -624,6 +629,10 @@ function mountShellChrome(root: HTMLElement): void {
 
 let chromeRoot: Root | undefined;
 
+/** Every inspector this file mounted; the teardown destroys each one. */
+const mountedInspectors: Array<ReturnType<typeof createSelectionInspector>> =
+  [];
+
 let settingsRoot: Root | undefined;
 
 /**
@@ -695,38 +704,40 @@ function mountSelectionInspector(root: HTMLElement): void {
 
     const host = document.createElement("div");
     root.append(host);
-    createSelectionInspector(host, {
-      editor: editor as never,
-      globals: globals as never,
-      nodeBindings: () => [{ id: "clock-time", semanticKey: "date.today" }],
-      refreshGlass: vi.fn(),
-      // The run rows' token edit and add entry are controls too: the audit only
-      // reads them when the session's port is behind the column.
-      designTokens: {
-        actions: {
-          onChange: () => undefined,
-          onDelete: () => undefined,
-          unbindFace: () => undefined,
-          paints: {
-            palette: () => ({}),
+    mountedInspectors.push(
+      createSelectionInspector(host, {
+        editor: editor as never,
+        globals: globals as never,
+        nodeBindings: () => [{ id: "clock-time", semanticKey: "date.today" }],
+        refreshGlass: vi.fn(),
+        // The run rows' token edit and add entry are controls too: the audit only
+        // reads them when the session's port is behind the column.
+        designTokens: {
+          actions: {
             onChange: () => undefined,
-            onDelete: undefined,
-            usage: undefined,
+            onDelete: () => undefined,
+            unbindFace: () => undefined,
+            paints: {
+              palette: () => ({}),
+              onChange: () => undefined,
+              onDelete: undefined,
+              usage: undefined,
+            },
           },
+          typeTokens: () => ({
+            body: { family: "Inter", weight: 400 },
+          }),
+          palette: () => ({
+            ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
+          }),
+          create: (kind, apply) => {
+            const ref = { kind, id: "colour" };
+            return apply(ref) ? ref : undefined;
+          },
+          reveal: () => undefined,
         },
-        typeTokens: () => ({
-          body: { family: "Inter", weight: 400 },
-        }),
-        palette: () => ({
-          ink: { name: "Ink", value: { kind: "solid", color: "#ffffff" } },
-        }),
-        create: (kind, apply) => {
-          const ref = { kind, id: "colour" };
-          return apply(ref) ? ref : undefined;
-        },
-        reveal: () => undefined,
-      },
-    });
+      }),
+    );
   }
 }
 
