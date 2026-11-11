@@ -8,6 +8,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { canvasProp } from "./canvas-probe.js";
 import { chooseIn } from "./control-set.js";
 import { hostEditorUrl } from "./host-editor-url.js";
+import { stopHost } from "./host-process.js";
 
 /**
  * A custom HTTP source, authored on the Host page and read on a display.
@@ -295,13 +296,23 @@ async function addSource(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 15_000 });
 }
 
-/** The player's scene, once its handle exists. */
+/**
+ * The player's scene, once its handle exists.
+ *
+ * The timeout is explicit, not Playwright's default of the whole test budget:
+ * a display that never mounts then names this wait, instead of spending the
+ * body's budget and timing out the teardown behind it.
+ */
 async function playerReady(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const handle = (window as unknown as { yunari?: { handle?: unknown } })
-      .yunari?.handle;
-    return handle !== undefined;
-  });
+  await page.waitForFunction(
+    () => {
+      const handle = (window as unknown as { yunari?: { handle?: unknown } })
+        .yunari?.handle;
+      return handle !== undefined;
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
 }
 
 let host: ChildProcess | undefined;
@@ -331,13 +342,7 @@ test.afterEach(async () => {
   const ending = host;
   host = undefined;
   expectedExits.add(ending);
-  // **Wait for the port to be free.** The next `beforeEach` binds it, and a
-  // kill that has not landed yet leaves the old listener answering the health
-  // poll for a host that is still coming up.
-  await new Promise<void>((resolve) => {
-    ending.once("exit", () => resolve());
-    ending.kill();
-  });
+  await stopHost(ending);
 });
 
 test.afterAll(async () => {

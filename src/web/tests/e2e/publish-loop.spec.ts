@@ -7,6 +7,7 @@ import { writeThemePackage } from "@yunari/theme-package";
 import { captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
 import { hostEditorUrl } from "./host-editor-url.js";
+import { stopHost } from "./host-process.js";
 
 /**
  * The publish loop, proved on a real host: **a save** carries the theme to the
@@ -244,13 +245,7 @@ test.describe("the publish loop", () => {
     const ending = host;
     host = undefined;
     expectedExits.add(ending);
-    // **Wait for the port to be free.** The next `beforeEach` binds it, and a
-    // kill that has not landed yet leaves the old listener answering the health
-    // poll for a host that is still coming up.
-    await new Promise<void>((resolve) => {
-      ending.once("exit", () => resolve());
-      ending.kill();
-    });
+    await stopHost(ending);
   });
 
   test("a save reaches the display showing that theme", async ({
