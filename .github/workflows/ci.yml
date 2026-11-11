@@ -97,13 +97,28 @@ jobs:
       # so a second engine would triple the install time to re-check the same
       # DOM. Cross-browser and real-device coverage is Gate 0 work on named
       # reference hardware (§126).
+      #
+      # No `--with-deps`: that runs `apt-get`, and the runner's Ubuntu archive
+      # mirror resolved nowhere on three consecutive attempts, which failed the
+      # job before a single test ran. The image already carries every library
+      # Chromium needs (the apt solve listed them all as "already the newest
+      # version"); the packages it wanted to add were fonts, which structure
+      # assertions do not read. A missing library still fails loudly at launch.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Install the secret service the host protects its CA key with
+        # `apt-get update` and the install both hit the same flaky mirror, so a
+        # transient resolution failure is retried rather than closing the job.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 gnome-keyring libsecret-tools
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y dbus-x11 gnome-keyring libsecret-tools; then
+              exit 0
+            fi
+            echo "apt attempt ${attempt} failed; retrying" >&2
+            sleep $((attempt * 15))
+          done
+          exit 1
 
       - name: Display tests (browser)
         # Every project, not just desktop-chromium: the host specs live in their
