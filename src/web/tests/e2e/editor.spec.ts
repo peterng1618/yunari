@@ -938,6 +938,11 @@ test.describe("Fabric editor route", () => {
     // Fabric draws the marquee onto the context rather than into the scene, so
     // the only way to see it is to read back the pixels a repaint erases. The
     // upper canvas is where it lands, and it is otherwise blank.
+    //
+    // **Every pixel's red byte, not one in sixteen.** The marquee is a hairline
+    // stroke, so a reading that samples every 64th byte can step over it and
+    // call a drawn marquee blank — which is how this failed on CI while it
+    // passed alone.
     const marqueeSum = async (): Promise<number> =>
       page.evaluate(() => {
         const canvas = document.querySelector(
@@ -954,7 +959,7 @@ test.describe("Fabric editor route", () => {
           canvas.height,
         ).data;
         let sum = 0;
-        for (let i = 0; i < data.length; i += 64) sum += data[i]!;
+        for (let i = 0; i < data.length; i += 4) sum += data[i]!;
         return sum;
       });
 
@@ -5377,6 +5382,12 @@ test.describe("Fabric editor route", () => {
     // on how fast the machine was.
     await installFixedClock(page);
     await page.goto(EDITOR);
+    // The bridge is mounted by the editor shell, after the document it reads is
+    // ready. Selecting through it before then is a race this test lost on CI
+    // ("Cannot read properties of undefined (reading 'selectLayer')"), and the
+    // editor's own status line is the signal that says it is there.
+    await expect(page.locator("#status-message")).toHaveText("Editor ready");
+    await page.waitForFunction(() => "yunariEditorBridge" in window);
     // Select through the bridge, not the layer row: a focused panel row is a
     // different starting state, and this test is about the nudge binding.
     await page.evaluate(() => {
