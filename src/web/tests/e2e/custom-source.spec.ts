@@ -7,6 +7,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { canvasProp } from "./canvas-probe.js";
 import { chooseIn } from "./control-set.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 
 /**
  * A custom HTTP source, authored on the Host page and read on a display.
@@ -302,7 +303,7 @@ test.afterAll(async () => {
 test("a source authored on the page is read on a display, and its deletion explains the gap", async ({
   page,
 }) => {
-  await page.goto(`${HOST}/editor/?theme=${THEME_ID}`);
+  await page.goto(hostEditorUrl(HOST, { themeId: THEME_ID }));
   await editorReady(page);
 
   // 1. The source is authored through the Host page's own form.

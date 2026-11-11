@@ -19,6 +19,7 @@ import { canvasProp, sceneBounds, sceneProperty } from "./canvas-probe.js";
 import { openPaused } from "./clock.js";
 import { answerDialogIfShown, captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 import {
   BADGE_INK,
   CHART_NODE_ID,
@@ -76,7 +77,7 @@ const themeIdOfSave = (request: Request): string =>
  * a theme no save ever wrote.
  */
 async function saveStarterThroughTheHost(page: Page): Promise<string> {
-  await page.goto(`${HOST}/editor/`);
+  await page.goto(hostEditorUrl(HOST));
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
@@ -367,7 +368,7 @@ test.describe("hosted player over the real host", () => {
 
     // The editor reaches the host's theme store, and the bytes it writes come
     // back through the host's player route: the author-to-display loop.
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -517,7 +518,7 @@ test.describe("hosted player over the real host", () => {
 
     // The starter as the editor actually holds it, saved through the host's
     // own route — the author-to-display loop, with no fixture in between.
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1341,7 +1342,7 @@ test.describe("a display fed by the real host", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1648,7 +1649,7 @@ test.describe("a display fed by the real host", () => {
     // the display shows "47%", and the reference image is a display. Saving
     // through the host's own route keeps this the same document a consumer
     // would load.
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -3523,15 +3524,11 @@ test.describe("a paired display and the theme it is given", () => {
 
   /** `/editor/` in the Settings mode: the surface the display controls live on. */
   async function openHostSettings(page: Page): Promise<void> {
-    await page.goto(`${admin}/editor/`);
-    const modeSwitch = page.locator(".editor-shell-mode-switch");
-    await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
-    await modeSwitch
-      .getByRole("button", { name: editorCopy.modes.settings, exact: true })
-      .click();
+    await page.goto(hostEditorUrl(admin, { mode: "settings" }));
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
       "settings",
+      { timeout: 30_000 },
     );
   }
 
@@ -4190,7 +4187,7 @@ test.describe("a paired display and the theme it is given", () => {
     }
   });
 
-  test("a theme-bounded background rotates and a display-bounded one does not", async ({
+  test("a theme-bounded background turns with the board, a display-bounded one with the screen", async ({
     page,
     request,
   }) => {
@@ -4207,9 +4204,11 @@ test.describe("a paired display and the theme it is given", () => {
       "a theme-bounded layer does not turn with the composition",
     ).toHaveCSS("transform", "matrix(-1, 0, 0, -1, 0, 0)");
 
-    // **At 45, not 0.** A display-bounded layer's box is the host, so
-    // `transform: none` at 0 would hold whether or not the layer turns with the
-    // composition; at a non-zero angle only an unturned layer reports none.
+    // **Both boxes turn; the box they turn about is what differs.** A
+    // display-bounded layer is the glass itself, so it turns in place about the
+    // centre of the screen (`docs/decisions/0008`): a video that stayed upright
+    // under rotated canvas text was the defect that decision fixed. At 45 an
+    // unturned layer would report `none`, so the matrix is what names the turn.
     const displayDisplay = await pairDisplay(request, "Display media", {
       shape: "circle",
       rotation: 45,
@@ -4224,8 +4223,12 @@ test.describe("a paired display and the theme it is given", () => {
     const layer = page.locator("[data-yunari-background-media]");
     await expect(
       layer,
-      "a display-bounded layer fills a box, not a board",
-    ).toHaveCSS("transform", "none");
+      "a display-bounded layer stayed upright on a turned screen",
+    ).toHaveCSS(
+      "transform",
+      "matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)",
+    );
+    // The layer is the glass: it turns in place, so its box is still the disc.
     await expect(layer).toHaveCSS("border-radius", "50%");
     const geometry = await layer.evaluate((node) => ({
       width: (node as HTMLElement).offsetWidth,
@@ -4436,18 +4439,11 @@ test.describe("a paired display and the theme it is given", () => {
       rotation: 0,
     });
 
-    await page.goto(`${admin}/editor/`);
-    const modeSwitch = page.locator(".editor-shell-mode-switch");
-    await expect(modeSwitch).toBeVisible({ timeout: 30_000 });
-    await modeSwitch
-      .getByRole("button", {
-        name: editorCopy.modes.settings,
-        exact: true,
-      })
-      .click();
+    await page.goto(hostEditorUrl(admin, { mode: "settings" }));
     await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
       "data-yunari-mode-region",
       "settings",
+      { timeout: 30_000 },
     );
 
     const row = page.locator(`[data-yunari-host-display="${display.id}"]`);

@@ -6,6 +6,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
 import { captureVisualReview } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 
 /**
  * The publish loop, proved on a real host: **a save** carries the theme to the
@@ -213,7 +214,7 @@ test.describe("the publish loop", () => {
     test.setTimeout(180_000);
     const before = await revision();
 
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible({ timeout: 30_000 });
@@ -249,7 +250,7 @@ test.describe("the publish loop", () => {
   }) => {
     test.setTimeout(180_000);
 
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible({ timeout: 30_000 });

@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 import { HOST_PORT, HOST_THEME_ID } from "./host-theme.js";
 import {
   focusedWithin,
@@ -43,7 +44,7 @@ const HOST = `http://127.0.0.1:${HOST_PORT}`;
  * same on every run. That a bare mount resumes arbitrarily among themes with
  * equal mtimes is `vg-363`, filed rather than repaired here. */
 export async function openWalkthrough(page: Page): Promise<void> {
-  await page.goto(`${HOST}/editor/?theme=${HOST_THEME_ID}`);
+  await page.goto(hostEditorUrl(HOST, { themeId: HOST_THEME_ID }));
   await expect(page.locator(".editor-shell-zoom")).toBeVisible();
 }
 

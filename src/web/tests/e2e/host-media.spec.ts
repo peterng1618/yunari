@@ -710,10 +710,15 @@ test.describe("the video frame callback on the real player", () => {
       );
       if (video === null)
         throw new Error("the background video is not mounted");
-      const before = video.currentTime;
+      // **Frames presented, not seconds elapsed.** The clip is short and
+      // `loop`ed, so `currentTime` wraps and a negative difference is a video
+      // that played past its end — measured, not assumed: an earlier form of
+      // this assertion read -0.59 s on a clip that was playing. The playback
+      // quality's frame count only ever rises while frames are presented.
+      const before = video.getVideoPlaybackQuality().totalVideoFrames;
       await new Promise((done) => setTimeout(done, 1000));
       return {
-        advanced: video.currentTime - before,
+        advanced: video.getVideoPlaybackQuality().totalVideoFrames - before,
         paused: video.paused,
       };
     });

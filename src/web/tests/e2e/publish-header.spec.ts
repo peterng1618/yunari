@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { writeThemePackage } from "@yunari/theme-package";
+import { hostEditorUrl } from "./host-editor-url.js";
 
 /**
  * The header's publish surface, on a real host that is actually serving the LAN.
@@ -130,7 +131,7 @@ test.describe("the header's publish surface", () => {
   }) => {
     test.setTimeout(180_000);
 
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
 
     // The bar's control opens the surface; the host switch is inside it (the header rule
     // puts the facts behind the press, and F1 puts the switch with them: a
@@ -165,7 +166,7 @@ test.describe("the header's publish surface", () => {
   }) => {
     test.setTimeout(180_000);
 
-    await page.goto(`${HOST}/editor/`);
+    await page.goto(hostEditorUrl(HOST));
 
     const publish = page.locator("[data-yunari-publish]");
     const facts = page.locator(".editor-shell-publish-dialog");
@@ -180,13 +181,13 @@ test.describe("the header's publish surface", () => {
     await expect(facts.locator("code")).toBeVisible({ timeout: 30_000 });
 
     const shown = await facts.locator("code").textContent();
-    // https, the origin a display is a secure context at, and **by the host's
-    // own name**: a display's cookie and storage are scoped to the origin it
-    // pairs on, so a dotted quad there is a phone that must pair again the
-    // moment DHCP moves the host. The plain address the
-    // popup prints beside it is the fallback, and it is a dotted quad — a device
-    // that cannot resolve the name is what it exists for.
-    expect(shown).toMatch(/^https:\/\/[^:\s]+\.local:\d+$/);
+    // https, the origin a display is a secure context at, and **the address
+    // the host answers on**: nothing advertises the host's `.local` name over
+    // mDNS, so naming it here is what made the printed URL and the symbol fail
+    // on a phone with no such resolver (`publish-control.tsx`). The name is
+    // offered beside it instead, for a device that does resolve it; the plain
+    // http address is the fallback for one that has not installed the root.
+    expect(shown).toMatch(/^https:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);
     expect(
       await facts.locator("[data-yunari-publish-fallback]").textContent(),
     ).toMatch(/^Fallback http:\/\/\d+\.\d+\.\d+\.\d+:\d+$/);

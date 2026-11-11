@@ -161,24 +161,27 @@ export async function openThemeFromStore(
   await expect(opened, "the item's surface draws no open action").toBeVisible();
   const started = Date.now();
   await opened.click();
-  // **Answer every question the open raises, until it reports.** The item's
-  // surface adds a layer of its own: leaving it can raise the editor's dirty
-  // guard and the open raises its replacement question, and which of the two
-  // arrives first is the gesture's race rather than a rule a case can depend
-  // on. One bounded poll answers whichever is showing and stops on the status
-  // line the open writes.
-  await expect
-    .poll(
-      async () => {
-        await answerDialogIfShown(page, "Discard", 1_000);
-        return page
-          .locator("#status-message")
-          .textContent({ timeout: 250 })
-          .catch(() => null);
-      },
-      { timeout: 20_000 },
-    )
-    .toBe(status ?? `Opened ${nameOf(theme.envelope)}`);
+  // **Answered until it reports, and the answer is matched as it was given.**
+  // The item's surface adds a layer of its own: leaving it can raise the
+  // editor's dirty guard and the open raises its replacement question, and
+  // which of the two arrives first is the gesture's race rather than a rule a
+  // case can depend on. One bounded poll answers whichever is showing and stops
+  // on the status line the open writes. A case about a *refused* document
+  // passes a `RegExp`, and matching it against a string with `toBe` would
+  // compare the two objects and fail every one of them.
+  const expected = status ?? `Opened ${nameOf(theme.envelope)}`;
+  const reported = expect.poll(
+    async () => {
+      await answerDialogIfShown(page, "Discard", 1_000);
+      return page
+        .locator("#status-message")
+        .textContent({ timeout: 250 })
+        .catch(() => null);
+    },
+    { timeout: 20_000 },
+  );
+  if (expected instanceof RegExp) await reported.toMatch(expected);
+  else await reported.toBe(expected);
   const elapsed = Date.now() - started;
   await switchMode(page, uiCopy.modes.editor);
   return elapsed;

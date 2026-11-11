@@ -5,6 +5,7 @@ import type { FabricThemeEnvelope } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { objectHandleScenePoint, sceneToClient } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 import { HOST_PORT, HOST_THEMES_DIR } from "./host-theme.js";
 import {
   addButton,
@@ -30,16 +31,6 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
-const HOST_EDITOR = `${HOST}/editor/`;
-/** The host's editor, on the editor mode, with a document to open. Written
- *  through `URL` so a second query parameter appends rather than being swallowed
- *  into `mode`'s value — `?mode=editor?theme=…` parses as neither. */
-function hostEditor(themeId?: string): string {
-  const url = new URL(HOST_EDITOR);
-  url.searchParams.set("mode", "editor");
-  if (themeId !== undefined) url.searchParams.set("theme", themeId);
-  return url.toString();
-}
 /** `openBlank`'s default: 16:9 at 1080p. Scene points are in these units. */
 const ARTBOARD_WIDTH = 1920;
 const ARTBOARD_HEIGHT = 1080;
@@ -686,7 +677,7 @@ test.describe("text and text box elements", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     test.setTimeout(120_000);
 
-    await page.goto(hostEditor());
+    await page.goto(hostEditorUrl(HOST));
     await openBlank(page);
     await placeText(page, { x: 300, y: 200 });
     const placed = (await readScene(page)).at(-1);
@@ -716,7 +707,7 @@ test.describe("text and text box elements", () => {
 
     // A reload half: the words must be in the document, not only on the canvas.
     const id = await saveToLibrary(page);
-    await page.goto(hostEditor(id));
+    await page.goto(hostEditorUrl(HOST, { themeId: id }));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -738,7 +729,7 @@ test.describe("text and text box elements", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     test.setTimeout(120_000);
 
-    await page.goto(hostEditor());
+    await page.goto(hostEditorUrl(HOST));
     await openBlank(page);
     await placeText(page, { x: 300, y: 200 });
     const placed = (await readScene(page)).at(-1);
@@ -787,7 +778,7 @@ test.describe("text and text box elements", () => {
 
     // The binding is document state, not a canvas decoration.
     const id = await saveToLibrary(page);
-    await page.goto(hostEditor(id));
+    await page.goto(hostEditorUrl(HOST, { themeId: id }));
     await expect.poll(async () => (await readScene(page)).length).toBe(1);
     expect(
       runsOf(await readObject(page, placed.name ?? "Text")).map(
@@ -836,7 +827,7 @@ test.describe("text and text box elements", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     test.setTimeout(120_000);
 
-    await page.goto(hostEditor());
+    await page.goto(hostEditorUrl(HOST));
     const authored = await authorBoth(page);
     const before = await factsById(page);
     expect(before.get(authored.point.id)?.type).toBe("i-text");
@@ -859,7 +850,7 @@ test.describe("text and text box elements", () => {
 
     const id = await saveToLibrary(page);
 
-    await page.goto(hostEditor(id));
+    await page.goto(hostEditorUrl(HOST, { themeId: id }));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -904,7 +895,7 @@ test.describe("text and text box elements", () => {
     test.setTimeout(120_000);
 
     seedLegacyTheme();
-    await page.goto(hostEditor(LEGACY_THEME_ID));
+    await page.goto(hostEditorUrl(HOST, { themeId: LEGACY_THEME_ID }));
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -961,7 +952,7 @@ test.describe("text and text box elements", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     test.setTimeout(120_000);
 
-    await page.goto(hostEditor());
+    await page.goto(hostEditorUrl(HOST));
     const authored = await authorBoth(page);
     const saved = await readScene(page);
     const id = await saveToLibrary(page);

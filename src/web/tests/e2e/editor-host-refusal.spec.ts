@@ -13,8 +13,9 @@ import { readThemePackage } from "@yunari/theme-package";
 import { strToU8, zipSync } from "fflate";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { typeIntoControl } from "./control-set.js";
-import { chooseAssetFile } from "./editor-canvas.js";
+import { chooseAssetFile, dismissPlacement } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
+import { hostEditorUrl } from "./host-editor-url.js";
 import { readScene } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
 
@@ -130,7 +131,7 @@ function activeId(page: Page): Promise<string | undefined> {
 }
 
 async function openEditor(page: Page): Promise<void> {
-  await page.goto(`${HOST}/editor/`);
+  await page.goto(hostEditorUrl(HOST));
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
@@ -270,6 +271,9 @@ test("the save-cleanup sheet renders the unused file, and a refused trash aborts
   await openPane(page, "Assets");
   const assets = page.locator('[data-yunari-panel="assets"]');
   await chooseAssetFile(page, "import", LOGO);
+  // The import asks where the picture goes, and the shell behind an open modal
+  // is `aria-hidden`: the export button below would resolve to nothing.
+  await dismissPlacement(page);
   await expect(assets).toContainText("logo.png");
 
   // The import places the picture and leaves it active; removing that object

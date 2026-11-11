@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { hostEditorUrl } from "./host-editor-url.js";
 
 /**
  * `vg-409`'s visible half, on a real host: **the editor reports success over a
@@ -113,7 +114,7 @@ test.afterAll(() => {
 test("a stored theme past the size bound is reported, not opened as success", async ({
   page,
 }) => {
-  await page.goto(`${HOST}/editor/?theme=${THEME_ID}`);
+  await page.goto(hostEditorUrl(HOST, { themeId: THEME_ID }));
 
   // The status element names the problem, in place of the "Editor ready" that
   // used to stand over a document never opened.

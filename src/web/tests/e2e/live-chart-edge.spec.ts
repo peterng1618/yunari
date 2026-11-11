@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, type Page, type Request, test } from "@playwright/test";
+import { hostEditorUrl } from "./host-editor-url.js";
 import { HOST_PORT } from "./host-theme.js";
 
 /**
@@ -65,7 +66,7 @@ const OUT = path.join(
  * every other display spec reads.
  */
 async function saveStarterThroughTheHost(page: Page): Promise<string> {
-  await page.goto(`${HOST}/editor/`);
+  await page.goto(hostEditorUrl(HOST));
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();

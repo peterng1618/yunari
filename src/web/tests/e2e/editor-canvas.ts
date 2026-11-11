@@ -202,14 +202,20 @@ export async function expandLayer(page: Page, groupId: string): Promise<void> {
  * read from the bridge rather than from the row's label.
  */
 export async function enterLayer(page: Page, groupId: string): Promise<void> {
+  // **Absent until the shell wires it.** Callers reach here on the `goto`'s
+  // next line, so on a slow runner the bridge is still undefined and reading
+  // `groupContext` off it threw before the poll below ever ran (`editor.spec
+  // 1854` on CI). An empty context is "nothing entered yet", which the poll
+  // upgrades as soon as the bridge mounts.
   const entered = (): Promise<readonly string[]> =>
-    page.evaluate(() =>
-      (
+    page.evaluate(() => {
+      const bridge = (
         window as unknown as {
-          yunariEditorBridge: { groupContext(): readonly string[] };
+          yunariEditorBridge?: { groupContext(): readonly string[] };
         }
-      ).yunariEditorBridge.groupContext(),
-    );
+      ).yunariEditorBridge;
+      return bridge?.groupContext() ?? [];
+    });
   if ((await entered()).includes(groupId)) return;
   const row = page.locator(`[data-yunari-layer="${groupId}"]`);
   // **Leave before arriving.** A hover to the point the pointer already rests
