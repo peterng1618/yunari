@@ -103,6 +103,22 @@ async function insertCustomShape(page: Page, name: string): Promise<void> {
     .click();
 }
 
+/** Answers the destination question an imported picture asks.
+ *
+ *  Importing declares the file first and asks where it goes — on the canvas, as
+ *  the background — and the dialog makes the rest of the shell inert while it
+ *  is open. The answer is the caller's: a case that authors the destination
+ *  through the inspector closes it, and one that wants an object places it. */
+async function answerPlaceImage(
+  page: Page,
+  answer: "Place on canvas" | "Background" | "Close",
+): Promise<void> {
+  await page
+    .getByRole("dialog", { name: "Add image" })
+    .getByRole("button", { name: answer, exact: true })
+    .click();
+}
+
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 /**
@@ -914,6 +930,10 @@ test.describe("Fabric editor route", () => {
     // an empty canvas finds nothing empty, because nothing is on it yet.
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
     await page.waitForFunction(() => "yunariEditorBridge" in window);
+    // The starter's objects have to be projected before an "empty" point is
+    // found: one picked while the scene was still landing can hold an object by
+    // the time the press arrives, and the gesture moves it instead of drawing.
+    await expect(page.locator("[data-yunari-layer]").first()).toBeVisible();
 
     // Fabric draws the marquee onto the context rather than into the scene, so
     // the only way to see it is to read back the pixels a repaint erases. The
@@ -1978,7 +1998,7 @@ test.describe("Fabric editor route", () => {
 
     await page.goto(EDITOR);
     // The artboard panel is a document panel, so it is in the Document pane.
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     await page.locator("[data-yunari-artboard-width]").fill("1000");
     await page.locator("[data-yunari-artboard-width]").press("Tab");
     // The board's paint is the background layer's now, so it is written where
@@ -1992,7 +2012,7 @@ test.describe("Fabric editor route", () => {
     ).toHaveAttribute("data-yunari-value", "palette.panel");
     // Back to the Document pane for the capture this action is registered for;
     // selecting the background survives the pane swap.
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     await expect(page.locator("[data-yunari-artboard-width]")).toHaveValue(
       "1000",
     );
@@ -2140,10 +2160,19 @@ test.describe("Fabric editor route", () => {
     ).toHaveCount(0);
 
     const envelope = (await saveEnvelope(page)) as {
-      background?: { color?: { ref: string } };
+      background?: {
+        color?: { ref: string };
+        media?: { color?: { ref: string } };
+      };
       globals: { palette: Record<string, unknown> };
     };
-    expect(envelope.background?.color).toEqual({ ref: "palette.dim" });
+    // The starter's backdrop is a media, and the media owns the paint when it
+    // exists (`backgroundPaintValue`), so the reassigned reference is read from
+    // the same slot the control writes.
+    const background = envelope.background;
+    expect(background?.media?.color ?? background?.color).toEqual({
+      ref: "palette.dim",
+    });
     expect(envelope.globals.palette.panel).toBeUndefined();
   });
 
@@ -2485,7 +2514,7 @@ test.describe("Fabric editor route", () => {
     // The artboard's own size is a document property, so it stays in the
     // Document pane; its paint and its picture's box moved to the inspector
     // when the background became a layer.
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     await page.locator("[data-yunari-artboard-width]").fill("1000");
     await page.locator("[data-yunari-artboard-width]").press("Tab");
     await selectLayer(page, "Background");
@@ -2500,7 +2529,11 @@ test.describe("Fabric editor route", () => {
       };
       background?: {
         color?: { ref: string };
-        media?: { bounds: string; flipX?: boolean };
+        media?: {
+          bounds: string;
+          flipX?: boolean;
+          color?: { ref: string };
+        };
       };
       scene: { objects: Array<{ id?: string; left?: number }> };
     };
@@ -2511,7 +2544,10 @@ test.describe("Fabric editor route", () => {
     expect(envelope.background?.media?.flipX).toBe(true);
     expect(envelope.artboard.contentFit ?? "contain").toBe("contain");
     expect(envelope.artboard.width).toBe(1000);
-    expect(envelope.background?.color).toEqual({ ref: "palette.panel" });
+    // The media owns the paint when it exists (`backgroundPaintValue`).
+    expect(
+      envelope.background?.media?.color ?? envelope.background?.color,
+    ).toEqual({ ref: "palette.panel" });
     expect(leftFor(envelope, "wordmark")).toBe(118);
   });
 
@@ -2529,7 +2565,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
     await page.goto(EDITOR);
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     await selectLayer(page, "Background");
 
     const media = page.locator("[data-yunari-background-media] img");
@@ -2613,7 +2649,14 @@ test.describe("Fabric editor route", () => {
     await expect(
       settingsPanel.getByRole("slider", { name: "Scale" }),
     ).toBeVisible();
-    expect(labels).toContain("Flip horizontally");
+    // The flip pair is drawn as two toggles on one row, under the group's own
+    // "Flip" label; the claim is that both halves are offered, not the words.
+    await expect(
+      settingsPanel.locator("[data-yunari-background-flip-x]"),
+    ).toBeVisible();
+    await expect(
+      settingsPanel.locator("[data-yunari-background-flip-y]"),
+    ).toBeVisible();
     // The control that does exist, still named and still choosing. Its value is
     // read off the hook the control commits through rather than `.value`: it is
     // plan 1's select, and a button's `.value` is always "".
@@ -3094,6 +3137,7 @@ test.describe("Fabric editor route", () => {
         "base64",
       ),
     });
+    await answerPlaceImage(page, "Place on canvas");
     // The list is the pane's cards, one per declaration: a card prints the file
     // the author chose, so the import that adds one is counted by that text.
     const listedAssets = (): Locator =>
@@ -3332,6 +3376,7 @@ test.describe("Fabric editor route", () => {
         "base64",
       ),
     });
+    await answerPlaceImage(page, "Close");
     // The picture and its box are the background layer's properties, so they
     // are written where that layer is selected.
     await selectLayer(page, "Background");
@@ -3790,13 +3835,16 @@ test.describe("Fabric editor route", () => {
       const surfaceContext = surface.getContext("2d");
       if (surfaceContext === null) throw new Error("no capture context");
       surfaceContext.drawImage(image, 0, 0);
-      // The capture is the canvas at the export multiplier, so the same point
-      // moves with it rather than being assumed to be the same pixel.
-      const exported = image.naturalWidth / element.width;
+      // The capture is the artboard's own screen rect, cropped to its origin
+      // and scaled to the export budget, so the same point moves with it
+      // rather than being assumed to be the same pixel.
+      const frameLeft = view.left * ratio;
+      const frameTop = view.top * ratio;
+      const exported = image.naturalWidth / (view.width * ratio);
       const shot = read(
         surfaceContext.getImageData(
-          Math.round(x * exported),
-          Math.round(y * exported),
+          Math.round((x - frameLeft) * exported),
+          Math.round((y - frameTop) * exported),
           1,
           1,
         ).data,
@@ -5127,7 +5175,10 @@ test.describe("Fabric editor route", () => {
     // document is open (its arrange half greys before a selection), so a press at
     // the horizontal centre lands on the toolbar and the drag never reaches the
     // canvas. Left of the toolbar's width the band is clear at every X.
-    const [sx, sy] = [canvasBox.x + 40, canvasBox.y + canvasBox.height - 16];
+    const [sx, sy] = [
+      canvasBox.x + rect.left + 8,
+      canvasBox.y + canvasBox.height - 16,
+    ];
     // Both sides in client space: `rect` is canvas-relative, so its client
     // position is `canvasBox` + `rect`. Without the offsets these guards compare a
     // client point against a canvas-space edge and pass on a drag that is nowhere
@@ -5138,7 +5189,11 @@ test.describe("Fabric editor route", () => {
     expect(sy).toBeGreaterThan(canvasBox.y + rect.top + rect.height);
     expect(sy).toBeLessThan(canvasBox.y + canvasBox.height);
     expect(sx).toBeGreaterThan(canvasBox.x + rect.left);
-    const [ex, ey] = at(100, 200);
+    // The drag has to *fully* contain an object: the canvas takes only bounds
+    // inside the rectangle (`selectionFullyContained`), so a strip that merely
+    // clips a card selects nothing. From the pasteboard's left edge to the
+    // artboard's far corner, the starter's card is wholly inside.
+    const [ex, ey] = at(STARTER_WIDTH - 1, 1);
 
     await page.mouse.move(sx, sy);
     await page.mouse.down();
@@ -5375,17 +5430,24 @@ test.describe("Fabric editor route", () => {
     // The row is opened from the tree rather than the canvas because a card's
     // parts are shut by default, and `time-rule` is inside one.
     await expandLayer(page, "group-time-card");
+    // Two gestures: the first double-click enters the owning group and selects
+    // the part, and only a row already inside its group renames on the second.
+    await page.locator('[data-yunari-layer="time-rule"]').dblclick();
     await page.locator('[data-yunari-layer="time-rule"]').dblclick();
     const rename = page.locator('input[aria-label^="Rename"]');
     await expect(rename).toBeFocused();
     await rename.press("Control+a");
-    // The row names the part, but `selectLayer` reaches it through its owning
-    // group — the same rule the canvas click follows.
-    expect(await selectedIds()).toEqual(["group-time-card"]);
+    // The first double-click entered the owning group, so the row's own layer
+    // is what is selected now — a part inside the group the author is in.
+    expect(await selectedIds()).toEqual(["time-rule"]);
 
     // ...and the same key with focus on the document does select everything.
     // Without this the test only ever proves the binding stays silent.
     await rename.blur();
+    // The row's first double-click entered its group, and inside one the chord
+    // selects that group's parts. Escape leaves it, so the next chord is the
+    // document's own select-all.
+    await page.keyboard.press("Escape");
     await page.keyboard.press("Control+a");
     const ids = await selectedIds();
     expect(ids.length).toBeGreaterThan(1);
@@ -5585,25 +5647,36 @@ test("keeps the folded inspector's expand control inside its slot", async ({
   await page.goto(EDITOR);
   await page.locator("[data-yunari-inspector-toggle]").click();
 
-  const fold = await page.evaluate(() => {
-    const button = document.querySelector("[data-yunari-inspector-toggle]");
-    const inspector = document.querySelector(".editor-shell-inspector");
-    if (button === null || inspector === null)
-      throw new Error("the inspector drew no handle");
-    const control = button.getBoundingClientRect();
-    const column = inspector.getBoundingClientRect();
-    return {
-      label: button.getAttribute("aria-label"),
-      left: control.left - column.left,
-      right: column.right - control.right,
-      width: control.width,
-    };
-  });
-
-  expect(fold.label).toBe(uiCopy.inspectorPanel.expand);
-  expect(fold.width).toBe(26);
-  expect(fold.left, "the handle is not inset from the left").toBe(6);
-  expect(fold.right, "the handle is not inset from the right").toBe(6);
+  // The body's column transition is 160ms, and a read taken mid-slide measures
+  // the moving track rather than the folded one. The settled insets are the
+  // claim, so the poll waits for them rather than guessing at a delay.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const button = document.querySelector(
+            "[data-yunari-inspector-toggle]",
+          );
+          const inspector = document.querySelector(".editor-shell-inspector");
+          if (button === null || inspector === null)
+            throw new Error("the inspector drew no handle");
+          const control = button.getBoundingClientRect();
+          const column = inspector.getBoundingClientRect();
+          return {
+            label: button.getAttribute("aria-label"),
+            left: Math.round(control.left - column.left),
+            right: Math.round(column.right - control.right),
+            width: control.width,
+          };
+        }),
+      { message: "the folded column settles on the handle's insets" },
+    )
+    .toEqual({
+      label: uiCopy.inspectorPanel.expand,
+      left: 6,
+      right: 6,
+      width: 26,
+    });
 });
 
 async function saveEnvelope(page: Page): Promise<unknown> {

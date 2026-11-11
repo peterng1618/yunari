@@ -149,6 +149,13 @@ export async function openThemeFromStore(
     `[data-yunari-store-cell="${theme.envelope.id}"] [data-yunari-store-cell-action="open"]`,
   );
   await expect(cell, "the store lists no theme to open").toBeVisible();
+  // The cell's controls are revealed by the card's hover state and stay
+  // `pointer-events: none` until it is attended, so a press aimed straight at
+  // the control is intercepted by the name button beneath it. Playwright checks
+  // the hit target before its own hover lands, so the control can never be the
+  // point that attends the card; the card is. Attending it first is the gesture
+  // an author makes.
+  await page.locator(`[data-yunari-store-cell="${theme.envelope.id}"]`).hover();
   const started = Date.now();
   await cell.click();
   await answerDialogIfShown(page, "Discard", 1_000);

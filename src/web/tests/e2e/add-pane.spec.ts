@@ -3,6 +3,7 @@ import { openPane } from "./editor-rail.js";
 import { insert, openBlank, readScene } from "./rebuild-driver.js";
 import { themeToken, typeStep } from "./shell-tokens.js";
 import { isDesktopSurface } from "./surface.js";
+import { stubWidgetPacks } from "./widget-packs-fixture.js";
 
 /**
  * The Add and Widgets panes, the two surfaces the insertable lists are reached
@@ -21,6 +22,12 @@ import { isDesktopSurface } from "./surface.js";
  */
 
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
+
+/** The preview has no host, so the Widgets pane's one source is answered here:
+ *  the pack this product ships. */
+test.beforeEach(async ({ page }) => {
+  await stubWidgetPacks(page);
+});
 
 /** The words neither half may be described by (spec `:537`). "Basic" and
  *  "Custom" are the sections' own names, not a ranking. */
@@ -47,18 +54,23 @@ test("the two insert panes offer units and primitives, neither greyed, neither a
   for (const heading of ["Basic Shape", "Custom Shape", "Chart"]) {
     await expect(pane.getByRole("group", { name: heading })).toBeVisible();
   }
-  await openPane(page, "Widgets");
-  const library = page.locator('[data-yunari-panel="widgets"]');
-  await expect(library.getByRole("group", { name: "Card" })).toBeVisible();
 
-  // Every control either pane offers is usable, whichever group it comes from.
-  for (const surface of [pane, library]) {
+  // Every control a pane offers is usable, whichever group it comes from. Read
+  // while that pane is the one showing: the rail shows one pane at a time, and
+  // a hidden pane's buttons are not in the accessibility tree.
+  const everyControl = async (surface: Locator): Promise<void> => {
     const controls = surface.getByRole("button");
     await expect(controls).not.toHaveCount(0);
     for (const item of await controls.all()) {
       await expect(item).toBeEnabled();
     }
-  }
+  };
+  await everyControl(pane);
+
+  await openPane(page, "Widgets");
+  const library = page.locator('[data-yunari-panel="widgets"]');
+  await expect(library.getByRole("group", { name: "Card" })).toBeVisible();
+  await everyControl(library);
 
   // Neither half is greyed, and neither is described as one.
   const spoken = await page

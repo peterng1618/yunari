@@ -181,10 +181,11 @@ it("indents a group child and carries the row's controls once it is selected", a
 
   const rows = host.querySelectorAll<HTMLElement>("[data-yunari-layer]");
   expect(rows).toHaveLength(2);
-  // One dense line, plus the two state indicators — not six text buttons, and
-  // no pen beside the name.
+  // One dense line, plus the state indicator the row's own lock brings back —
+  // not six text buttons, no pen beside the name, and no second icon for a
+  // flag that is still at its default.
   expect(rows[1]?.style.getPropertyValue("--layer-depth")).toBe("1");
-  expect(rows[1]?.querySelectorAll("button")).toHaveLength(2);
+  expect(rows[1]?.querySelectorAll("button")).toHaveLength(1);
   expect(rows[1]?.querySelector('[aria-label="Unlock"]')).not.toBeNull();
   // The group row is marked as a group for the stylesheet, which bolds its
   // name, and its one leading slot is the twisty rather than a second glyph.
@@ -913,6 +914,9 @@ it("draws locked as a filled lock and unlocked as an outline one", async () => {
       selected: true,
     }),
   ]);
+  // The unlocked row's state is the default, so only attention draws its lock
+  // control; the locked row names its own state without one.
+  await hover(host, "open");
   // Both state buttons carry `aria-pressed`, so the lock one is named rather
   // than positional: the visibility icon would satisfy a bare attribute match.
   const lock = (id: string): SVGSVGElement | null =>
@@ -1642,10 +1646,11 @@ it("carries no state icon at all on a default row", async () => {
   expect(row.querySelector('[aria-label="Lock"]')).toBeNull();
 });
 
-it("shows the state icons on hover, on focus and on selection", async () => {
-  // Three ways of saying "this is the row you are about to act on", and the
+it("shows the state icons on hover and on focus", async () => {
+  // Two ways of saying "this is the row you are about to act on", and the
   // pointer is only one of them: a keyboard author has to reach the same
-  // controls a pointer reaches.
+  // controls a pointer reaches. A selection is not a third: it paints the row
+  // and leaves the controls to attention, so they go when the pointer does.
   const host = await renderPanel([
     layerRow({ id: "wordmark", name: "wordmark" }),
   ]);
@@ -1705,8 +1710,9 @@ it("keeps the icons on a row whose own state is not the default", async () => {
 });
 
 it("still hides and locks the row whose icons the author pressed", async () => {
-  // The subtractions are allowed to remove ink, not the actions. Selecting a row
-  // is what brings the buttons back, so the press has to reach the bridge.
+  // The subtractions are allowed to remove ink, not the actions. Attention is
+  // what brings the buttons, so the test puts the keyboard on the row first;
+  // the press has to reach the bridge.
   const setLayerVisible = vi.fn();
   const setLayerLocked = vi.fn();
   const host = await renderPanel(
@@ -1715,6 +1721,11 @@ it("still hides and locks the row whose icons the author pressed", async () => {
       setLayerVisible,
       setLayerLocked,
     },
+  );
+  await act(async () =>
+    host
+      .querySelector<HTMLElement>('[data-yunari-layer="wordmark"]')
+      ?.dispatchEvent(new FocusEvent("focusin", { bubbles: true })),
   );
   const press = async (label: string): Promise<void> => {
     await act(async () =>

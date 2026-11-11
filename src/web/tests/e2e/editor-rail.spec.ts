@@ -14,6 +14,7 @@ import { selectLayer } from "./rebuild-driver.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 import { withRoleTokens } from "./theme-fixture.js";
+import { stubWidgetPacks } from "./widget-packs-fixture.js";
 
 /**
  * The contract of the shared `openPane` helper, against the real editor.
@@ -62,6 +63,10 @@ test.beforeEach(async ({ page }) => {
       headers: { "access-control-allow-origin": "*" },
     }),
   );
+  // The preview serves no host routes, and the editor reads its installed
+  // widget units from the host at boot. Without an answer the read fails, the
+  // Widgets pane is empty and the status strip carries the warning.
+  await stubWidgetPacks(page);
 });
 
 test("asking for the pane already showing leaves it showing", async ({
@@ -128,7 +133,7 @@ test("shows the theme's own panel in the left column, and swaps away from it", a
   // and the document-references panels append into that one node, so a control
   // of either being reachable is the host having moved into the pane rather
   // than into the inspector's tab.
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
   await expect(page.locator("[data-yunari-artboard-width]")).toBeVisible();
 
   // Swapping the slot hides the whole host rather than unmounting it, and
@@ -137,7 +142,7 @@ test("shows the theme's own panel in the left column, and swaps away from it", a
   await openPane(page, "Add");
   await expect(page.locator("[data-yunari-artboard-width]")).toBeHidden();
 
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
   await expect(page.locator("[data-yunari-artboard-width]")).toBeVisible();
 });
 
@@ -166,6 +171,10 @@ test("a pane's title bar and footer stay put while its body scrolls", async ({
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
   ).toBeVisible();
   await openEveryGroup(page);
+  // The pane's footer is the object-command strip, and the strip is drawn only
+  // while there is a subject: an empty document or no selection leaves the
+  // pane with no footer to measure.
+  await selectLayer(page, "group-cpu-card");
 
   const measured = await page.evaluate(() => {
     const column = document.querySelector<HTMLElement>(".editor-shell-panel");
@@ -313,9 +322,10 @@ test("a collapse between two swaps does not lose the list's scroll", async ({
  *  back off the element after it is written: a pane whose body fits fails here
  *  with the slot named rather than passing on a `0` that survived a swap.
  *  Composition is opened to its full length first for the reason the case above
- *  gives — a collapsed starter does not overflow the panel. Tokens and Document
- *  overflow at rest. The archived bullet this case descends from named the
- *  asset-library surface and Document; the library is the Assets pane now, and
+ *  gives — a collapsed starter does not overflow the panel. Design tokens and
+ *  Theme settings overflow at rest. The archived bullet this case descends from
+ *  named the asset-library surface and the document pane; the library is the
+ *  Assets pane now, and
  *  Assets is excluded because at rest it declares the starter's one backdrop — a
  *  single card that fits, so it cannot hold an offset. Add is not walked any more
  *  either: the file section that gave it a long tail is the Assets pane's, and
@@ -343,7 +353,7 @@ test("each pane long enough to scroll comes back to the offset it was left at", 
   await openEveryGroup(page);
 
   const measured: Record<string, number> = {};
-  for (const slot of ["Layers", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Design tokens", "Theme settings"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot} is the pane showing`).toHaveCount(1);
@@ -487,7 +497,7 @@ test("every pane's title bar sits at the same top offset", async ({
   ).toBeVisible();
 
   const tops: [string, number][] = [];
-  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Theme settings"]) {
     await openPane(page, slot);
     const title = page.locator(
       ".editor-shell-pane:not([hidden]) > .editor-shell-pane-title",
@@ -533,7 +543,7 @@ test("no pane's column scrolls sideways", async ({ page }, testInfo) => {
   ).toBeVisible();
 
   const overflow: [string, number][] = [];
-  for (const slot of ["Layers", "Add", "Design tokens", "Document"]) {
+  for (const slot of ["Layers", "Add", "Design tokens", "Theme settings"]) {
     await openPane(page, slot);
     const body = paneBody(page);
     await expect(body, `${slot}'s body is showing`).toHaveCount(1);
@@ -721,18 +731,19 @@ test("the status bar reads the scene's counts, and still carries its message", a
  * The row ruled it per pane, so this walks the panes that hold a list and reads
  * each title bar against **the list that pane draws** rather than against a
  * number this test remembers: the Widgets pane's count is the tiles under it,
- * the Tokens pane's is the token rows under it, and the Composition pane's is
+ * and the Composition pane's is
  * the scene's own total, which is also what the strip prints — the duplication
  * the row accepted and named, asserted here as one string in two surfaces so a
  * pane that drifted to a different number fails.
  *
- * **The Document pane is the one with no count, and the absence is the
- * assertion.** Its body is two sections of fields and it holds no list of its
- * own, so a count there would be a number the product does not have. A dom case
- * can show the span is absent from the tree; only a rendered pane shows that it
- * is absent from the surface the author opens.
+ * **A pane with no single list has no count, and the absence is the
+ * assertion.** Theme settings' body is two sections of fields; Design tokens is
+ * two libraries, each counting its own rows under its own heading; Add is
+ * primitives. A count on any of them would be a number the product does not
+ * have. A dom case can show the span is absent from the tree; only a rendered
+ * pane shows that it is absent from the surface the author opens.
  */
-test("every pane's title bar carries the count of its own list, and Document carries none", async ({
+test("a list pane's title bar carries its own count, and the others carry none", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -779,20 +790,24 @@ test("every pane's title bar carries the count of its own list, and Document car
     "the Add pane holds primitives, not a list",
   ).toHaveCount(0);
 
-  // Tokens: the theme's paints, which is the rows the pane draws.
+  // Tokens: two libraries with their own headings and their own counts, so the
+  // pane's title bar prints no total over both.
   await openPane(page, "Design tokens");
   const tokens = await page
     .locator('[data-yunari-panel="tokens"] [data-yunari-palette-token-row]')
     .count();
   expect(tokens, "the booted theme declares tokens").toBeGreaterThan(0);
-  await expect(titleCount("tokens")).toHaveText(`${tokens} tokens`);
+  await expect(
+    titleCount("tokens"),
+    "the Tokens pane counts each library under its own heading",
+  ).toHaveCount(0);
 
-  // Document: no list, so no count.
-  await openPane(page, "Document");
+  // Theme settings: no list, so no count.
+  await openPane(page, "Theme settings");
   await expect(page.locator('[data-yunari-panel="document"]')).toBeVisible();
   await expect(
     page.locator('[data-yunari-panel="document"] .editor-shell-pane-count'),
-    "the Document pane holds no list, so its title bar prints no count",
+    "the Theme settings pane holds no list, so its title bar prints no count",
   ).toHaveCount(0);
 });
 
@@ -1096,6 +1111,13 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     probe.style.color = "var(--accent)";
     strip.append(probe);
     const accent = getComputedStyle(probe).color;
+    // The 14% wash, resolved by the same cascade rather than restated: the
+    // chosen segment's background is this colour, and the probe is how the test
+    // compares two computed colours instead of guessing the serialisation.
+    probe.style.color = "";
+    probe.style.background =
+      "color-mix(in srgb, var(--accent) 14%, transparent)";
+    const wash = getComputedStyle(probe).backgroundColor;
     probe.remove();
     return {
       well: Math.round(node.getBoundingClientRect().height),
@@ -1105,6 +1127,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
       chosenInk: getComputedStyle(chosen).color,
       restInk: getComputedStyle(rest).color,
       accent,
+      wash,
     };
   });
   const report = JSON.stringify(paint);
@@ -1119,10 +1142,10 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     paint.well,
     `the switch overflows the header (${report})`,
   ).toBeLessThan(paint.header);
-  // The chosen treatment, measured rather than assumed: a lifted ground and
-  // `--text` that differ from an unchosen segment's — and neither is the
-  // region's accent, because the palette spends the header's one accent-filled control
-  // on the publish button.
+  // The chosen treatment, measured rather than assumed: the rail slots'
+  // selected state — the accent ink over the accent's 14% wash — and it differs
+  // from an unchosen segment's ground and ink. It is not the header's accent
+  // *fill*; that stays the publish button's.
   expect(
     paint.chosenFill,
     `the chosen segment paints the same ground as an unchosen one (${report})`,
@@ -1132,13 +1155,13 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     `the chosen segment paints the same ink as an unchosen one (${report})`,
   ).not.toBe(paint.restInk);
   expect(
-    paint.chosenFill.includes(paint.accent),
-    `the chosen segment is filled with the accent (${report})`,
-  ).toBe(false);
+    paint.chosenFill.includes(paint.wash),
+    `the chosen segment is not washed with the accent (${report})`,
+  ).toBe(true);
   expect(
     paint.chosenInk,
-    `the chosen segment is inked with the accent (${report})`,
-  ).not.toBe(paint.accent);
+    `the chosen segment is not inked with the accent (${report})`,
+  ).toBe(paint.accent);
 
   // ── The round trip, on a document the product dirtied ─────────────────────
   const identity = page.locator(".editor-shell-identity");
@@ -2393,7 +2416,7 @@ async function routeInstallingHost(
     readonly refusal?: string;
   },
 ): Promise<void> {
-  await page.route("**/api/themes/install", (route) => {
+  await page.route("**/api/store/install", (route) => {
     options.onInstall?.();
     return options.refusal === undefined
       ? route.fulfill({ json: { ok: true, id: "installed" } })
@@ -2465,8 +2488,12 @@ async function showOnlineStore(
 
   const region = page.locator("[data-yunari-mode-region='themes']");
   await expect(region, "the themes mode renders no region").toBeVisible();
-  const halves = region.locator("[data-yunari-store-halves] button");
-  await expect(halves, "the region draws no halves").toHaveCount(2);
+  // The halves sit in the shell's header beside the mode switch, not inside
+  // the mode's own region (`store-mode/halves.tsx`).
+  const halves = page.locator(
+    ".editor-shell-header [data-yunari-store-halves] button",
+  );
+  await expect(halves, "the header draws no halves").toHaveCount(2);
   await halves.nth(1).click();
   await expect(
     halves.nth(1),
@@ -2616,6 +2643,7 @@ test("pressing Install on an online cell draws the item as Installed once the ho
     install,
     "an item the library does not hold does not offer Install",
   ).toHaveText("Install");
+  await cell.hover();
   await install.click();
 
   // **The re-list is the evidence**: the host answered `ok`, the surface read
@@ -2669,6 +2697,7 @@ test("an item the library holds at an older version reads Update before the pres
       );
     },
   });
+  await cell.hover();
   await update.click();
 
   const installed = cell.locator(
@@ -2709,6 +2738,7 @@ test("a refused install leaves the cell as it was and states the host's reason",
     install,
     "the cell before the press does not read Install",
   ).toHaveText("Install");
+  await cell.hover();
   await install.click();
 
   // **The host's sentence, verbatim** — a reason composed on this side would
@@ -2851,6 +2881,23 @@ test("a missing identity opens the host's sign-in window and names the author's 
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
+  // The submission's preparation step opens the stored theme to bake its crops,
+  // and the preview has no host: without this answer the step refuses the
+  // submission before the 401 below is ever asked for.
+  await page.route("**/api/themes/boundary-plain", (route) =>
+    route.fulfill({
+      json: {
+        envelope: boundaryEnvelope({
+          id: "boundary-plain",
+          name: "Boundary plain",
+          tags: [],
+          width: 1920,
+          height: 1080,
+        }),
+        assets: {},
+      },
+    }),
+  );
   // **A `401` is the one status that starts a sign-in**, and the poll waits:
   // this claim is about what the author is told while it does.
   await page.route("**/api/themes/submit", (route) =>
@@ -2972,6 +3019,22 @@ test("a refused submission states the host's own sentence", async ({
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
+  // The preparation step opens the stored theme to bake its crops; the preview
+  // serves no host, so this answer keeps the press reaching the 503 below.
+  await page.route("**/api/themes/boundary-plain", (route) =>
+    route.fulfill({
+      json: {
+        envelope: boundaryEnvelope({
+          id: "boundary-plain",
+          name: "Boundary plain",
+          tags: [],
+          width: 1920,
+          height: 1080,
+        }),
+        assets: {},
+      },
+    }),
+  );
   // A sentence only the host could write: a local composer that paraphrased it
   // would pass a test that asserted its own copy instead.
   const reason = "This host has no GitHub token to open a pull request.";
@@ -3011,6 +3074,22 @@ test("a submitted theme states the version it published, and the caption reads i
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   const modal = await openLibraryItem(page, "boundary-plain");
+  // The preparation step opens the stored theme to bake its crops; without this
+  // answer the preview's HTML refusal ends the press before it is submitted.
+  await page.route("**/api/themes/boundary-plain", (route) =>
+    route.fulfill({
+      json: {
+        envelope: boundaryEnvelope({
+          id: "boundary-plain",
+          name: "Boundary plain",
+          tags: [],
+          width: 1920,
+          height: 1080,
+        }),
+        assets: {},
+      },
+    }),
+  );
   // The host wrote `1.5.0` into the document and the surface re-read the
   // library after the submission, so every later listing is the new version.
   await page.route("**/api/themes", (route) =>

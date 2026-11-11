@@ -19,6 +19,7 @@ import {
   setName,
 } from "./rebuild-driver.js";
 import { isDesktopSurface } from "./surface.js";
+import { stubWidgetPacks } from "./widget-packs-fixture.js";
 
 /**
  * The reference composition, rebuilt from a blank theme by hand.
@@ -36,6 +37,12 @@ import { isDesktopSurface } from "./surface.js";
  */
 
 const SHOT = (name: string) => `test-results/rebuild/${name}.png`;
+
+/** The rebuild runs against the editor preview alone, which has no host; the
+ *  Widgets pane's one source is the pack this product ships. */
+test.beforeEach(async ({ page }) => {
+  await stubWidgetPacks(page);
+});
 
 /**
  * The four device colours the composition is painted with. The blank theme's ten
@@ -961,11 +968,13 @@ test("what the rebuild authored survives the save", async ({
   // The artboard the chooser was asked for, not the one the document opened at.
   expect(envelope.artboard).toMatchObject({ width: 1920, height: 1080 });
 
-  // F2.5: the box the author typed, persisted as the box.
-  expect(byName("cpu-card-value")?.yunariText?.box).toMatchObject({
-    width: 220,
-    height: 60,
-  });
+  // F2.5: the box the author typed, persisted as the box. A text box's width is
+  // the pointer's scene travel from the drag that drew it, so it is fractional
+  // and the Size field rounds it for display; the height is typed and lands
+  // exactly. The claim is the number the author sees in the field.
+  const valueBox = byName("cpu-card-value")?.yunariText?.box;
+  expect(Math.round(valueBox?.width ?? 0)).toBe(220);
+  expect(valueBox?.height).toBe(60);
 
   // F2.1: two runs, the first a reading and the second its unit.
   expect(byName("cpu-card-value")?.yunariText?.runs).toEqual([

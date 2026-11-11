@@ -628,10 +628,16 @@ describe("the chrome's frame, rhythm and hover treatments", () => {
     expect(ruleBodies(".editor-shell-zoom")).toContain("gap: var(--space-4)");
   });
 
-  it("yields the role column to the row's controls on hover", () => {
-    expect(ruleBodies(".yunari-layer-row:hover .yunari-layer-role")).toContain(
-      "display: none",
+  it("yields the role column to the row's controls whenever they are drawn", () => {
+    // Keyed to the controls rather than to `:hover`, because attention is the
+    // pointer or the keyboard and a non-default state draws one with nobody on
+    // the row. The role is clipped into a visually-hidden box rather than
+    // removed, so the treeitem's accessible name keeps it.
+    const body = ruleBodies(
+      ".yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-role",
     );
+    expect(body).toContain("clip-path: inset(50%)");
+    expect(body).toContain("position: absolute");
   });
 
   it("gives the chord its own surface in the tooltip", () => {

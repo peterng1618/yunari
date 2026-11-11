@@ -202,7 +202,7 @@ test.describe("the artboard panel's crop figure", () => {
     // The starter paints asynchronously; a read before it has finished is a read
     // of an empty canvas.
     await page.waitForTimeout(1500);
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
 
     const note = page.locator("[data-yunari-artboard-note]");
     await expect(note).toBeVisible();

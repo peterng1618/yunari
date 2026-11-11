@@ -257,18 +257,30 @@ export async function stageBackground(page: Page): Promise<string> {
   });
 }
 
-/** Opens Settings on one tab, the way the rail's gear does. */
-export async function openSettings(page: Page, tab: string): Promise<void> {
+/** Opens the Settings mode on one page, the way the rail's gear does. The gear
+ *  switches the shell, so there is no dialog to wait for and no Escape to
+ *  dismiss: the page is chosen from the mode's own navigation column. */
+export async function openSettings(
+  page: Page,
+  pageName: string,
+): Promise<void> {
   await page.locator(".editor-shell-rail-settings").click();
-  const dialog = page.getByRole("dialog", { name: uiCopy.settings.title });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("tab", { name: tab }).click();
+  await expect(
+    page.locator("[data-yunari-mode-region='settings']"),
+  ).toBeVisible();
+  await page
+    .locator("[data-yunari-settings-region]")
+    .getByRole("tab", { name: pageName, exact: true })
+    .click();
 }
 
 export async function closeSettings(page: Page): Promise<void> {
-  await page.keyboard.press("Escape");
+  await page
+    .locator(".editor-shell-mode-switch")
+    .getByRole("button", { name: uiCopy.modes.editor, exact: true })
+    .click();
   await expect(
-    page.getByRole("dialog", { name: uiCopy.settings.title }),
+    page.locator("[data-yunari-mode-region='settings']"),
   ).toBeHidden();
 }
 

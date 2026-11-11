@@ -30,7 +30,7 @@ import { isDesktopSurface } from "./surface.js";
 
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 const HOST = `http://127.0.0.1:${HOST_PORT}`;
-const HOST_EDITOR = `${HOST}/editor/`;
+const HOST_EDITOR = `${HOST}/editor/?mode=editor`;
 /** `openBlank`'s default: 16:9 at 1080p. Scene points are in these units. */
 const ARTBOARD_WIDTH = 1920;
 const ARTBOARD_HEIGHT = 1080;

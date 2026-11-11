@@ -118,10 +118,12 @@ it("shows the row's own controls on the attended row and on a row whose state is
       ],
     },
     {
-      what: "a selected row",
+      what: "a selected row with nobody on it",
       row: row({ selected: true }),
       attended: false,
-      shows: [uiCopy.panels.hide, uiCopy.actions.lock],
+      // A selection is not attention: it paints the row, but the controls
+      // belong to the author's attention and leave when the pointer does.
+      shows: [],
     },
     {
       what: "a hidden row",
@@ -146,6 +148,22 @@ it("shows the row's own controls on the attended row and on a row whose state is
     expect(affordanceLabels(host), what).toEqual(shows);
     host.remove();
   }
+});
+
+it("withdraws the controls when the pointer leaves the row it had selected", async () => {
+  // The reported defect: the selection kept the strip alive after the pointer
+  // had gone, so the row it was on carried controls the author had moved off.
+  const subject = row({ selected: true });
+  const host = await renderPane([subject]);
+  await hover(host, subject.id);
+  expect(affordanceLabels(host)).not.toEqual([]);
+  await act(async () =>
+    host
+      .querySelector<HTMLElement>(`[data-yunari-layer="${subject.id}"]`)
+      ?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true })),
+  );
+  expect(affordanceLabels(host)).toEqual([]);
+  host.remove();
 });
 
 it("reaches visibility and lock from the keyboard, with a name each", async () => {

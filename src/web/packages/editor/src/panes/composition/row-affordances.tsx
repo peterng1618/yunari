@@ -20,6 +20,12 @@ import { uiCopy } from "../../ui-copy.js";
  * back the control that names it, and only that one: a hidden row is still
  * unlocked, so an unlocked row's lock icon would be noise even there.
  *
+ * **A selection is not attention.** It used to be a third way in, and it left
+ * the controls behind after the pointer had gone: the author had moved on to
+ * another row while the last one still showed its strip. The row a selection
+ * paints is already stated by the fill, and the keyboard reaches the controls
+ * by focusing the row.
+ *
  * **Rename is not here, and it is not a missing control**. It was
  * never a state — it appeared wherever either state control did, including on a
  * locked row — and the name it acted on is the one thing the row already
@@ -59,8 +65,8 @@ export function RowAffordances({
   readonly onToggleVisible: () => void;
   readonly onToggleLocked: () => void;
 }): React.JSX.Element {
-  const showVisibility = attended || row.selected || !row.visible;
-  const showLock = attended || row.selected || row.locked;
+  const showVisibility = attended || !row.visible;
+  const showLock = attended || row.locked;
   return (
     <>
       {showVisibility ? (

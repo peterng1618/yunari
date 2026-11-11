@@ -135,7 +135,7 @@ async function resizeArtboard(
   width: number,
   height: number,
 ): Promise<void> {
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
   await page.locator("[data-yunari-artboard-width]").fill(String(width));
   await page.locator("[data-yunari-artboard-width]").blur();
   await page.locator("[data-yunari-artboard-height]").fill(String(height));

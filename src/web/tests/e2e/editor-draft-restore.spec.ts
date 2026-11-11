@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { FIXED_TIME } from "./clock.js";
 import { openPane } from "./editor-rail.js";
 import { isDesktopSurface } from "./surface.js";
+import { stubWidgetPacks } from "./widget-packs-fixture.js";
 
 /** The editor preview, the same address every editor spec uses. */
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
@@ -61,6 +62,10 @@ test("a refused draft restore is reported, and the report names its fate", async
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  // The diagnostic line is the shell's one message slot, and the preview has no
+  // host: an unread pack listing would write its warning over the refusal this
+  // test reads.
+  await stubWidgetPacks(page);
   await page.clock.install({ time: FIXED_TIME });
   await page.addInitScript(
     ([key, draft]) => {
@@ -112,7 +117,7 @@ test("a refused draft restore is reported, and the report names its fate", async
   // **The fate the report named.** The author edits the document in front of
   // them — the fallback — and the next autosave tick takes the single slot, so
   // the draft that could not be opened is gone from this moment on.
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
   await page.locator("[data-yunari-artboard-width]").fill("320");
   await page.locator("[data-yunari-artboard-width]").blur();
   await page.clock.fastForward(31_000);

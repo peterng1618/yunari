@@ -156,11 +156,12 @@ export const ROW_HEIGHT = 26;
 
 /** The row's indentation: `LAYER_ROW_INDENT` at the root and
  *  `LAYER_ROW_INDENT_STEP` per level, matched by `.yunari-layer-row`'s
- *  `calc(0px + var(--layer-depth, 0) * 8px)` and by the drop line's
+ *  `calc(2px + var(--layer-depth, 0) * 8px)` and by the drop line's
  *  `--layer-dropline-left`, which promises the slot the row it crosses would
- *  take. The root is flush with the pane so the leading glyph — a group's
- *  twisty or a leaf's kind mark — starts at the pane's own edge. */
-export const LAYER_ROW_INDENT = 0;
+ *  take. The root is 2px in rather than flush: the leading control is a 20px
+ *  twisty whose 24×24 press area is centred on it, so 2px of the row's own box
+ *  is what keeps that area pressable inside the pane's clipped edge. */
+export const LAYER_ROW_INDENT = 2;
 export const LAYER_ROW_INDENT_STEP = 8;
 
 /** The entered group and everything under it. The projection emits a parent

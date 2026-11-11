@@ -25,6 +25,7 @@ import { rulePx } from "./shell-tokens.js";
 import { openThemeFromStore, storedThemeOfPackage } from "./store-library.js";
 import { isDesktopSurface } from "./surface.js";
 import { withRoleTokens } from "./theme-fixture.js";
+import { stubWidgetPacks } from "./widget-packs-fixture.js";
 
 /**
  * The composition panel's browser contract, against the real editor.
@@ -55,25 +56,31 @@ import { withRoleTokens } from "./theme-fixture.js";
 
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
-/** The layer row's third `:has` arm — the reservation for three controls. Four
- *  is the most a row can draw, because the attended row adds the rename pen to
- *  the entry control, the eye and the lock; the row measured below is selected
- *  but not attended, so three is what it draws and the third arm is the one its
- *  room comes from. Read from the stylesheet so the arm's reservation and this
- *  spec's expectation stay one fact rather than two numbers kept in step by
- *  hand. */
-const THREE_CONTROL_ARM =
-  ".yunari-layer-row:has(.yunari-layer-state button:nth-child(3))";
+/** The preview serves no host, so the Widgets pane's one source — the pack
+ *  this product ships — is answered here, as `add-pane.spec.ts` does. */
+test.beforeEach(async ({ page }) => {
+  await stubWidgetPacks(page);
+});
+
+/** The layer row's fourth `:has` arm — the reservation for four controls.
+ *  Four is the most a row can draw: the attended row carries the rename pen,
+ *  the entry control, the eye and the lock. A selection is not attention, so
+ *  the row measured below is attended (the pointer is on it) and its room comes
+ *  from the fourth arm. Read from the stylesheet so the arm's reservation and
+ *  this spec's expectation stay one fact rather than two numbers kept in step
+ *  by hand. */
+const FOUR_CONTROL_ARM =
+  ".yunari-layer-row:has(.yunari-layer-state button:nth-child(4))";
 
 /** The row's own padding, which the arm's reservation includes and the slot's
  *  own footprint does not. The in-page measurement subtracts the same value. */
 const LAYER_ROW_PADDING_PX = 4;
 
-/** The slot's own footprint with three controls: 6px of padding, three
- *  26px squares on the spacing rhythm and two 4px gaps — the arm's reservation less the
- *  row's own padding. */
-const THREE_CONTROL_SLOT_PX =
-  rulePx(THREE_CONTROL_ARM, "padding-right") - LAYER_ROW_PADDING_PX;
+/** The slot's own footprint with four controls: 6px of padding, four 26px
+ *  squares on the spacing rhythm and three 4px gaps — the arm's reservation
+ *  less the row's own padding. */
+const FOUR_CONTROL_SLOT_PX =
+  rulePx(FOUR_CONTROL_ARM, "padding-right") - LAYER_ROW_PADDING_PX;
 
 /** The mark column's slot, sized on `.yunari-layer-mark` itself. */
 const MARK_SLOT_PX = rulePx(".yunari-layer-mark", "flex");
@@ -161,9 +168,13 @@ test("every row carries a role and a mark, and the role adds no height", async (
     expect(text.trim().length, "a role that says nothing").toBeGreaterThan(0);
   }
 
-  // A mark *slot* on every row, even where the treatment inside it is nothing —
-  // that slot is what lines the names up.
-  await expect(page.locator(".yunari-layer-mark")).toHaveCount(rowCount);
+  // One leading slot on every row — a leaf's kind mark, or the twisty a group
+  // draws in the same slot — and that slot is what lines the names up.
+  await expect(
+    page.locator(
+      ".yunari-layer-mark, .yunari-layer-row > button[aria-expanded]",
+    ),
+  ).toHaveCount(rowCount);
 
   // The role is `flex: none`, so it is never the element that gives up width.
   // What it must not do instead is leave the row's box: the row clips its
@@ -230,13 +241,16 @@ test("a row's mark draws its kind's glyph, and the Add pane draws the same", asy
       .locator(".yunari-layer-mark [data-yunari-layer-mark]")
       .first();
 
-  // A group says "this holds others" with the chrome's stack glyph, and a text
-  // row with the vocabulary's T — never the object's own words or bytes.
-  await expect(rowMark("group-cpu-card")).toHaveAttribute(
-    "data-yunari-layer-mark",
-    "group",
+  // A group's leading slot is its twisty, not a second glyph: the row says
+  // "this holds others" by being openable, and the fold that gave it one glyph
+  // spent no column on the stack mark. A text row keeps the vocabulary's T.
+  const groupLeading = page
+    .locator('[data-yunari-layer="group-cpu-card"] > button[aria-expanded]')
+    .first();
+  await expect(groupLeading).toHaveAttribute("aria-expanded", "true");
+  expect(await groupLeading.locator("svg").getAttribute("class")).toContain(
+    "lucide-chevron-down",
   );
-  expect(await markGlyph("group-cpu-card")).toContain("lucide-layers-2");
   await expect(rowMark("cpu-card-title")).toHaveAttribute(
     "data-yunari-layer-mark",
     "text",
@@ -368,11 +382,12 @@ test("the row's twisty paints at 20px and takes a 24×24 target", async ({
  *
  * A group used to draw a twisty column and then a second kind glyph, costing a
  * narrow pane 32px before the name. The twisty now takes the kind's slot, a leaf
- * keeps the kind mark in the same slot, and both start at the row's own left
- * edge. The child step is the other half: a root row is flush with the pane and
+ * keeps the kind mark in the same slot, and both start at the row's content
+ * edge. The child step is the other half: the root is 2px in — the room the
+ * leading control's 24×24 press area needs inside the pane's clipped edge — and
  * each level adds 8px.
  */
-test("the layer row's leading slot is one glyph, flush at the root", async ({
+test("the layer row's leading slot is one glyph, 2px in at the root", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -402,7 +417,7 @@ test("the layer row's leading slot is one glyph, flush at the root", async ({
 
   expect(rows.length, "no layer rows in the tree").toBeGreaterThan(0);
   for (const row of rows) {
-    const indent = Number(row.depth) * 8;
+    const indent = Number(row.depth) * 8 + 2;
     expect(row.paddingLeft, "the child step is not 8px per level").toBe(
       `${indent}px`,
     );
@@ -436,7 +451,9 @@ test("the layer footer appears with a selection and sits at the pane's bottom", 
     "a footer drawn before anything is selected",
   ).toBe(0);
 
-  await page.locator(".yunari-layer-row").first().click();
+  // Selected through the bridge rather than by pressing the first row: the
+  // tree scrolls, and a press can land under the pane's floating header.
+  await selectLayer(page, "group-cpu-card");
   const footer = pane.locator("[data-yunari-layer-actions]");
   await expect(footer).toBeVisible();
 
@@ -525,12 +542,10 @@ test("the state slot does not cover the role, at rest or with the row attended",
 
   // **The attended row, and it is the same predicate.** Hovering is what draws
   // a row's controls, so the slot paints a real surface over the row's right
-  // edge and the row that pays is the one the pointer is on. The name has no
-  // width floor at rest or attended — a floor is still a width the row may not
-  // have, and on a font whose glyphs run wider than the one it was measured in
-  // it pushed the role past the row's edge — so the name ellipsises while the
-  // role keeps its glyphs ("A row yields its name and its key
-  // before it yields a control, and it yields the role last").
+  // edge. The role is the column that gives way while those controls are drawn,
+  // and it gives way whole: the stylesheet clips it into the platform's
+  // visually-hidden box, so it keeps no line to be covered and still keeps the
+  // row's kind in the treeitem's accessible name.
   //
   // Every row is walked rather than a hand-picked sample, because which row is
   // over budget is the row's own role and key rather than a property of the
@@ -551,26 +566,34 @@ test("the state slot does not cover the role, at rest or with the row attended",
       `rows whose role the slot paints over while "${id}" is attended`,
     ).toEqual([]);
 
-    // **And the order, which the outcome above cannot see.** A role that
-    // clips is only legitimate once the name and the key have nothing left, and
-    // a proportional shrink would leave the name readable while the role
-    // clipped while still fitting the line — the outcome would pass and the
-    // order would be gone. Read on the row just hovered, because that is the
-    // only row the strip's weight is charged to.
+    // The background row is not a layer an author can hide, lock or enter, so
+    // attention draws no control on it and there is no yield to read.
+    if ((await row.locator(".yunari-layer-state button").count()) === 0) {
+      continue;
+    }
+
+    // **The yield itself, which the outcome above cannot see.** The role must
+    // actually stand down while the controls are drawn — a role that kept its
+    // full column and merely happened to fit would pass the overlap read — and
+    // it must stand down without leaving the tree, because it is the row's
+    // whole statement of its kind on four kinds in five.
     const yielded = await row.evaluate((element) => {
       const role = element.querySelector(".yunari-layer-role") as HTMLElement;
-      const name = element.querySelector(".yunari-layer-name") as HTMLElement;
-      const key = element.querySelector(".yunari-layer-bound");
       return {
-        roleClipped: role.scrollWidth > role.clientWidth,
-        nameLeft: Math.round(name.getBoundingClientRect().width),
-        keyLeft: Math.round(key?.getBoundingClientRect().width ?? 0),
+        position: getComputedStyle(role).position,
+        width: role.getBoundingClientRect().width,
+        text: role.textContent?.trim() ?? "",
       };
     });
     expect(
-      yielded.roleClipped && yielded.nameLeft + yielded.keyLeft > 0,
-      `"${id}" clips its role with ${yielded.nameLeft}px of name and ${yielded.keyLeft}px of key left`,
-    ).toBe(false);
+      yielded.position,
+      `"${id}" keeps its role in the line while attended`,
+    ).toBe("absolute");
+    expect(
+      yielded.width,
+      `"${id}" keeps a visible role box while attended`,
+    ).toBeLessThanOrEqual(1);
+    expect(yielded.text, `"${id}" lost its role text`).not.toBe("");
   }
 });
 
@@ -661,7 +684,7 @@ test("keeps the document's own controls reachable while a card is selected", asy
   await page.locator('[data-yunari-layer="group-cpu-card"]').click();
   await expect(page.locator('[data-yunari-panel="selection"]')).toBeVisible();
 
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
 
   // The artboard's controls are in this pane, with the selection still standing:
   // they are not behind the selection's surface, so they cannot be hidden by
@@ -1019,7 +1042,11 @@ test("carries the document's binding, and selecting a card and entering it are s
   const rows = page.locator("[data-yunari-layer]");
   const rowCount = await rows.count();
   expect(rowCount, "the starter's tree, every group open").toBeGreaterThan(1);
-  await expect(page.locator(".yunari-layer-mark")).toHaveCount(rowCount);
+  await expect(
+    page.locator(
+      ".yunari-layer-mark, .yunari-layer-row > button[aria-expanded]",
+    ),
+  ).toHaveCount(rowCount);
   await expect(page.locator("[data-yunari-layer-role]")).toHaveCount(rowCount);
 
   // **The bound column, where the document declares a binding.** The panel
@@ -1459,32 +1486,34 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
   await expect.poll(() => activeId(page)).toBe("inside-2");
   const selectMs = msSince(selectStarted);
 
-  // **The row that draws the whole state slot short of the rename pen**, which
-  // an attended row adds: the entry control, the eye and the lock — three
-  // controls at the 26px square, all of them up on a selected row the pointer is
-  // not on. The stylesheet asks for the room they need out of the *bound*
+  // **The row that draws the whole state slot**, which only attention does: the
+  // rename pen, the entry control, the eye and the lock — four controls at the
+  // 26px square. The stylesheet asks for the room they need out of the *bound*
   // column, one `:has` arm per control count.
   await selectLayer(page, "group-large");
   await expect.poll(() => activeId(page)).toBe("group-large");
   const groupRow = page.locator('[data-yunari-layer="group-large"]');
+  await groupRow.hover();
   await expect(
     groupRow.locator(".yunari-layer-state button"),
-    "entry, visibility and lock, all three on one row",
-  ).toHaveCount(3);
+    "rename, entry, visibility and lock, all four on one row",
+  ).toHaveCount(4);
   const slot = await groupRow.evaluate((row) => {
     const state = row.querySelector(".yunari-layer-state") as HTMLElement;
-    const role = row.querySelector(".yunari-layer-role") as HTMLElement;
     const bound = row.querySelector(".yunari-layer-bound") as HTMLElement;
     const name = row.querySelector(".yunari-layer-name") as HTMLElement;
-    const mark = row.querySelector(".yunari-layer-mark") as HTMLElement;
+    // A group's leading slot is its twisty; a leaf's is the kind mark. Either
+    // way it is the row's first child and the one column the narrowing rules
+    // must leave whole.
+    const leading = row.firstElementChild as HTMLElement;
     return {
       // The slot the narrowing rules, read off the row the worst case is on: a
       // value this column's own `:has`-free `flex-basis` sets, so a re-widening
       // is caught here rather than only in a comment.
-      markWidth: Math.round(mark.getBoundingClientRect().width),
+      markWidth: Math.round(leading.getBoundingClientRect().width),
       // **The two halves of the reservation, bound to each other.** One half is
-      // what the slot's own rendered box needs — 6px of padding plus three 26px
-      // squares and two 4px gaps — and the other is what the stylesheet's third
+      // what the slot's own rendered box needs — 6px of padding plus four 26px
+      // squares and three 4px gaps — and the other is what the stylesheet's fourth
       // `:has` arm reserves out of the row. The room is the row's own
       // `padding-right` rather than the key column's margin, because the slot
       // covers whatever is last in the row and that column is the role on a row
@@ -1501,17 +1530,14 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
       // layer's name does — so it can never end up the wider of the two.
       boundWidth: Math.round(bound.getBoundingClientRect().width),
       nameWidth: Math.round(name.getBoundingClientRect().width),
-      // **Recorded, not asserted.** At DESIGN.md's 246px a row drawing three
-      // 26px controls is over budget: 92px of reservation on a 211px row, so
-      // the bound's own box still overflows the line — the key short by 41px
-      // and the name by 28px. These four figures are the only instrument the
-      // row's cost has (`vg-260` carries the measurement; Task 10's ratchet and
-      // Task 12's register own the decision). Asserting that the room stayed
-      // whole would assert a defect as a pass condition, which is a red proof
-      // against its own fix. The row measured here is selected but not
-      // attended, so it draws three controls; the attended row adds the rename
-      // pen and takes the fourth arm's 126px, which no row measured here
-      // carries.
+      // **Recorded, not asserted.** At DESIGN.md's 246px a row drawing four
+      // 26px controls is over budget: the reservation alone is 126px on a 211px
+      // row, so the bound's own box still overflows the line. These four
+      // figures are the only instrument the row's cost has (`vg-260` carries
+      // the measurement; Task 10's ratchet and Task 12's register own the
+      // decision). Asserting that the room stayed whole would assert a defect as
+      // a pass condition, which is a red proof against its own fix. The row
+      // measured here is the attended row, so it draws the whole slot.
       rowWidth: Math.round(row.getBoundingClientRect().width),
       roomKept: Math.round(
         row.getBoundingClientRect().right - bound.getBoundingClientRect().right,
@@ -1519,29 +1545,18 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
       keyClipped: bound.scrollWidth > bound.clientWidth,
       nameClipped: name.scrollWidth > name.clientWidth,
       // **How far short, not only that it is short.** The row's own requirement
-      // is that the selected row keeps its name and its key readable, and the
+      // is that the attended row keeps its name and its key readable, and the
       // mark is the column that is allowed to give way — so the decision the
       // ruling asks for is "how much does the mark have to yield", which a
       // boolean cannot answer. Recorded as the overflow in px.
       nameDeficitPx: Math.max(0, name.scrollWidth - name.clientWidth),
       keyDeficitPx: Math.max(0, bound.scrollWidth - bound.clientWidth),
-      // **Recorded too, and it is the wider failure of the same over-budget
-      // row**: with three controls the row's own columns still cannot fit beside
-      // the slot, so the role — which `flex: none` keeps at its full width, and
-      // which the stylesheet promises is never the column that gives way — runs
-      // under the slot by 23px and is painted over. Which column yields when a
-      // row is this narrow is a design question between three recorded
-      // invariants and is filed as `vg-447`; `vg-265` closed the half where the
-      // slot held no control at all, which the case above asserts.
-      roleCoveredPx: Math.round(
-        role.getBoundingClientRect().right - state.getBoundingClientRect().left,
-      ),
     };
   });
   expect(
     slot.slotWidth,
-    `the slot's rendered box is the ${THREE_CONTROL_SLOT_PX}px the third \`:has\` arm promises`,
-  ).toBe(THREE_CONTROL_SLOT_PX);
+    `the slot's rendered box is the ${FOUR_CONTROL_SLOT_PX}px the third \`:has\` arm promises`,
+  ).toBe(FOUR_CONTROL_SLOT_PX);
   expect(
     slot.reservedPx,
     "and the room the arm asks the key column for is the room the slot needs",
@@ -1561,16 +1576,15 @@ test("a group entered inside a large document", async ({ page }, testInfo) => {
     ["rows-after-entry", "205"],
     ["enter-ms", String(enterMs)],
     ["select-inside-ms", String(selectMs)],
-    ["three-control-slot-width-px", String(slot.slotWidth)],
-    ["three-control-reserved-px", String(slot.reservedPx)],
-    ["three-control-row-width-px", String(slot.rowWidth)],
-    ["three-control-room-kept-px", String(slot.roomKept)],
-    ["three-control-key-clipped", String(slot.keyClipped)],
-    ["three-control-name-clipped", String(slot.nameClipped)],
-    ["three-control-name-deficit-px", String(slot.nameDeficitPx)],
-    ["three-control-key-deficit-px", String(slot.keyDeficitPx)],
-    ["three-control-role-covered-px", String(slot.roleCoveredPx)],
-    ["three-control-mark-width-px", String(slot.markWidth)],
+    ["four-control-slot-width-px", String(slot.slotWidth)],
+    ["four-control-reserved-px", String(slot.reservedPx)],
+    ["four-control-row-width-px", String(slot.rowWidth)],
+    ["four-control-room-kept-px", String(slot.roomKept)],
+    ["four-control-key-clipped", String(slot.keyClipped)],
+    ["four-control-name-clipped", String(slot.nameClipped)],
+    ["four-control-name-deficit-px", String(slot.nameDeficitPx)],
+    ["four-control-key-deficit-px", String(slot.keyDeficitPx)],
+    ["four-control-mark-width-px", String(slot.markWidth)],
   ] as const) {
     testInfo.annotations.push({ type, description: String(value) });
   }
@@ -1823,6 +1837,12 @@ test("gives every image it places a layer row", async ({ page }, testInfo) => {
       mimeType: "image/png",
       buffer: png,
     });
+    // Importing declares the file and then asks where it goes; the dialog makes
+    // the shell inert, so the next import cannot start until this one answers.
+    await page
+      .getByRole("dialog", { name: "Add image" })
+      .getByRole("button", { name: "Place on canvas", exact: true })
+      .click();
   }
 
   await expect

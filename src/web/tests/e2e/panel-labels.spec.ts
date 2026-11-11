@@ -227,7 +227,7 @@ test.describe("the settings panels name every control", () => {
     await expect(page.locator("span[data-yunari-token-weight]")).toHaveText(
       "300",
     );
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     await audit(DOCUMENT_CONTROLS);
     // The background's controls are the selection inspector's, which renders
     // while the background layer is selected; selecting it opens Composition,
@@ -255,7 +255,7 @@ test.describe("the settings panels name every control", () => {
     page,
   }) => {
     // The version control is the artboard panel's, so it is in Document.
-    await openPane(page, "Document");
+    await openPane(page, "Theme settings");
     // An `output` is a status region, not a form control: nothing an author
     // types ever reaches it, so it is named rather than wrapped in a field.
     // The role is asserted with it because a name on the wrong role would

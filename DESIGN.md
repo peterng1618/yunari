@@ -347,14 +347,23 @@ a place for tools.
 **A row yields its name and its key before it yields a control, and it yields
 the role last.** A Layers row that carries every control it can — the
 twisty, the entry control on a group, the eye and the lock — and a bound key is
-wider than the pane's body, so the row clips rather than dropping a control or
-taking the leading slot below 20px. The name and key give way first; the role gives
-way only once they have nothing left, and it is *clipped* rather than *covered*,
-because it is often the only statement of what a row is. A role the slot paints
-over says nothing; a role that ellipsises still says what it can. This is the
-pane's trade at its default width, not a defect to measure away: the mark slot is
-already at the floor its contents set, so narrowing it moves the clip rather than
-removing it.
+wider than the pane's body, so its columns give way rather than dropping a
+control or taking the leading slot below 20px. The name and key give way first;
+the role gives way only once they have nothing left, because it is often the
+only statement of what a row is. A role the slot paints over says nothing; a
+role that keeps its word still says what it can.
+
+**While the row draws its controls the role is hidden, not narrowed.** The
+controls belong to the author's attention — the pointer on the row or the
+keyboard on it — plus the one control a non-default visible/locked state brings
+back. In each of those cases the role would be the row's second competing
+column, so it gives way whole: the span keeps its text in the visually-hidden
+box rather than being removed, because a treeitem's accessible name is the
+concatenation of its columns and the role is the whole statement of its kind on
+the four kinds whose mark is `aria-hidden`. This is the pane's trade at its
+default width, not a defect to measure away: the mark slot is already at the
+floor its contents set, so narrowing it moves the clip rather than removing
+it.
 
 ### The inspector
 
@@ -596,7 +605,11 @@ elevation and hairline are unchanged.
 
 **`Segmented` has a bare form, and the header's mode switch is it.** The switch
 is the well this table describes — `--panel-2` inside a 1px `--edge` at
-`--radius-md`, the chosen name lifted to `--stage` with `--text` — and it carries
+`--radius-md` — and its chosen member takes the rail slots' selected state:
+accent ink over the accent's 14% wash. That is the shell's one selected-state
+paint, shared with the rail and the Asset Finder's tabs rather than a second
+chrome surface, and it is not the header's accent fill: the publish button is
+that. The switch carries
 no row label, because the three names inside the well are the whole control. It
 shares the labelled row's primitive but not its component:
 `components/ui/control-segmented.tsx` is a labelled **row**, whose `ControlRow`

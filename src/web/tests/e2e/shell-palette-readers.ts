@@ -5,7 +5,7 @@ import { openShell } from "./shell-palette.js";
 /** Responsibility: the four readers both shell-palette specs share — the editor opened with a pane, the shell's resolved colours, and a fill's alpha. */
 export async function openEditor(page: Page): Promise<void> {
   await openShell(page);
-  await openPane(page, "Document");
+  await openPane(page, "Theme settings");
 }
 
 /**

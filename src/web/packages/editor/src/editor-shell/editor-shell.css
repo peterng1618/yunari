@@ -2516,7 +2516,7 @@ body,
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-left: calc(var(--layer-depth, 0) * 8px);
+  padding-left: calc(2px + var(--layer-depth, 0) * 8px);
   padding-right: 4px;
   /* The control set's panel rhythm, and the half of `ROW_HEIGHT` in
      `composition-pane.tsx` that CSS owns: the drop-line's `top` is
@@ -2525,7 +2525,13 @@ body,
   /* the spacing scale: a row takes `--radius-md` — the scale's entry for menu rows and small
      tiles — rather than the off-scale `5px` it carried (plan 7 Task 3). */
   height: 26px;
-  overflow: hidden;
+  /* The row does not clip. Its name carries its own ellipsis, and the leading
+     control's 24×24 press area is centred on a 20px twisty, so on a root row
+     that area reaches 2px past the row's own left edge — `hidden` cut those
+     2px off and the target the dense-target rule promises lost its left edge.
+     `clip` with a margin does not help: hit testing stops at the row's border
+     box, so the margin would paint a target that cannot be pressed. */
+  overflow: visible;
   border-radius: var(--radius-md);
   /* The state controls are laid over this edge, so the row is their containing
      block. */
@@ -2724,6 +2730,12 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
+}
+/* The mark clips its glyph; the twisty must not clip its own target. A group's
+   leading slot is a button whose 24×24 `::before` is the press area, and
+   `overflow: hidden` on the button cut it back to the 20px paint box, so the
+   corners the rule exists for could not be pressed. */
+.yunari-layer-mark {
   overflow: hidden;
 }
 /* The name is the row's identity and it is the first column to yield, because
@@ -2762,18 +2774,6 @@ body,
 .yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-bound {
   flex-shrink: 999;
 }
-/* **And the role yields last, and it clips rather than being covered** — the pane rule's
-   other amended half. On a row whose role is wider than the pane can hold beside
-   the strip, every column that may yield has already yielded, and a role the slot
-   paints over says nothing at all where one that ellipsises says what it can.
-   `overflow: hidden` is what makes it clip: a shrunken box with `visible`
-   overflow still paints its text past its own edge. */
-.yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-role {
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* A group holds others, and a bold name says so without a mark repeating it. */
 .yunari-layer-row[data-kind="group"] .yunari-layer-name {
   font-weight: 600;
@@ -2801,10 +2801,30 @@ body,
   font-size: 11px;
 }
 /* Hover belongs to the controls. The role is the column that yields while the
-   pointer is on the row, so the actions get the width instead of sharing it
-   with a word the row already speaks to a screen reader when not hovered. */
-.yunari-layer-row:hover .yunari-layer-role {
-  display: none;
+   row draws them, so the actions get the width instead of sharing it with a
+   word the row already speaks to a screen reader.
+
+   Keyed to the controls rather than to `:hover`: attention is the pointer over
+   the row *or* the keyboard on it, and a row whose own state is not the default
+   draws one control with nobody on it. In every one of those cases the role
+   would be the second thing competing for the line, so it is the thing that
+   gives way.
+
+   Hidden visually, not removed: the treeitem's accessible name is the
+   concatenation of its own columns, and the role is the row's whole statement
+   of its kind on the four kinds whose mark is `aria-hidden`. The 1px clipped
+   box is the platform's usual visually-hidden pattern, so a screen reader
+   still reads the word while no eye pays for its column. */
+.yunari-layer-row:has(.yunari-layer-state button) .yunari-layer-role {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 /* The row's own controls — rename, the eye and the lock, plus the entry control
    on a group — laid over the row's right edge rather than held open beside it.
