@@ -216,7 +216,15 @@ ${stderr}`,
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
-      if ((await fetch(`${HOST}/api/health`)).ok) return child;
+      if ((await fetch(`${HOST}/api/health`)).ok) {
+        // **The answer must be this child's.** A host that loses the bind falls
+        // back to another port, and a host from the previous test that is still
+        // closing holds this one: either way the poll can see a healthy server
+        // that is not the one this test will talk to, and the next navigation
+        // is refused. Measured on CI, twice.
+        if (child.exitCode !== null || child.signalCode !== null) break;
+        return child;
+      }
     } catch {
       /* not up yet */
     }
@@ -224,7 +232,12 @@ ${stderr}`,
   }
 
   child.kill();
-  throw new Error(`the custom-source host never answered on ${PORT}`);
+  throw new Error(
+    `the custom-source host never answered on ${PORT} (exit ${
+      child.exitCode ?? child.signalCode ?? "unknown"
+    })
+${stderr}`,
+  );
 }
 
 /** The endpoint a source reads: the one shape each case asserts on. */
@@ -314,9 +327,17 @@ test.beforeEach(async () => {
 });
 
 test.afterEach(async () => {
-  if (host !== undefined) expectedExits.add(host);
-  host?.kill();
+  if (host === undefined) return;
+  const ending = host;
   host = undefined;
+  expectedExits.add(ending);
+  // **Wait for the port to be free.** The next `beforeEach` binds it, and a
+  // kill that has not landed yet leaves the old listener answering the health
+  // poll for a host that is still coming up.
+  await new Promise<void>((resolve) => {
+    ending.once("exit", () => resolve());
+    ending.kill();
+  });
 });
 
 test.afterAll(async () => {
