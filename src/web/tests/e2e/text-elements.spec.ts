@@ -275,6 +275,60 @@ async function saveToLibrary(page: Page): Promise<string> {
   return id;
 }
 
+/**
+ * Opens a theme the host holds, and fails if the editor did not bring it up.
+ *
+ * **The host is asked to serve the id before the editor asks for it.** The save
+ * answers with the status line and the PUT, and the boot opens a theme or
+ * nothing (`boot-theme.ts`): a read that fails once is a blank document for
+ * ever, with no retry of its own. On CI this spec's reload landed blank after a
+ * save that had already reported success. The preflight removes the save/write
+ * race; the second navigation covers the remaining transient one, because the
+ * only wrong state a blank boot can be told apart from is an empty canvas.
+ */
+async function reopen(page: Page, themeId: string): Promise<void> {
+  const content = `${HOST}/api/themes/${encodeURIComponent(themeId)}`;
+  await expect
+    .poll(async () => (await page.request.get(content)).ok(), {
+      timeout: 20_000,
+      message: `the host never served ${content}`,
+    })
+    .toBe(true);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto(hostEditorUrl(HOST, { themeId }));
+    try {
+      await expect
+        .poll(async () => (await readScene(page)).length, { timeout: 20_000 })
+        .toBeGreaterThan(0);
+      return;
+    } catch (error) {
+      if (attempt === 1) {
+        // **The page's own words on the way out.** A blank scene is either a
+        // boot that opened nothing or one that was refused, and the two are
+        // told apart only by what the shell says — read here rather than left
+        // to the trace.
+        const said = await page
+          .locator("#status-message")
+          .textContent()
+          .catch(() => null);
+        const dialogs = await page.locator('[role="dialog"]').count();
+        throw new Error(
+          `${String(error)}
+reopen ${themeId}: url ${page.url()}, status ${JSON.stringify(
+            said,
+          )}, ${dialogs} dialog(s), mode region ${JSON.stringify(
+            await page
+              .locator("[data-yunari-mode-region]")
+              .getAttribute("data-yunari-mode-region")
+              .catch(() => null),
+          )}`,
+        );
+      }
+    }
+  }
+}
+
 /** Places one Text by click and one Text box by drag, and leaves both edited. */
 async function authorBoth(
   page: Page,
@@ -707,7 +761,7 @@ test.describe("text and text box elements", () => {
 
     // A reload half: the words must be in the document, not only on the canvas.
     const id = await saveToLibrary(page);
-    await page.goto(hostEditorUrl(HOST, { themeId: id }));
+    await reopen(page, id);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -778,7 +832,7 @@ test.describe("text and text box elements", () => {
 
     // The binding is document state, not a canvas decoration.
     const id = await saveToLibrary(page);
-    await page.goto(hostEditorUrl(HOST, { themeId: id }));
+    await reopen(page, id);
     await expect.poll(async () => (await readScene(page)).length).toBe(1);
     expect(
       runsOf(await readObject(page, placed.name ?? "Text")).map(
@@ -850,7 +904,7 @@ test.describe("text and text box elements", () => {
 
     const id = await saveToLibrary(page);
 
-    await page.goto(hostEditorUrl(HOST, { themeId: id }));
+    await reopen(page, id);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -895,7 +949,7 @@ test.describe("text and text box elements", () => {
     test.setTimeout(120_000);
 
     seedLegacyTheme();
-    await page.goto(hostEditorUrl(HOST, { themeId: LEGACY_THEME_ID }));
+    await reopen(page, LEGACY_THEME_ID);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();

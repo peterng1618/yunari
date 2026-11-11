@@ -196,8 +196,23 @@ async function startHost(): Promise<ChildProcess> {
       "--app-dir",
       appDir,
     ],
-    { cwd: process.cwd(), stdio: "ignore" },
+    { cwd: process.cwd(), stdio: ["ignore", "ignore", "pipe"] },
   );
+  // **A dead host must say so.** Two own-host specs met a refused connection on
+  // their second test, on CI only, and nothing recorded why: the child's stderr
+  // went to /dev/null. The next death leaves its last words in the job log.
+  let stderr = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr = (stderr + String(chunk)).slice(-4_000);
+  });
+  child.once("exit", (code, signal) => {
+    // Our own `kill()` in the teardown is not news.
+    if (expectedExits.has(child)) return;
+    console.error(
+      `[e2e] the custom-source host on ${PORT} exited: ${code ?? signal}
+${stderr}`,
+    );
+  });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
@@ -277,6 +292,8 @@ async function playerReady(page: Page): Promise<void> {
 }
 
 let host: ChildProcess | undefined;
+/** The hosts this spec ended itself, so only a surprise exit is logged. */
+const expectedExits = new WeakSet<ChildProcess>();
 let fixture: Server | undefined;
 
 test.beforeAll(async () => {
@@ -285,11 +302,24 @@ test.beforeAll(async () => {
   seedLibrary();
   seedSources();
   fixture = await startFixture();
+});
+
+// **One host per test.** The host is a child process the spec owns, and the
+// work between two tests is the runner's: a host left from a previous test was
+// gone before the next one's first navigation on CI, with no hook of this file
+// in between that could have killed it. Starting it here makes each test's host
+// its own and leaves the reason for a mid-test death to the exit log above.
+test.beforeEach(async () => {
   host = await startHost();
 });
 
-test.afterAll(async () => {
+test.afterEach(async () => {
+  if (host !== undefined) expectedExits.add(host);
   host?.kill();
+  host = undefined;
+});
+
+test.afterAll(async () => {
   await new Promise<void>((resolve) => {
     if (fixture === undefined) {
       resolve();

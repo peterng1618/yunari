@@ -191,7 +191,11 @@ export default defineConfig({
       ),
     },
     {
-      // One real host, one set of stores: serial by construction.
+      // One real host, one set of stores: serial by construction. The global
+      // `fullyParallel` would split one file's tests across workers, and a
+      // worker that starts the host in `beforeAll` then loses it when its
+      // sibling's `afterAll` kills the same process — CI's `--workers=2`
+      // overrides the project's `workers` and did exactly that.
       name: "desktop-host",
       use: {
         ...devices["Desktop Chrome"],
@@ -199,12 +203,14 @@ export default defineConfig({
       },
       testMatch: HOST_SPECS,
       workers: 1,
+      fullyParallel: false,
     },
     {
       name: "phone-host",
       use: { ...devices["Pixel 7"] },
       testMatch: /host-player\.spec\.ts|live-chart-edge\.spec\.ts/,
       workers: 1,
+      fullyParallel: false,
     },
     {
       // Its own host on its own port, so it is serial by construction for the
@@ -216,6 +222,7 @@ export default defineConfig({
       },
       testMatch: OWN_HOST_SPEC,
       workers: 1,
+      fullyParallel: false,
     },
   ],
 });

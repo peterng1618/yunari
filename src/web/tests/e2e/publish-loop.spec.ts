@@ -105,8 +105,23 @@ async function startHost(): Promise<ChildProcess> {
       "--app-dir",
       APP_DIR,
     ],
-    { cwd: process.cwd(), stdio: "ignore" },
+    { cwd: process.cwd(), stdio: ["ignore", "ignore", "pipe"] },
   );
+  // **A dead host must say so.** The second test here met a refused connection
+  // on CI, after the first had passed, and the child's stderr had gone to
+  // /dev/null. The next death leaves its last words in the job log.
+  let stderr = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr = (stderr + String(chunk)).slice(-4_000);
+  });
+  child.once("exit", (code, signal) => {
+    // Our own `kill()` in the teardown is not news.
+    if (expectedExits.has(child)) return;
+    console.error(
+      `[e2e] the publish-loop host on ${PORT} exited: ${code ?? signal}
+${stderr}`,
+    );
+  });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
@@ -193,18 +208,28 @@ async function storedArtboard(): Promise<{ width: number; height: number }> {
   return body.artboard;
 }
 
-test.describe("the publish loop", () => {
-  let host: ChildProcess | undefined;
+let host: ChildProcess | undefined;
+/** The hosts this spec ended itself, so only a surprise exit is logged. */
+const expectedExits = new WeakSet<ChildProcess>();
 
+test.describe("the publish loop", () => {
   test.beforeAll(async () => {
     rmSync(APP_DIR, { recursive: true, force: true });
     mkdirSync(THEMES_DIR, { recursive: true });
     seedLibrary();
+  });
+
+  // **One host per test**, for the reason `custom-source.spec.ts` gives: the
+  // host this file started in `beforeAll` was gone by the second test's first
+  // navigation on CI, and no hook between them could have killed it.
+  test.beforeEach(async () => {
     host = await startHost();
   });
 
-  test.afterAll(() => {
+  test.afterEach(() => {
+    if (host !== undefined) expectedExits.add(host);
     host?.kill();
+    host = undefined;
   });
 
   test("a save reaches the display showing that theme", async ({

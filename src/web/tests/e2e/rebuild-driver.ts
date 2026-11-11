@@ -116,6 +116,13 @@ export async function openBlank(
   ratio = "16:9",
   resolution = "1080p",
 ): Promise<void> {
+  // **A press the shell has already wired.** Callers reach here on the line
+  // after `goto`, and the button is in the built HTML before its handler is: a
+  // press that lands in between closes nothing and opens nothing, and the
+  // chooser below then waits out its full timeout. Measured on CI as
+  // `text-elements.spec.ts`'s last case, "element(s) not found" for the
+  // chooser after a press that found the button.
+  await page.waitForFunction(() => "yunariEditorBridge" in window);
   await page.getByRole("button", { name: "New theme", exact: true }).click();
   const chooser = page.locator('[role="dialog"]', {
     hasText: "Choose an artboard size",
