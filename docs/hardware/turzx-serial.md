@@ -10,11 +10,13 @@
   so a display record's rotation is composed into the picture by the host
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
-- **Last hardware verification:** 2026-11-10 (probed on `COM5`; the successful
-  run was 2026-10-30)
-- **Last known good revision:** `988cda820713` (2026-11-06) — playing well on
-  the attached 5"; this path is unchanged by the Lian Li feed lookahead. Compare
-  a future playback regression against this revision.
+- **Last hardware verification:** 2026-11-13 (paced overlay run on `COM5`, owner
+  confirmed the picture; before that 2026-11-10, and the first successful run
+  2026-10-30)
+- **Last known good revision:** `fd7a3637f` (2026-11-13) — the overlay pacing
+  below, watched on the attached 5" and confirmed by eye. Compare a future
+  playback regression against this revision; `988cda820713` (2026-11-06) is the
+  last known-good before the pacing rule.
 
 **Update this document with every new fact.** Record a firmware string, a command
 the driver starts using, a refused sequence and its cause, a timing constraint —
