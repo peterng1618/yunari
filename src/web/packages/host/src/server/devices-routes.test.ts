@@ -30,7 +30,7 @@ function bridgeRecorder(): {
       describe: () => ({
         hub: { name: "Yunari", vendor: "Yunari" },
         devices: [],
-        stats: { malformed: 0, dropped: 0 },
+        stats: { received: 2, malformed: 0, dropped: 0 },
       }),
       controls: async (id, input) => {
         if (id !== "kraken-z")

@@ -166,7 +166,11 @@ describe("SignalRGB bridge", () => {
       controls: { pump: true, fans: true, telemetry: true },
       display: { kind: "panel", width: 320, height: 320 },
     });
-    expect(descriptor.stats).toEqual({ malformed: 0, dropped: 0 });
+    expect(descriptor.stats).toEqual({
+      received: 0,
+      malformed: 0,
+      dropped: 0,
+    });
   });
 
   it("orders devices by stable id, which is the UDP index", async () => {
@@ -206,8 +210,15 @@ describe("SignalRGB bridge", () => {
     expect(sink.writes[1]?.[0]).toBe(30);
 
     const descriptor = bridge.describe();
-    expect(descriptor.devices[0]?.lighting?.stats.dropped).toBe(1);
-    expect(descriptor.stats.dropped).toBe(1);
+    expect(descriptor.devices[0]?.lighting?.stats).toEqual({
+      received: 3,
+      dropped: 1,
+    });
+    expect(descriptor.stats).toEqual({
+      received: 3,
+      malformed: 0,
+      dropped: 1,
+    });
   });
 
   it("counts malformed and device-less frames", async () => {
@@ -221,7 +232,9 @@ describe("SignalRGB bridge", () => {
     send(bridge.port, fullFrame(3, [1, 2, 3]));
     await waitFor(() => {
       const stats = bridge.describe().stats;
-      return stats.malformed === 1 && stats.dropped === 1;
+      return (
+        stats.malformed === 1 && stats.received === 1 && stats.dropped === 1
+      );
     });
   });
 

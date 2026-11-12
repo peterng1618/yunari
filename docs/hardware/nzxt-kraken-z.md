@@ -118,13 +118,14 @@ report", because the firmware broadcasts `75 01` on its own):
 | 24:23 | fan RPM, little-endian |
 | 25 | fan percent |
 
-Measured on 2026-11-12: the status reply returned 43.5 °C, 1775 RPM pump at
-50%, 1022 RPM fan at 50%. Writing `72 01` / `72 02` was reflected in the next
-status reply (pump 30%, then 35%; fan 40%, then 50%) while the LCD kept taking
-frames on the same handle and reported no refusals. Lighting writes drew no
-error, but **the LEDs were not watched** — no person was at the glass during
-the run, so emission and colour order are unconfirmed visually (see *Open
-questions*).
+Measured on 2026-11-12: the status reply returned **45.0 °C, 1775 → 1652 RPM
+pump (50% → 35%), 1022 RPM fan at 50%**. Writing `72 01` / `72 02` was
+reflected in the next status reply (pump 30%, then 35%; fan 40%, then 50%)
+while the LCD kept taking frames on the same handle and reported no refusals.
+Ninety YRGB colour frames were written through the same queue with zero
+malformed datagrams and no LCD error. Lighting writes drew no error, but **the
+LEDs were not watched** — no person was at the glass during the run, so
+emission and colour order are unconfirmed visually (see *Open questions*).
 
 ## What CAM exposes beyond these reports
 

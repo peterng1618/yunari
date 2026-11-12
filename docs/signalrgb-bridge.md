@@ -115,3 +115,8 @@ as the Jungle Leopard L10 hub with its ports.
   hardware run showing LCD + LEDs + fan reports on the same handle.
 - Plugin: self-check for the datagram builder and the LED layout; one hardware run with an effect
   driving the ring while the LCD plays a Yunari theme.
+
+Measured 2026-11-12: the plugin's loopback stream is 128-byte datagrams, index 0, 40 LEDs,
+`YRGB` version 1 (304 frames in 15 s, no malformed); Yunari's receiver accepted 90 injected
+frames with none malformed and only newest-frame coalescing counted as dropped. The two halves
+were captured separately; the plugin-to-receiver run with both active is still to be recorded.

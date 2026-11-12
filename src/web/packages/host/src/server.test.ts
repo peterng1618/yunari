@@ -9171,13 +9171,13 @@ describe("The SignalRGB device descriptor", () => {
             udpPort: 7788,
             channels: [{ name: "Kraken Z", leds: 40 }],
             layout: { shape: "ring", width: 4, height: 4 },
-            stats: { malformed: 0, dropped: 0 },
+            stats: { received: 0, dropped: 0 },
           },
           controls: { pump: true, fans: true, telemetry: true },
           display: { kind: "panel", width: 320, height: 320 },
         },
       ],
-      stats: { malformed: 0, dropped: 0 },
+      stats: { received: 0, malformed: 0, dropped: 0 },
     } as const;
     const hosted = createHostServer({
       registry: new ProviderRegistry([]),

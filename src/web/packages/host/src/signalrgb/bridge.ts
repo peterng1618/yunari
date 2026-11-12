@@ -97,7 +97,15 @@ function solidFrame(colour: Uint8Array, ledCount: number): Uint8Array {
 }
 
 export interface DescriptorStats {
+  readonly received: number;
   readonly malformed: number;
+  readonly dropped: number;
+}
+
+/** One device's counters: frames it received, and how many of them were not
+ *  written (coalesced behind a newer frame, or blocked by a non-canvas mode). */
+export interface DeviceStats {
+  readonly received: number;
   readonly dropped: number;
 }
 
@@ -110,7 +118,7 @@ export interface DescriptorDevice {
     readonly udpPort: number;
     readonly channels: readonly LightingChannel[];
     readonly layout: LightingLayout;
-    readonly stats: DescriptorStats;
+    readonly stats: DeviceStats;
   };
   readonly controls?: {
     readonly pump: boolean;
@@ -160,6 +168,7 @@ interface DeviceState {
   mode: LightingMode;
   colour: Uint8Array | undefined;
   timer: ReturnType<typeof setInterval> | undefined;
+  received: number;
   dropped: number;
 }
 
@@ -183,6 +192,8 @@ export async function createSignalRgbBridge(
   const states = new Map<string, DeviceState>();
   const telemetry = new Map<string, { value: DeviceTelemetry; at: number }>();
   const now = options.now ?? (() => Date.now());
+  /** Valid frames that arrived, including ones that named no device. */
+  let received = 0;
   /** Valid frames that were not written, including ones naming no device. */
   let dropped = 0;
   /** Datagrams the parser refused. */
@@ -198,6 +209,7 @@ export async function createSignalRgbBridge(
       mode: "canvas",
       colour: undefined,
       timer: undefined,
+      received: 0,
       dropped: 0,
     };
     states.set(id, state);
@@ -262,6 +274,7 @@ export async function createSignalRgbBridge(
       return;
     }
 
+    received += 1;
     const open = sinks();
     const sink = open[frame.deviceIndex];
     if (
@@ -274,6 +287,7 @@ export async function createSignalRgbBridge(
     }
 
     const state = stateOf(sink.id);
+    state.received += 1;
     if (state.mode !== "canvas") {
       state.dropped += 1;
       dropped += 1;
@@ -328,7 +342,10 @@ export async function createSignalRgbBridge(
                   udpPort: port,
                   channels: sink.lighting.channels,
                   layout: sink.lighting.layout,
-                  stats: { dropped: state.dropped, malformed },
+                  stats: {
+                    received: state.received,
+                    dropped: state.dropped,
+                  },
                 },
               }),
           ...(sink.controls === undefined
@@ -355,7 +372,7 @@ export async function createSignalRgbBridge(
       return {
         hub: { name: "Yunari", vendor: "Yunari" },
         devices,
-        stats: { malformed, dropped },
+        stats: { received, malformed, dropped },
       };
     },
 
