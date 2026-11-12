@@ -200,6 +200,7 @@ function DeviceRow(props: {
                 lighting.layout.shape,
                 lighting.layout.width,
                 lighting.layout.height,
+                lighting.layout.count,
               ),
               copy.devicePort(lighting.udpPort),
             ].join(" · ")}

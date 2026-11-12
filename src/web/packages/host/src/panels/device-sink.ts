@@ -14,11 +14,14 @@
 
 /** How LEDs are arranged on a device, for a consumer turning them into
  *  positions. `ring` is the perimeter of `width`×`height`; `strip` is
- *  `width` LEDs per row across `height` rows. */
+ *  `width` LEDs per row across `height` rows; `rings` is `count` rings of
+ *  `width`×`height`, laid left to right one cell apart. */
 export interface LightingLayout {
-  readonly shape: "ring" | "strip";
+  readonly shape: "ring" | "strip" | "rings";
   readonly width: number;
   readonly height: number;
+  /** How many rings `shape: "rings"` draws. Absent for the other shapes. */
+  readonly count?: number;
 }
 
 /** One independently addressable run of LEDs on a device. */

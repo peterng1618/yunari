@@ -336,7 +336,7 @@ describe("KrakenPanel device sink", () => {
     expect(sink.lighting).toEqual({
       ledCount: 40,
       channels: [{ name: "Kraken Z", leds: 40 }],
-      layout: { shape: "ring", width: 11, height: 11 },
+      layout: { shape: "rings", width: 3, height: 3, count: 3 },
     });
     expect(sink.controls).toMatchObject({
       pump: true,

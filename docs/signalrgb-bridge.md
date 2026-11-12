@@ -52,7 +52,7 @@ as the Jungle Leopard L10 hub with its ports.
         "ledCount": 40,
         "udpPort": 7788,
         "channels": [ { "name": "Kraken Z", "leds": 40 } ],
-        "layout": { "shape": "ring", "width": 11, "height": 11 },
+        "layout": { "shape": "rings", "width": 3, "height": 3, "count": 3 },
         "stats": { "received": 0, "dropped": 0 }
       },
       "controls": { "pump": true, "fans": true, "telemetry": true },
@@ -64,12 +64,14 @@ as the Jungle Leopard L10 hub with its ports.
 
 - `devices` order defines the UDP **device index** (0-based). Devices without lighting are still
   listed, but the plugin creates no channel for them.
-- `layout.shape` is `ring` (perimeter of `width`×`height`) or `strip` (`width` LEDs per row,
-  `height` rows). The plugin turns it into `setControllableLeds` positions.
-- `width`/`height` are the **LED ring**, not the device's canvas: the smallest square whose
-  perimeter (`4n − 4`) holds `ledCount`. The Kraken Z's 40 LEDs are 11×11, not the 4×4 block the
-  shipped plugin draws its device on. A geometry that cannot hold the count makes a consumer
-  rebuild the subdevice (and lose its saved layout position) on every descriptor change.
+- `layout.shape` is `ring` (perimeter of `width`×`height`), `strip` (`width` LEDs per row,
+  `height` rows) or `rings` (`count` rings of `width`×`height`, laid left to right one cell apart).
+  The plugin turns it into `setControllableLeds` positions.
+- The Kraken Z's channel is the pump/controller's 40 LED slots, wired to **three AER RGB fans,
+  each an 8-LED ring**: `rings`, `3×3`, `count: 3`. `ledCount` stays 40 because the wire frame is
+  40 LEDs; the plugin places only the 24 fan LEDs and leaves the other 16 slots black. Its canvas
+  is 11 cells wide × 3 high (three 3-wide rings, one cell apart).
+- `width`/`height` describe each LED run, not the device's canvas or the fan housings.
 - `id` is stable across restarts; the plugin keys its saved layout by it.
 - Unknown fields are ignored by the plugin; missing devices answer `404`.
 - `/api/devices` already answers the host's device-assignment surface

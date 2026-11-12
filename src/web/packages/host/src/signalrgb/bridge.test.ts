@@ -83,7 +83,7 @@ function fakeSink(id: string): DeviceSink & {
     lighting: {
       ledCount: 40,
       channels: [{ name: "Kraken Z", leds: 40 }],
-      layout: { shape: "ring" as const, width: 11, height: 11 },
+      layout: { shape: "rings" as const, width: 3, height: 3, count: 3 },
     },
     controls: {
       pump: true,
@@ -161,7 +161,7 @@ describe("SignalRGB bridge", () => {
         ledCount: 40,
         udpPort: bridge.port,
         channels: [{ name: "Kraken Z", leds: 40 }],
-        layout: { shape: "ring", width: 11, height: 11 },
+        layout: { shape: "rings", width: 3, height: 3, count: 3 },
       },
       controls: { pump: true, fans: true, telemetry: true },
       display: { kind: "panel", width: 320, height: 320 },

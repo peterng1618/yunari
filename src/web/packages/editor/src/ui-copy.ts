@@ -1056,8 +1056,13 @@ export const uiCopy = {
         "One row per device Yunari drives, in the order SignalRGB numbers them.",
       deviceLeds: (count: number): string =>
         `${count} ${count === 1 ? "LED" : "LEDs"}`,
-      deviceLayout: (shape: string, width: number, height: number): string =>
-        `${shape} ${width}×${height}`,
+      deviceLayout: (
+        shape: string,
+        width: number,
+        height: number,
+        count: number | undefined,
+      ): string =>
+        `${shape} ${width}×${height}${count === undefined ? "" : ` × ${count}`}`,
       deviceChannels: (names: string): string => `Channels: ${names}`,
       devicePort: (port: number): string => `UDP ${port}`,
       deviceFrames: (received: number, dropped: number): string =>

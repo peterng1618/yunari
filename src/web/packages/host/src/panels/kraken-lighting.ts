@@ -1,8 +1,4 @@
-import type {
-  DeviceSink,
-  DeviceTelemetry,
-  LightingLayout,
-} from "./device-sink.js";
+import type { DeviceSink, DeviceTelemetry } from "./device-sink.js";
 
 /**
  * The Kraken Z's lighting and fan reports, taken from SignalRGB's shipped
@@ -21,25 +17,7 @@ import type {
 /** One channel of 40 LEDs. */
 export const KRAKEN_LED_COUNT = 40;
 
-/**
- * The square a ring of `ledCount` LEDs occupies.
- *
- * **This is the LED ring, not the device's canvas.** SignalRGB's shipped
- * plugin draws the device on a 4×4 block because that is its `Size()`, and
- * publishing that as the layout made a consumer rebuild the whole subdevice
- * whenever the descriptor changed (a 4×4 ring holds 12 LEDs, not 40). The
- * perimeter of an `n`×`n` grid is `4n − 4`, so the side is the smallest `n`
- * whose perimeter holds the count.
- */
-export function ringLayout(ledCount: number): LightingLayout {
-  return {
-    shape: "ring",
-    width: Math.ceil((ledCount + 4) / 4),
-    height: Math.ceil((ledCount + 4) / 4),
-  };
-}
-
-/** The puppump's firmware floor: a lower requested value is raised to it. */
+/** The pump's firmware floor: a lower requested value is raised to it. */
 const PUMP_MINIMUM_PERCENT = 25;
 /** One report carries 60 colour bytes: 20 LEDs. */
 const LEDS_PER_REPORT = 20;
@@ -163,7 +141,9 @@ export function createKrakenSink(deps: KrakenSinkDeps): DeviceSink {
     lighting: {
       ledCount: KRAKEN_LED_COUNT,
       channels: [{ name: "Kraken Z", leds: KRAKEN_LED_COUNT }],
-      layout: ringLayout(KRAKEN_LED_COUNT),
+      // Three AER RGB fans are daisy-chained to the pump's 40-LED channel, each
+      // a ring of 8 LEDs (24 lit; the remaining 16 slots stay empty and black).
+      layout: { shape: "rings", width: 3, height: 3, count: 3 },
     },
     controls: {
       pump: true,

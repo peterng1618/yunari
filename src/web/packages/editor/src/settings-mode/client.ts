@@ -81,11 +81,13 @@ export interface SignalRgbChannel {
   readonly leds: number;
 }
 
-/** How LEDs are arranged on a device, as the sink declares it. */
+/** How LEDs are arranged on a device, as the sink declares it. `rings` is
+ *  `count` rings of `width`×`height`, laid left to right one cell apart. */
 export interface SignalRgbLayout {
-  readonly shape: "ring" | "strip";
+  readonly shape: "ring" | "strip" | "rings";
   readonly width: number;
   readonly height: number;
+  readonly count?: number;
 }
 
 /** One device as `GET /api/devices` describes it to the SignalRGB consumer. */
@@ -562,6 +564,7 @@ function readSignalRgbLighting(input: unknown): SignalRgbDevice["lighting"] {
   const shape = (layout as Record<string, unknown>)["shape"];
   const width = finite((layout as Record<string, unknown>)["width"]);
   const height = finite((layout as Record<string, unknown>)["height"]);
+  const count = finite((layout as Record<string, unknown>)["count"]);
   const received = finite((stats as Record<string, unknown>)["received"]);
   const dropped = finite((stats as Record<string, unknown>)["dropped"]);
   const channels = Array.isArray(lighting["channels"])
@@ -578,9 +581,10 @@ function readSignalRgbLighting(input: unknown): SignalRgbDevice["lighting"] {
     : [];
 
   if (
-    (shape !== "ring" && shape !== "strip") ||
+    (shape !== "ring" && shape !== "strip" && shape !== "rings") ||
     width === undefined ||
     height === undefined ||
+    (shape === "rings" && count === undefined) ||
     received === undefined ||
     dropped === undefined
   ) {
@@ -591,7 +595,12 @@ function readSignalRgbLighting(input: unknown): SignalRgbDevice["lighting"] {
     ledCount,
     udpPort,
     channels,
-    layout: { shape, width, height },
+    layout: {
+      shape,
+      width,
+      height,
+      ...(shape === "rings" && count !== undefined ? { count } : {}),
+    },
     stats: { received, dropped },
   };
 }

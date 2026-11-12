@@ -9319,7 +9319,7 @@ describe("The SignalRGB device descriptor", () => {
             ledCount: 40,
             udpPort: 7788,
             channels: [{ name: "Kraken Z", leds: 40 }],
-            layout: { shape: "ring", width: 11, height: 11 },
+            layout: { shape: "rings", width: 3, height: 3, count: 3 },
             stats: { received: 0, dropped: 0 },
           },
           controls: { pump: true, fans: true, telemetry: true },
