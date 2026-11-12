@@ -19,6 +19,7 @@ import {
   enterLayer,
 } from "./editor-canvas.js";
 import { openPane } from "./editor-rail.js";
+import { openEditor } from "./editor-ready.js";
 import {
   addChart,
   insert,
@@ -663,7 +664,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
 
     // The starter's own hierarchy, before any panel is touched.
@@ -704,7 +705,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
@@ -744,6 +745,13 @@ test.describe("the per-kind inspector column", () => {
           input: input?.value ?? null,
         };
       });
+
+    // The column is drawn from the selection, one render behind the click: a
+    // read taken straight after it found no slider at all on CI, and reported
+    // the Layer section as missing rather than as late.
+    await expect(
+      page.locator('input[type="range"][data-yunari-opacity]'),
+    ).toBeAttached();
 
     const start = await slider();
     expect(
@@ -803,7 +811,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
@@ -850,7 +858,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
@@ -883,7 +891,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
@@ -927,7 +935,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await insert(page, "Rectangle", "shape");
@@ -974,7 +982,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await insert(page, "Rectangle", "shape");
@@ -1063,7 +1071,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     // The stage behind a transparent chart is the same `#223047` as the
@@ -1130,7 +1138,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await addChart(page, {
@@ -1226,7 +1234,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
 
@@ -1346,7 +1354,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
 
@@ -1452,7 +1460,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await addChart(page, {
@@ -1611,7 +1619,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await addChart(page, {
@@ -1715,7 +1723,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
 
@@ -1781,7 +1789,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await addChart(page, {
@@ -1841,7 +1849,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await addChart(page, {
@@ -1916,7 +1924,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
 
@@ -1938,7 +1946,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
 
     // Locking through the layer row's own control notifies the column, which
@@ -1968,7 +1976,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await selectStarterGauge(page);
 
@@ -2005,7 +2013,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await page.locator('[data-yunari-layer="group-cpu-card"]').click();
 
@@ -2031,7 +2039,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await openBlank(page);
     await insert(page, "Rectangle", "shape");
@@ -2050,7 +2058,7 @@ test.describe("the per-kind inspector column", () => {
 
   test("captures the chart's column", async ({ page }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     await selectStarterGauge(page);
     await expect(
@@ -2068,7 +2076,7 @@ test.describe("the per-kind inspector column", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.waitForFunction(() => "yunariEditorBridge" in window);
     // The dark half of the comparison: a capture of one palette cannot show a
     // hard-coded hex. The

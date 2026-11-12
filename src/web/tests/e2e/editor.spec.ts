@@ -52,6 +52,7 @@ import {
   storedColour,
 } from "./editor-fixture.js";
 import { assetCard, chooseAssetCard, openPane } from "./editor-rail.js";
+import { openEditor } from "./editor-ready.js";
 import {
   openPosition,
   placeText,
@@ -865,7 +866,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // Selecting through the layer row, not a canvas click: the stage
     // letterboxes the artboard, so a scene coordinate is not a stable page one.
     await page.locator('[data-yunari-layer="wordmark"]').click();
@@ -886,7 +887,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.locator('[data-yunari-layer="wordmark"]').click();
 
     const isOpen = (id: string): Promise<boolean> => sectionExpanded(page, id);
@@ -925,7 +926,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The scene has to be mounted before a gesture means anything: hit-testing
     // an empty canvas finds nothing empty, because nothing is on it yet.
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
@@ -1043,7 +1044,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(page.locator("#status-message")).toHaveText("Editor ready");
     // "Add color" is the palette panel's control, and the palette is the
     // Tokens pane's.
@@ -1090,7 +1091,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
 
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
@@ -1103,7 +1104,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await placeText(page);
     expect((await readScene(page)).at(-1)?.type).toBe("i-text");
 
@@ -1148,7 +1149,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Add");
     await page
       .locator('[data-yunari-panel="add"]')
@@ -1184,7 +1185,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Add");
     // The Add pane's shapes are a group: "Line" is both a chart family and a
     // primitive, so the legend is what tells the two apart.
@@ -1306,7 +1307,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Add");
 
     // Four, which is `SHAPE_KINDS` — rect, ellipse, polygon and path — spelled
@@ -1370,7 +1371,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Add");
     // The Add pane's shapes are a group: "Line" is both a chart family and a
     // primitive, so the legend is what tells the two apart.
@@ -1421,7 +1422,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1605,7 +1606,7 @@ test.describe("Fabric editor route", () => {
     // quarter-disc; only a picture says whether the thing on the canvas looks
     // like the word. Captured from the Add pane, so what is photographed is
     // what an author gets rather than a hand-placed shape.
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1665,7 +1666,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1679,7 +1680,7 @@ test.describe("Fabric editor route", () => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const duration = await page
       .locator(".editor-shell-panel")
       .evaluate((el) => getComputedStyle(el).animationDuration);
@@ -1806,7 +1807,7 @@ test.describe("Fabric editor route", () => {
      */
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -1836,7 +1837,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await selectStarterChart(page);
     await chooseIn(
       page,
@@ -1861,7 +1862,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The starter theme's clock is authored as a value run, so selecting it
     // shows what an author chooses to read and how it should read. It is a part
     // of the time card, and a part is reached by **entering** its group: with
@@ -1931,7 +1932,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The gauge is a part of the RAM card, so the card is opened first.
     await expandLayer(page, "group-ram-card");
     const layer = page.locator('[data-yunari-layer="ram-gauge"]');
@@ -1959,7 +1960,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await selectLayer(page, "Background");
     await chooseIn(page, "[data-yunari-background]", "palette.panel");
     const trigger = page.locator("[data-yunari-background]");
@@ -2001,7 +2002,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The artboard panel is a document panel, so it is in the Document pane.
     await openPane(page, "Theme settings");
     await page.locator("[data-yunari-artboard-width]").fill("1000");
@@ -2030,7 +2031,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setUncheckedThemePackage(
       page,
       {
@@ -2057,7 +2058,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -2113,7 +2114,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane.
     await openPane(page, "Design tokens");
     await page.locator('[data-yunari-palette-token-row="background"]').click();
@@ -2142,7 +2143,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The artboard must reference the token before it is deleted, or the
     // reassignment has nothing to reassign and the test passes for the wrong
     // reason. The board's one paint is `background`, so it is pointed at `panel`
@@ -2186,7 +2187,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The palette panel is the Tokens pane's, so it is in the Tokens pane; a row
     // press hands the token to the inspector, where the delete row lives.
     await openPane(page, "Design tokens");
@@ -2219,7 +2220,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The type-token library is a list now; a row press hands the token to
     // the token inspector, which is the field set's new home. `heading` is the
     // starter theme's wordmark face.
@@ -2304,7 +2305,7 @@ test.describe("Fabric editor route", () => {
     // does not change. What tracking changes is where the ink lands inside it.
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // Tracking is the run's own value, not the token's: the row lives in
     // the selection inspector's runs section, so the case selects the object
     // that wears it. The wordmark is the starter's first run.
@@ -2332,7 +2333,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Design tokens");
     // A role token is not deletable and the validator requires all three, so
     // the case creates the unroled token it will delete. The add's seeded face
@@ -2388,7 +2389,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // **An authoring act, not a canvas write.** The guard asks
     // `persistence.isDirty`, which compares the session's snapshot against what
     // it last saved; setting a Fabric property through the global reaches the
@@ -2418,7 +2419,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.keyboard.press("Control+n");
     // The size chooser is the first of New's two questions, and the surface the
     // conversion rewrote: it was a `<dialog>` of `<select>`s and is a Base UI
@@ -2463,7 +2464,7 @@ test.describe("Fabric editor route", () => {
         },
       }),
     );
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // Dirty by an authoring act first, for the reason the replacement capture
     // gives. An untouched starter is *not* dirty: the toolbar's Open would ask
     // nothing, and `answerDialogIfShown` would then find the chooser's own
@@ -2501,7 +2502,7 @@ test.describe("Fabric editor route", () => {
     // second enters it, and the manager re-resolves the part under the pointer.
     // Both routes must reach the same chart, and only a test that makes the
     // gesture itself can say so.
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const centre = await clientOfStarterGauge(page);
     await page.mouse.dblclick(centre.x, centre.y);
     await expect.poll(() => activeId(page)).toBe("ram-gauge");
@@ -2515,7 +2516,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The artboard's own size is a document property, so it stays in the
     // Document pane; its paint and its picture's box moved to the inspector
     // when the background became a layer.
@@ -2569,7 +2570,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Theme settings");
     await selectLayer(page, "Background");
 
@@ -2625,7 +2626,7 @@ test.describe("Fabric editor route", () => {
     // author sets it — so neither owner must offer it, and the background's own
     // position controls (bounds and offsets, now that media is always cover)
     // must still be offered where the background layer is selected.
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The artboard panel is a document panel, so the Theme settings pane shows it.
     await openPane(page, "Theme settings");
     await expect(page.locator("[data-yunari-artboard-fit-mode]")).toHaveCount(
@@ -2674,7 +2675,7 @@ test.describe("Fabric editor route", () => {
   test("persists a selected chart binding", async ({ page }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await selectStarterChart(page);
     await chooseIn(
       page,
@@ -2708,7 +2709,7 @@ test.describe("Fabric editor route", () => {
     // `previous` — the *first* series — kept nothing, and `palette: [null]` is
     // not something the picker can render. Measured before the fix: this
     // selector list went from `[stroke, palette.0]` to `[]`.
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Add");
     // "Line" is both a chart family and a primitive, so the Chart group is what
     // tells the two apart. A gauge's paints are not per-series, which is why the
@@ -2748,7 +2749,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await selectStarterChart(page);
     await chooseIn(
       page,
@@ -2778,7 +2779,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -2983,7 +2984,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const envelope = {
       schemaVersion: "3.0.0" as const,
       fabricVersion: "7.4.0",
@@ -3017,7 +3018,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.locator('[data-yunari-layer="wordmark"]').click();
 
     // Driven through the control, not the bridge: reaching into the page would
@@ -3062,7 +3063,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -3094,7 +3095,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -3124,7 +3125,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // **The pane is opened first, because an author opens it first.** The import
     // and replace below go through the controls the Assets pane renders, and a
     // control behind a closed pane is not one a person can press. Driving the
@@ -3345,7 +3346,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Assets");
     const assets = page.locator('[data-yunari-panel="assets"]');
     // A fake `.ttf`: nothing parses until Create type preset, which this case
@@ -3371,7 +3372,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await openPane(page, "Assets");
     await chooseAssetFile(page, "import", {
       name: "hero.png",
@@ -3412,7 +3413,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -3494,7 +3495,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -3703,7 +3704,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // The same two rectangles the case above enters, with nothing else on the
     // canvas: one is the group's own part and one is what entering puts out of
     // reach, so the two pixels below are the whole of what the rule acts on.
@@ -3742,7 +3743,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, groupDimEnvelope());
 
     // Entered the way an author does: a double-click inside the group's part.
@@ -3867,7 +3868,7 @@ test.describe("Fabric editor route", () => {
   test("rehydrates a chart runtime after undo", async ({ page }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await selectStarterChart(page);
     // The grab point comes from the object's own geometry, through the camera.
     // **The gauge's own world box.** Inside an entered group a drag moves the
@@ -3943,7 +3944,7 @@ test.describe("Fabric editor route", () => {
     // property is asserted on a plate the test authors itself — which is also
     // the property the fix actually covers. A test aimed at the plate alone
     // would pass while any other non-selectable object stayed draggable.
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setThemePackage(page, {
       schemaVersion: "3.0.0",
       fabricVersion: "7.4.0",
@@ -4110,7 +4111,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await setUncheckedThemePackage(
       page,
       {
@@ -4134,7 +4135,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.evaluate(() => {
       const editor = Object.entries(
         window as unknown as Record<string, unknown>,
@@ -4173,7 +4174,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await page.evaluate(() => {
       const editor = Object.entries(
         window as unknown as Record<string, unknown>,
@@ -4204,7 +4205,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4284,7 +4285,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4378,7 +4379,7 @@ test.describe("Fabric editor route", () => {
   test("snaps a two-object selection as a unit", async ({ page }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4411,7 +4412,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4461,7 +4462,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4577,7 +4578,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     await expect(
       page.locator("#yunari-fabric-editor canvas.upper-canvas"),
     ).toBeVisible();
@@ -4759,7 +4760,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const canvas = page.locator("#yunari-fabric-editor canvas.upper-canvas");
     await expect(canvas).toBeVisible();
 
@@ -4798,7 +4799,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const canvas = page.locator("#yunari-fabric-editor canvas.upper-canvas");
     await expect(canvas).toBeVisible();
     await selectStarterChart(page);
@@ -4946,7 +4947,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // Read the camera through its own accessor: `viewport.zoom()` is the owner
     // of zoom (Task 1), and `window.yunariEditorBridge` is the page handle
     // Plan B Task 4 established. Reaching into `canvas.getZoom()` through a
@@ -5028,7 +5029,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     const readout = page.locator("[data-yunari-zoom]");
     await expect(readout).toBeVisible();
     // Read the camera, not the canvas: `ViewportManager` owns zoom, so only the
@@ -5075,7 +5076,7 @@ test.describe("Fabric editor route", () => {
     page,
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
 
     // Scene-space document geometry, NOT object `left`. A marquee press puts the
     // hit objects inside an ActiveSelection, whose `enterGroup` rebases every
@@ -5237,7 +5238,7 @@ test.describe("Fabric editor route", () => {
   }, testInfo) => {
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
 
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
     // A fixture with both shapes the rule distinguishes: two plain siblings, and a
     // group whose child can be moved across the boundary. **It could not be, and
     // that was `vg-461` (item 4)**: the drop slots admitted only the slot the row
@@ -5381,13 +5382,7 @@ test.describe("Fabric editor route", () => {
     // which split one burst into two entries and made the undo assertion depend
     // on how fast the machine was.
     await installFixedClock(page);
-    await page.goto(EDITOR);
-    // The bridge is mounted by the editor shell, after the document it reads is
-    // ready. Selecting through it before then is a race this test lost on CI
-    // ("Cannot read properties of undefined (reading 'selectLayer')"), and the
-    // editor's own status line is the signal that says it is there.
-    await expect(page.locator("#status-message")).toHaveText("Editor ready");
-    await page.waitForFunction(() => "yunariEditorBridge" in window);
+    await openEditor(page, EDITOR);
     // Select through the bridge, not the layer row: a focused panel row is a
     // different starting state, and this test is about the nudge binding.
     await page.evaluate(() => {
@@ -5477,7 +5472,7 @@ test.describe("Fabric editor route", () => {
     // alone matches nothing. Only pressing the real keys proves the binding.
     test.skip(!isDesktopSurface(testInfo), "desktop surface");
     await installFixedClock(page);
-    await page.goto(EDITOR);
+    await openEditor(page, EDITOR);
 
     const paintOrder = (): Promise<Array<string | undefined>> =>
       page.evaluate(() => {
@@ -5622,7 +5617,7 @@ test("starts Theme settings' first section at the body's own top", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(EDITOR);
+  await openEditor(page, EDITOR);
   await openPane(page, "Theme settings");
 
   const gap = await page.evaluate(() => {
@@ -5655,7 +5650,7 @@ test("keeps the folded inspector's expand control inside its slot", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(EDITOR);
+  await openEditor(page, EDITOR);
   await page.locator("[data-yunari-inspector-toggle]").click();
 
   // The body's column transition is 160ms, and a read taken mid-slide measures
