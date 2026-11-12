@@ -58,7 +58,7 @@ describe("createPanelManager video refresh", () => {
       opens += 1;
       return deviceOver({
         frameIntervalMs: 5,
-        video: { start, presentOverlay: async () => {}, stop },
+        video: { start, presentOverlay: async () => true, stop },
       });
     });
 
@@ -92,7 +92,11 @@ describe("createPanelManager video refresh", () => {
       opens += 1;
       return deviceOver({
         frameIntervalMs: 5,
-        video: { start, presentOverlay: async () => {}, stop: async () => {} },
+        video: {
+          start,
+          presentOverlay: async () => true,
+          stop: async () => {},
+        },
       });
     });
 
@@ -141,7 +145,11 @@ describe("createPanelManager video refresh", () => {
       opens += 1;
       return deviceOver({
         frameIntervalMs: 5,
-        video: { start, presentOverlay: async () => {}, stop: async () => {} },
+        video: {
+          start,
+          presentOverlay: async () => true,
+          stop: async () => {},
+        },
       });
     });
 

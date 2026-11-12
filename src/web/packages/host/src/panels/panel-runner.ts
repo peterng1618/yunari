@@ -181,7 +181,7 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
    */
   const send = async (
     useOverlay: boolean,
-    present: (frame: Uint8Array) => Promise<void>,
+    present: (frame: Uint8Array) => Promise<boolean | void>,
     presentFailed?: () => void,
     /**
      * False for an overlay the device refused. A refusal is an answer from a
@@ -206,7 +206,10 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
     if (last !== undefined && sameBytes(last, frame)) return false;
 
     try {
-      await present(frame);
+      // `false` is the device holding the frame back on its own pacing, not a
+      // failure: the pixels are not on the panel, so `last` keeps the older
+      // frame and the next capture offers these pixels again.
+      if ((await present(frame)) === false) return false;
     } catch (error) {
       // A send that failed did not put these pixels on the panel, so the last
       // frame is not this one: keeping it would suppress the retry.
@@ -248,8 +251,9 @@ export function createPanelRunner(options: PanelRunnerOptions): PanelRunner {
       return await send(
         true,
         async (frame) => {
-          await video.presentOverlay(frame);
-          overlayFailures = 0;
+          const sent = await video.presentOverlay(frame);
+          if (sent) overlayFailures = 0;
+          return sent;
         },
         () => {
           overlayFailures += 1;

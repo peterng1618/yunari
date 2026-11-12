@@ -630,8 +630,10 @@ export class TurUsbPanel implements PanelDevice {
   }
 
   /** Replaces the UI layer over the playing video. The panel composites it
-   *  with the decoded picture; alpha is what lets the video show through. */
-  private async presentOverlay(png: Uint8Array): Promise<void> {
+   *  with the decoded picture; alpha is what lets the video show through.
+   *  Unpaced: the vendor driver sends one per frame and this interface drains
+   *  it, so every call is shown. */
+  private async presentOverlay(png: Uint8Array): Promise<boolean> {
     if (!this.opened) throw new Error("The panel is not open.");
     if (png.length > MAX_PAYLOAD) {
       throw new Error(
@@ -654,6 +656,8 @@ export class TurUsbPanel implements PanelDevice {
       );
       await this.read(READ_TIMEOUT_MS);
     });
+
+    return true;
   }
 
   /** Sends one frame, recovering a stalled endpoint the way the vendor does:

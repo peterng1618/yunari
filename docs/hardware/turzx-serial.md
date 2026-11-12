@@ -237,6 +237,14 @@ answer. Status is recognised by `needReSend` / `renderCnt` in the reply.
 - **Do not query status during video.** Unverified on hardware; the class's own
   note says a query is never appended after a frame.
 - **A held port is not a missing panel.** Close the vendor app, then retry.
+- **Pace the overlay updates.** The firmware stops draining its OUT endpoint
+  under a live stream of diffs: 20–41 KB updates every 1.5–2.5 s stalled it at
+  update 87 (56–90 across runs) while every payload was well formed, and full
+  still frames push far more data safely, so the panel's own ingest is the
+  ceiling. The host keeps a 3 s minimum gap between updates (measured
+  2026-11-12: 332 updates over 22 minutes, and 5 s carried 296 over 31) and
+  re-sends the accumulated diff on the next update, so a held-back frame is
+  neither lost nor shown late.
 - **A device that stops consuming is a USB wedge, not a held port** (measured
   2026-11-10). After the panel's OUT endpoint stops accepting data, every write
   fails with `ERROR_SEM_TIMEOUT` ("The semaphore timeout period has expired"),

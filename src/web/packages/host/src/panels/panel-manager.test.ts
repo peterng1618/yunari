@@ -213,7 +213,7 @@ describe("createPanelManager", () => {
       deviceOver({
         video: {
           start: async () => {},
-          presentOverlay: async () => {},
+          presentOverlay: async () => true,
           stop: async () => {},
         },
       }),
@@ -237,7 +237,7 @@ describe("createPanelManager", () => {
 
   it("reads videoFor once per start, and undefined leaves stills", async () => {
     const present = vi.fn(async () => {});
-    const presentOverlay = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => true);
     const start = vi.fn(async () => {});
 
     h.family = familyOver(async () =>
@@ -269,7 +269,7 @@ describe("createPanelManager", () => {
   it("passes the clip to a runner that starts it", async () => {
     const start = vi.fn(async () => {});
     let frame = 0;
-    const presentOverlay = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => true);
 
     h.rasterizer = () => ({
       capture: async () => new Uint8Array([1]),

@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PanelControlCommand, PanelDevice } from "./panel-device.js";
 import type { SerialTransport } from "./serial-transport.js";
 import {
@@ -1096,6 +1096,7 @@ describe("a panel's overlay", () => {
     pixels[0] = 255;
     pixels[3] = 255;
     const { panel, writes } = await playing(pixels);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
 
     try {
       await panel.video!.presentOverlay(Uint8Array.of(1));
@@ -1117,6 +1118,7 @@ describe("a panel's overlay", () => {
 
       // The same frame again has nothing changed: only the visible span is
       // re-sent, and the count climbs.
+      clock.mockReturnValue(1_000_000 + 4_000);
       await panel.video!.presentOverlay(Uint8Array.of(2));
       const second = writes[writes.length - 2]!;
       expect([...second.slice(0, 7)]).toEqual([
@@ -1127,6 +1129,63 @@ describe("a panel's overlay", () => {
         0x00, 0x00, 0x00, 0x00, 0x01, 0xef, 0x69,
       ]);
     } finally {
+      clock.mockRestore();
+      await panel.close();
+    }
+  });
+
+  it("holds an update back inside the pacing gap and sends the whole change after it", async () => {
+    // The panel's ingest wedges on a stream of updates; one inside the gap is
+    // not lost, because the wire's base frame moves only when an update lands.
+    let pixels = new Uint8Array(800 * 480 * 4);
+    pixels[0] = 255;
+    pixels[3] = 255;
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88", // HELLO
+      "0", // GET_FILE_SIZE: nothing stored yet
+      "create_success", // UPLOAD_FILE
+      "file_rev_done", // the panel finished writing the clip
+      "play_video_success", // START_VIDEO
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({
+        width,
+        height,
+        rgba: Uint8Array.from(pixels),
+      }),
+    });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(2_000_000);
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      expect(await panel.video!.presentOverlay(Uint8Array.of(1))).toBe(true);
+
+      // The first pixel clears and the second turns red: a change the gap holds.
+      pixels = new Uint8Array(800 * 480 * 4);
+      pixels[4] = 255;
+      pixels[7] = 255;
+      const sent = fake.writes.length;
+      expect(await panel.video!.presentOverlay(Uint8Array.of(2))).toBe(false);
+      expect(fake.writes.length).toBe(sent);
+
+      // After the gap the same capture carries everything since the panel's
+      // last update: the new pixel, diffed from the base that is still there.
+      clock.mockReturnValue(2_000_000 + 4_000);
+      expect(await panel.video!.presentOverlay(Uint8Array.of(3))).toBe(true);
+      const body = fake.writes[fake.writes.length - 1]!;
+      // Offset 1, width 1, one opaque red pixel — the cleared pixel at 0 is
+      // absent from the visible list, which is how it clears.
+      expect([...body.slice(0, 9)]).toEqual([
+        0x00, 0x00, 0x01, 0x00, 0x01, 0x03, 0x03, 0xff, 0x00,
+      ]);
+    } finally {
+      clock.mockRestore();
       await panel.close();
     }
   });

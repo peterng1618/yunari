@@ -152,7 +152,12 @@ export interface PanelVideo {
     placement: PanelVideoPlacement,
     rotation?: number,
   ): Promise<void>;
-  presentOverlay(png: Uint8Array): Promise<void>;
+  /**
+   * Shows the UI over the playing clip. Answers `false` when the device's own
+   * pacing held the frame back: nothing was sent, so the caller must not treat
+   * these pixels as shown and has to offer the next capture again.
+   */
+  presentOverlay(png: Uint8Array): Promise<boolean>;
   stop(): Promise<void>;
 }
 

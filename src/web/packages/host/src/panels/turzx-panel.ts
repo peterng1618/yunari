@@ -57,6 +57,18 @@ const FILE_TIMEOUT_MS = 10_000;
 export const SIZE_PROBE_TIMEOUT_MS = 2_000;
 /** The panel dropped an overlay update sent 8 ms after init; 1.5 s worked. */
 const OVERLAY_SETTLE_MS = 1500;
+/**
+ * Shortest gap between two overlay updates, in milliseconds.
+ *
+ * The firmware stops draining its OUT endpoint under a live stream of updates:
+ * 20–41 KB diffs sent every 1.5–2.5 s stalled it at update 87 (and at 56–90
+ * across other runs), while the payloads were all well formed. The bytes are
+ * not the cause — full still frames push far more data safely — so the panel's
+ * own ingest is the ceiling. A 3 s floor carried 332 updates over 22 minutes and
+ * 5 s carried 296 over 31 (measured 2026-11-12); a held-back frame is not a lost
+ * one, because `previousOverlay` advances only when an update lands.
+ */
+const OVERLAY_MIN_GAP_MS = 3_000;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
 /**
@@ -343,6 +355,8 @@ class TurzxPanel implements PanelDevice {
   private previousOverlay: Uint8Array | undefined;
   /** UPDATE_BITMAP's count field: the verified probe sent 0 first. */
   private overlayCount = 0;
+  /** When the last overlay update was sent, for the gap below. */
+  private lastOverlayAt = 0;
   /**
    * The brightness byte this host last wrote, full by default.
    *
@@ -478,6 +492,9 @@ class TurzxPanel implements PanelDevice {
         // last session is meaningless. The probe sent 0 first and the panel took
         // it, so the field's meaning is unverified; Task 12 observes it.
         this.overlayCount = 0;
+        // The settle above is the wait this first update needed; the pacing gap
+        // belongs to a stream, not to the frame after an init.
+        this.lastOverlayAt = 0;
         if (
           this.previousVideoPath !== undefined &&
           this.previousVideoPath !== remotePath
@@ -501,16 +518,19 @@ class TurzxPanel implements PanelDevice {
   /**
    * Sends one overlay diff over the playing video: the UPDATE_BITMAP header and
    * its body in one queue slot, so no control command lands between them, then
-   * keeps the frame as the base for the next diff.
+   * keeps the frame as the base for the next diff. Answers `false` inside the
+   * pacing gap, having sent nothing and kept the older base.
    */
-  private async presentOverlay(png: Uint8Array): Promise<void> {
-    await this.enqueue(async () => {
+  private async presentOverlay(png: Uint8Array): Promise<boolean> {
+    return this.enqueue(async () => {
       const previous = this.previousOverlay;
       if (previous === undefined) {
         throw new Error(
           "The panel's overlay is not initialized; start the video before sending an update.",
         );
       }
+
+      if (Date.now() - this.lastOverlayAt < OVERLAY_MIN_GAP_MS) return false;
 
       const current = await this.decode(
         png,
@@ -533,7 +553,9 @@ class TurzxPanel implements PanelDevice {
       // a number. The first update carries 0, the value the verified probe
       // sent; whether the count matters is Task 12's observation.
       this.overlayCount = count + 1;
+      this.lastOverlayAt = Date.now();
       this.previousOverlay = current.rgba;
+      return true;
     });
   }
 

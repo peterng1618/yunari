@@ -268,7 +268,7 @@ describe("createPanelRunner", () => {
   });
 
   it("sends overlay captures through presentOverlay when a video source is given", async () => {
-    const presentOverlay = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => true);
     const present = vi.fn(async () => {});
     const start = vi.fn(async () => {});
     const stopVideo = vi.fn(async () => {});
@@ -301,8 +301,52 @@ describe("createPanelRunner", () => {
     expect(stopVideo).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a held-back overlay again instead of counting it as shown", async () => {
+    // The device paces its overlay updates. A held-back frame is not on the
+    // panel, so the runner must keep offering these pixels: recording them as
+    // the last frame would let a freeze leave the panel on stale pixels.
+    let attempts = 0;
+    const presentOverlay = vi.fn(async () => {
+      attempts += 1;
+      return attempts > 1;
+    });
+    const frames: number[] = [];
+    const device: PanelDevice = {
+      geometry: { width: 4, height: 4 },
+      open: async () => {},
+      present: vi.fn(async () => {}),
+      close: async () => {},
+      video: {
+        start: async () => {},
+        presentOverlay,
+        stop: async () => {},
+      },
+    };
+    const rasterizer: Rasterizer = {
+      capture: vi.fn(async () => Uint8Array.of(1)),
+      captureOverlay: vi.fn(async () => Uint8Array.of(2)),
+      close: async () => {},
+    };
+
+    const runner = createPanelRunner({
+      device,
+      rasterizer,
+      video: SOURCE,
+      onFrame: () => frames.push(1),
+    });
+
+    // Held back: nothing went out, so this tick did not show a frame.
+    await expect(runner.tick()).resolves.toBe(false);
+    expect(frames).toHaveLength(0);
+
+    // The same capture is offered again, and this time it lands.
+    await expect(runner.tick()).resolves.toBe(true);
+    expect(presentOverlay).toHaveBeenCalledTimes(2);
+    expect(frames).toHaveLength(1);
+  });
+
   it("retries a clip that failed to start before giving up on it", async () => {
-    const presentOverlay = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => true);
     const present = vi.fn(async () => {});
     let attempts = 0;
     const start = vi.fn(async () => {
@@ -347,7 +391,7 @@ describe("createPanelRunner", () => {
       open: async () => {},
       present,
       close: async () => {},
-      video: { start, presentOverlay: async () => {}, stop: async () => {} },
+      video: { start, presentOverlay: async () => true, stop: async () => {} },
     };
     const rasterizer: Rasterizer = {
       capture: vi.fn(async () => Uint8Array.of((frame += 1))),
@@ -372,7 +416,7 @@ describe("createPanelRunner", () => {
 
   it("keeps the still path when no video source is given", async () => {
     const present = vi.fn(async () => {});
-    const presentOverlay = vi.fn(async () => {});
+    const presentOverlay = vi.fn(async () => true);
     const device: PanelDevice = {
       geometry: { width: 4, height: 4 },
       open: async () => {},
@@ -423,7 +467,7 @@ describe("createPanelRunner", () => {
       close: async () => {},
       video: {
         start,
-        presentOverlay: vi.fn(async () => {}),
+        presentOverlay: vi.fn(async () => true),
         stop: async () => {},
       },
     };
@@ -451,7 +495,7 @@ describe("createPanelRunner", () => {
       },
       video: {
         start: async () => {},
-        presentOverlay: async () => {},
+        presentOverlay: async () => true,
         stop: async () => {
           order.push("stop");
         },
@@ -490,6 +534,7 @@ describe("createPanelRunner", () => {
         presentOverlay: async () => {
           await gate;
           order.push("overlay");
+          return true;
         },
         stop: async () => {
           order.push("stop");
@@ -522,6 +567,7 @@ describe("createPanelRunner", () => {
     const presentOverlay = vi.fn(async () => {
       overlayCalls += 1;
       if (overlayCalls === 1) throw new Error("overlay refused");
+      return true;
     });
     const present = vi.fn(async () => {});
     let overlayFrame = 0;
@@ -610,7 +656,7 @@ describe("createPanelRunner", () => {
       close: deviceClose,
       video: {
         start: async () => {},
-        presentOverlay: async () => {},
+        presentOverlay: async () => true,
         // A disconnected panel refuses this write; the port is still open and
         // must be released before anything can open it again.
         stop: async () => {
