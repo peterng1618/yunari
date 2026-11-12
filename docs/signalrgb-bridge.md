@@ -118,5 +118,9 @@ as the Jungle Leopard L10 hub with its ports.
 
 Measured 2026-11-12: the plugin's loopback stream is 128-byte datagrams, index 0, 40 LEDs,
 `YRGB` version 1 (304 frames in 15 s, no malformed); Yunari's receiver accepted 90 injected
-frames with none malformed and only newest-frame coalescing counted as dropped. The two halves
-were captured separately; the plugin-to-receiver run with both active is still to be recorded.
+frames with none malformed and only newest-frame coalescing counted as dropped.
+
+With both halves running (SignalRGB driving the bridge while Yunari played the glass), a 30 s
+window at the receiver counted 650 frames received (21.7 Hz), 0 malformed, 184 dropped by
+newest-frame coalescing, all resolving to device index 0 with `ledCount` 40. The host logged no
+LCD write refusals during the run.
