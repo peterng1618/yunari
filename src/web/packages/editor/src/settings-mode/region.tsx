@@ -22,6 +22,7 @@ import { KeyboardPage } from "./pages/keyboard-page.js";
 import { PathPresetsPage } from "./pages/path-presets-page.js";
 import { PreviewsPage } from "./pages/previews-page.js";
 import { ReadingsPage } from "./pages/readings-page.js";
+import { SignalRgbPage } from "./pages/signalrgb-page.js";
 import { UnitsPage } from "./pages/units-page.js";
 import {
   createPluginSettingsClient,
@@ -277,6 +278,12 @@ function Settings(props: {
                 <>
                   {page.id === "displays" ? <DisplaysPage {...host} /> : null}
                   {page.id === "hardware" ? <HardwarePage {...host} /> : null}
+                  {page.id === "signalrgb" ? (
+                    <SignalRgbPage
+                      settings={host.settingsClient}
+                      write={host.write}
+                    />
+                  ) : null}
                   {page.id === "units" ? <UnitsPage {...host} /> : null}
                   {page.id === "readings" ? <ReadingsPage {...host} /> : null}
                   {page.id === "appearance" ? (

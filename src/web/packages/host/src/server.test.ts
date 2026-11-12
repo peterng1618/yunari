@@ -83,6 +83,7 @@ import type { HostRecord } from "./settings/host-record.js";
 import type { Monitor } from "./settings/monitors.js";
 import type { KeyProtector } from "./settings/os-key-protector.js";
 import { createSecretStore } from "./settings/secret-store.js";
+import { createSignalRgbBridgeSettings } from "./settings/signalrgb-bridge.js";
 import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -9183,6 +9184,7 @@ describe("The SignalRGB device descriptor", () => {
       registry: new ProviderRegistry([]),
       bundles: { player: tmpDir, editor: tmpDir },
       devices: createDeviceSettingsStore(tmpDir),
+      signalRgbBridge: createSignalRgbBridgeSettings(tmpDir),
       bridge: {
         port: 7788,
         describe: () => descriptor,
@@ -9205,9 +9207,70 @@ describe("The SignalRGB device descriptor", () => {
       expect(answer.status).toBe(200);
       expect(answer.json()).toMatchObject({
         available: { gpus: [], disks: [] },
+        bridge: {
+          listening: true,
+          port: 7788,
+          configuredPort: 7788,
+          error: null,
+        },
         hub: descriptor.hub,
         devices: descriptor.devices,
         stats: descriptor.stats,
+      });
+    } finally {
+      await hosted.close();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers why the receiver is absent, and stores a new port", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-bridge-"));
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      devices: createDeviceSettingsStore(tmpDir),
+      signalRgbBridge: createSignalRgbBridgeSettings(tmpDir),
+      bridgeError: "listen EADDRINUSE 127.0.0.1:7788",
+    });
+
+    try {
+      const before = await request(hosted.server, "GET", "/api/devices");
+      expect(before.status).toBe(200);
+      expect(before.json()).toMatchObject({
+        bridge: {
+          listening: false,
+          port: null,
+          configuredPort: 7788,
+          error: "listen EADDRINUSE 127.0.0.1:7788",
+        },
+      });
+
+      // A port the host could never bind is refused here, before the file is
+      // touched; the route's rule is the store's own.
+      expect(
+        (
+          await request(
+            hosted.server,
+            "PUT",
+            "/api/signalrgb-bridge",
+            json({ udpPort: 0 }),
+          )
+        ).status,
+      ).toBe(400);
+
+      const saved = await request(
+        hosted.server,
+        "PUT",
+        "/api/signalrgb-bridge",
+        json({ udpPort: 9000 }),
+      );
+      expect(saved.status).toBe(200);
+      expect(saved.json()).toEqual({ udpPort: 9000 });
+      expect(await createSignalRgbBridgeSettings(tmpDir).read()).toBe(9000);
+
+      const after = await request(hosted.server, "GET", "/api/devices");
+      expect(after.json()).toMatchObject({
+        bridge: { configuredPort: 9000 },
       });
     } finally {
       await hosted.close();

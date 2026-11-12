@@ -382,7 +382,8 @@ export function createHostServer(options: HostServerOptions): HostServer {
     moveLan,
     // The descriptor rides in `GET /api/devices`, the path the assignment
     // surface already owns; see the settings route's `bridge` option.
-    bridge: () => options.bridge?.describe(),
+    bridge: () => options.bridge,
+    signalRgbBridge: options.signalRgbBridge,
   });
   const secretRoutes = createSecretRoutes({
     sourceRoutes,

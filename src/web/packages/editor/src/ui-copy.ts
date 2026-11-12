@@ -159,6 +159,7 @@ export const uiCopy = {
     pages: {
       displays: "Displays",
       hardware: "Hardware",
+      signalrgb: "SignalRGB",
       units: "Units & time",
       readings: "Readings",
       appearance: "Appearance",
@@ -177,6 +178,8 @@ export const uiCopy = {
         "Each display shows its own theme. Assign one from the theme's row in Themes.",
       hardware:
         "Which hardware the Host reports. These apply to every theme, unless a theme asks for something different.",
+      signalrgb:
+        "The colour receiver SignalRGB sends to, and the devices it publishes back.",
       units:
         "How the Host's readings are shown. A theme decides how a clock reads; this decides which zone it reads and which units temperatures use.",
       readings:
@@ -1023,6 +1026,43 @@ export const uiCopy = {
       heading: (theme: string): string => `${theme} needs`,
       hint: "This theme reads hardware that has no answer yet. Pick a device, or leave it following the Host's settings.",
       inherit: "Use the Host's settings",
+    },
+    /** The SignalRGB seam's own page: the receiver, its port, and the devices
+     *  it publishes. This is the only place in Yunari a person can see that the
+     *  bridge exists at all. */
+    signalrgb: {
+      heading: "Receiver",
+      hint: "SignalRGB sends colour frames to this host over loopback UDP. The devices below are its subdevices; nothing is added by hand in either app.",
+      listening: (port: number): string => `Listening on 127.0.0.1:${port}.`,
+      notListening: "The receiver is not listening.",
+      bindFailed: (reason: string): string =>
+        `The receiver could not bind: ${reason}`,
+      port: "UDP port",
+      portHint: "A whole number from 1 to 65535.",
+      rebindNote:
+        "A new port applies on the next host start. The receiver does not rebind while it runs.",
+      savedPort: "Saved the bridge port. Restart this host to bind it.",
+      devicesHeading: "Devices",
+      devicesHint:
+        "One row per device Yunari drives, in the order SignalRGB numbers them.",
+      deviceLeds: (count: number): string =>
+        `${count} ${count === 1 ? "LED" : "LEDs"}`,
+      deviceLayout: (shape: string, width: number, height: number): string =>
+        `${shape} ${width}×${height}`,
+      deviceChannels: (names: string): string => `Channels: ${names}`,
+      devicePort: (port: number): string => `UDP ${port}`,
+      deviceFrames: (received: number, dropped: number): string =>
+        `${received} received · ${dropped} dropped`,
+      noLighting: "no lighting",
+      noDevices:
+        "No device is open. A device appears here once Yunari starts driving it.",
+      absent: "The receiver is not running on this host.",
+      reading: "Reading the bridge…",
+      unreachable:
+        "The host did not answer. This page reads it while Yunari runs.",
+      addHeading: "How a device is added",
+      addBody:
+        "A device appears here, and in SignalRGB, only when Yunari registers a device sink for it. There is no manual add in either app. SignalRGB refreshes its subdevices from this list within about 15 seconds of a change.",
     },
     /** The region's own status line, which is the host page's: its two halves
      *  are the display count and the last write's answer. */

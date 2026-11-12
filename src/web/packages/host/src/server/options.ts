@@ -30,6 +30,7 @@ import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
 import type { FontFavoritesStore } from "../settings/font-favorites.js";
 import type { HostRecord } from "../settings/host-record.js";
 import type { Monitor } from "../settings/monitors.js";
+import type { SignalRgbBridgeSettingsStore } from "../settings/signalrgb-bridge.js";
 import type { SourceStore } from "../settings/sources.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
@@ -89,6 +90,19 @@ export interface HostServerOptions {
    * over a getter read per request.
    */
   readonly bridge?: SignalRgbBridge | undefined;
+  /**
+   * Why the last bind attempt failed, in the host's words. A missing bridge
+   * alone does not say whether the receiver never started or could not take its
+   * port; the settings surface needs the difference. Set only on a failed
+   * attempt, and read per request like {@link bridge}.
+   */
+  readonly bridgeError?: string | undefined;
+  /**
+   * The receiver's stored port, read and replaced by the SignalRGB settings
+   * page. Absent when this host keeps no such setting; the route then says so
+   * rather than inventing a default.
+   */
+  readonly signalRgbBridge?: SignalRgbBridgeSettingsStore | undefined;
   /** The one-time code a display with no camera types, and the window it is
    *  valid in. Supplied so the launcher can print a link carrying the same code
    *  the claim route accepts; a caller with no launcher gets a store of its
