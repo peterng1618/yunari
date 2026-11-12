@@ -48,6 +48,13 @@ const SLEEP_DELAY_ID = "yunari-panel-sleep-delay";
  * Disconnect, which stops the panel and keeps it stopped until a reconnect or a
  * host restart; while it is not, it offers Reconnect. Removing the display is
  * the permanent answer, so the section never offers that here.
+ *
+ * **A panel that is attached but silent gets a third control.** A device that
+ * opened and then stopped taking data is not cured by a reconnect — the port
+ * reopens into the same wedge — so the section offers the restart of its USB
+ * node, which is what does clear it. It is drawn only while the device is
+ * attached and not connected: resetting a working panel would drop it for
+ * nothing.
  */
 export function PanelControlsSection(props: {
   readonly displayId: string;
@@ -65,6 +72,8 @@ export function PanelControlsSection(props: {
   readonly onReconnect: () => Promise<void>;
   /** Stops the device and keeps it stopped. The caller re-reads the map. */
   readonly onDisconnect: () => Promise<void>;
+  /** Has Windows restart the device's USB node. Prompts for elevation. */
+  readonly onResetDevice: () => Promise<void>;
   readonly onCommand: (command: EditorPanelCommand) => Promise<string>;
 }): React.JSX.Element {
   const copy = uiCopy.hostSettings.panels.controls;
@@ -93,6 +102,9 @@ export function PanelControlsSection(props: {
   /** True while this surface's own disconnect is in flight, for the same
    *  reason as `reconnecting`. */
   const [disconnecting, setDisconnecting] = useState(false);
+  /** True while the elevated restart is running: the UAC prompt and the USB
+   *  restart both happen while the row must show something is under way. */
+  const [resetting, setResetting] = useState(false);
   /** A connection press that failed, drawn outside the door: the door does not
    *  exist while disconnected, and a disconnect can fail while it is open. */
   const [connectionFailure, setConnectionFailure] = useState<
@@ -160,6 +172,23 @@ export function PanelControlsSection(props: {
         setDisconnecting(false);
         setConnectionFailure(
           copy.disconnectFailed(
+            reason instanceof Error ? reason.message : String(reason),
+          ),
+        );
+      },
+    );
+  };
+
+  const resetDevice = (): void => {
+    if (resetting) return;
+    setResetting(true);
+    setConnectionFailure(undefined);
+    void props.onResetDevice().then(
+      () => setResetting(false),
+      (reason: unknown) => {
+        setResetting(false);
+        setConnectionFailure(
+          copy.resetDeviceFailed(
             reason instanceof Error ? reason.message : String(reason),
           ),
         );
@@ -242,22 +271,52 @@ export function PanelControlsSection(props: {
             {disconnecting ? copy.disconnecting : copy.disconnect}
           </button>
         ) : (
-          <button
-            type="button"
-            data-yunari-panel-reconnect={props.displayId}
-            className={plainButtonClasses}
-            disabled={reconnecting || status === "connecting"}
-            {...controlStateAttributes(
-              reconnecting || status === "connecting" ? "busy" : undefined,
+          <>
+            <button
+              type="button"
+              data-yunari-panel-reconnect={props.displayId}
+              className={plainButtonClasses}
+              disabled={reconnecting || resetting || status === "connecting"}
+              {...controlStateAttributes(
+                reconnecting || status === "connecting" ? "busy" : undefined,
+              )}
+              onClick={reconnect}
+            >
+              {reconnecting || status === "connecting"
+                ? copy.reconnecting
+                : copy.reconnect}
+            </button>
+            {/* Only for an attached device the host can name: an unplugged
+                panel has no USB node, and a family whose discovery reports no
+                instance id has nothing to restart. */}
+            {props.panel?.deviceId === undefined ? null : (
+              <button
+                type="button"
+                data-yunari-panel-reset-device={props.displayId}
+                className={plainButtonClasses}
+                disabled={resetting || reconnecting}
+                {...controlStateAttributes(resetting ? "busy" : undefined)}
+                onClick={resetDevice}
+              >
+                {resetting ? copy.resettingDevice : copy.resetDevice}
+              </button>
             )}
-            onClick={reconnect}
-          >
-            {reconnecting || status === "connecting"
-              ? copy.reconnecting
-              : copy.reconnect}
-          </button>
+          </>
         )}
       </div>
+      {connected || props.panel?.deviceId === undefined ? null : (
+        <p className="m-0 text-2xs text-faint">{copy.resetDeviceHint}</p>
+      )}
+      {/* The host's own words for why an attached device is not driven: a
+          retry loop that meets the same refusal must not read as "wait". */}
+      {connected || props.panel?.reason === undefined ? null : (
+        <p
+          data-yunari-panel-reason={props.displayId}
+          className="m-0 text-2xs text-warn"
+        >
+          {props.panel.reason}
+        </p>
+      )}
       {status === "disconnected" ? (
         <p className="m-0 text-2xs text-faint">
           {props.connection.stopped === true

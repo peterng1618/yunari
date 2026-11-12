@@ -10,7 +10,8 @@
   so a display record's rotation is composed into the picture by the host
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
-- **Last hardware verification:** 2026-10-30 (probed on `COM5`)
+- **Last hardware verification:** 2026-11-10 (probed on `COM5`; the successful
+  run was 2026-10-30)
 - **Last known good revision:** `988cda820713` (2026-11-06) — playing well on
   the attached 5"; this path is unchanged by the Lian Li feed lookahead. Compare
   a future playback regression against this revision.
@@ -30,9 +31,15 @@ matching:
 chs_<model>.dev<n>_rom<version>
 ```
 
-The model string is the identity; the `rom` field is the firmware. Ports that do
-not answer are closed and ignored. A port another program holds is reported, not
-fatal — the TURZX vendor app is the usual holder.
+The model string is the identity; the `rom` field is the firmware. A port that
+answers with something else is closed and ignored. Two failures are reported
+rather than dropped, because both are present hardware the owner can act on:
+
+- A port another program holds (open refused with `EACCES`/`EBUSY`) is listed as
+  disconnected with that reason. The TURZX vendor app is the usual holder.
+- A port that opens and then stops taking data is listed as disconnected with
+  the write deadline's reason and the device's OS instance id, so the host can
+  restart its USB node. Reopening the port would only meet the same wedge.
 
 After HELLO the driver sends `STOP_VIDEO`, `STOP_MEDIA` and `QUERY_STATUS` so the
 panel starts from a known state. The open-time `QUERY_STATUS` text reply stays
@@ -230,6 +237,22 @@ answer. Status is recognised by `needReSend` / `renderCnt` in the reply.
 - **Do not query status during video.** Unverified on hardware; the class's own
   note says a query is never appended after a frame.
 - **A held port is not a missing panel.** Close the vendor app, then retry.
+- **A device that stops consuming is a USB wedge, not a held port** (measured
+  2026-11-10). After the panel's OUT endpoint stops accepting data, every write
+  fails with `ERROR_SEM_TIMEOUT` ("The semaphore timeout period has expired"),
+  and the process still holding the handle makes every later open answer
+  `EACCES` — so the host's first sentence blames another program for its own
+  stale handle. The transport therefore bounds a write at 10 s and a close at
+  5 s, and a timed-out write marks the port closed so later writes fail at once
+  instead of queueing. `IOCTL_SERIAL_RESET_DEVICE` is not a way out: `usbser`
+  answers `ERROR_INVALID_PARAMETER`.
+- **Only a restart of the parent composite device clears the wedge.** Restarting
+  the COM child (`USB\VID_1D6B&PID_0106&MI_00\…`) leaves it; restarting
+  `USB\VID_1D6B&PID_0106\…` does, and HELLO then answers at once. Both need
+  elevation, which is why the vendor app (its manifest is
+  `requireAdministrator`) never meets the failure. Host settings offers that
+  restart as **Restart USB device**, through a UAC prompt; the retry loop
+  reopens the panel afterwards.
 
 ## Other revisions are different devices
 

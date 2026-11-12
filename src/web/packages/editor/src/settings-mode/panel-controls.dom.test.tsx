@@ -40,6 +40,16 @@ const CONTROLLABLE: PanelHint = {
   },
 };
 
+/** Attached, opened, then no longer taking data: the wedge a reconnect cannot
+ *  clear, and the host can name the USB node whose restart does. */
+const SILENT: PanelHint = {
+  ...CONTROLLABLE,
+  status: "disconnected",
+  reason:
+    'TURZX 5" Panel is attached but did not answer: The serial port stopped accepting data. Unplug and replug it, or restart its USB device.',
+  deviceId: "USB\\VID_1D6B&PID_0106&MI_00\\6&E9576A&5&0000",
+};
+
 const ALL_COMMANDS = [
   "brightness",
   "screen",
@@ -122,6 +132,7 @@ function section(options: {
   readonly commands?: readonly string[];
   readonly onReconnect?: () => Promise<void>;
   readonly onDisconnect?: () => Promise<void>;
+  readonly onResetDevice?: () => Promise<void>;
   readonly stopped?: boolean;
   readonly displayId?: string;
 }): ReactElement {
@@ -136,6 +147,7 @@ function section(options: {
       }}
       onReconnect={options.onReconnect ?? (async () => undefined)}
       onDisconnect={options.onDisconnect ?? (async () => undefined)}
+      onResetDevice={options.onResetDevice ?? (async () => undefined)}
       onCommand={options.onCommand}
     />
   );
@@ -329,6 +341,58 @@ it("says a disconnected panel stays off rather than promising a retry", async ()
   );
   expect(container.textContent).toContain("Disconnected by hand.");
   expect(container.textContent).not.toContain("every 15 seconds");
+});
+
+it("offers the USB restart for an attached device the host can name", async () => {
+  const onResetDevice = vi.fn(async () => undefined);
+  const container = await mount(
+    section({
+      panel: SILENT,
+      status: "disconnected",
+      commands: [],
+      onCommand: async () => "ok",
+      onResetDevice,
+    }),
+  );
+
+  expect(container.textContent).toContain("Windows asks for permission first.");
+  expect(container.textContent).toContain("stopped accepting data");
+  await click(buttonNamed(/^restart usb device$/i));
+  expect(onResetDevice).toHaveBeenCalledTimes(1);
+});
+
+it("does not offer a USB restart for a device the host cannot name", async () => {
+  await mount(
+    section({
+      panel: CONTROLLABLE,
+      status: "disconnected",
+      commands: [],
+      onCommand: async () => "ok",
+    }),
+  );
+
+  expect(document.querySelector("[data-yunari-panel-reset-device]")).toBeNull();
+  expect(document.body.textContent).not.toContain(
+    "Windows asks for permission first.",
+  );
+});
+
+it("shows a refused USB restart beside the status it is about", async () => {
+  const container = await mount(
+    section({
+      panel: SILENT,
+      status: "disconnected",
+      commands: [],
+      onCommand: async () => "ok",
+      onResetDevice: async () => {
+        throw new Error("The operation was canceled by the user.");
+      },
+    }),
+  );
+
+  await click(buttonNamed(/^restart usb device$/i));
+  const alert = must(container.querySelector('[role="alert"]'), "alert");
+  expect(alert.textContent).toContain("canceled by the user");
 });
 
 it("sends brightness as a whole percent and shows the reply", async () => {

@@ -180,6 +180,10 @@ export interface HostServerOptions {
    *  the host that drives panels can hand over the same registry it opens from,
    *  plugin rows included. */
   readonly panelFamilies?: PanelFamilyRegistry;
+  /** Restarts the USB device a wedged panel hangs off, behind an elevation
+   *  prompt. Omitted is the real Windows action; a case supplies its own so it
+   *  never opens a UAC prompt. */
+  readonly resetPanelDevice?: (deviceId: string) => Promise<void>;
   /** The host's own start-at-sign-in entry: whether the OS holds one now, and
    *  the write that turns it on or off. Omitted when this host cannot manage
    *  it: the routes then say so rather than reporting a change that did not

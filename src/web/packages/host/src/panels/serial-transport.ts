@@ -14,6 +14,12 @@ export interface SerialPortInfo {
   readonly vendorId?: number;
   readonly productId?: number;
   readonly serialNumber?: string;
+  /**
+   * The OS instance id, when the listing reports one. It is the only name a
+   * device reset can act on: the COM number moves, and the host otherwise has
+   * no way to tell Windows which node it means.
+   */
+  readonly pnpId?: string;
 }
 
 export interface SerialTransport {
@@ -69,6 +75,7 @@ export async function listSerialPorts(): Promise<readonly SerialPortInfo[]> {
       ...(port.serialNumber === undefined
         ? {}
         : { serialNumber: port.serialNumber }),
+      ...(port.pnpId === undefined ? {} : { pnpId: port.pnpId }),
     });
   }
 
@@ -77,6 +84,20 @@ export async function listSerialPorts(): Promise<readonly SerialPortInfo[]> {
 
 /** A reply that has gone quiet this long is complete; the wire has no frame end. */
 const READ_QUIET_MS = 50;
+
+/**
+ * Longest one write may stay inside the OS before the device is called dead.
+ *
+ * A full 1.5 MB frame is about 0.6 s on this panel's wire (the CDC link ignores
+ * the nominal baud), so ten seconds is margin, not a transfer budget. The
+ * deadline exists because a USB endpoint that stops consuming never calls the
+ * binding back: an unbounded await holds the COM handle, and every later open
+ * is then refused as another program's lock.
+ */
+const WRITE_DEADLINE_MS = 10_000;
+
+/** Longest a close may take before it is reported as not having happened. */
+const CLOSE_DEADLINE_MS = 5_000;
 
 /**
  * Replies held for a later read. A device that chatters while nothing reads is
@@ -227,20 +248,42 @@ class OpenSerialPort implements SerialTransport {
     this.discarding = false;
 
     return new Promise((resolve, reject) => {
-      this.port.write(Buffer.from(bytes), (error) => {
+      let settled = false;
+      const deadline = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        // A write the device never took is a device that stopped reading.
+        // Marking the port closed makes every later write fail at once rather
+        // than queue behind the one the USB stack is still holding, and lets
+        // the caller's own stop reach `close`.
+        this.closed = true;
+        reject(
+          Object.assign(new Error("The serial port stopped accepting data."), {
+            code: "ETIMEDOUT",
+          }),
+        );
+      }, WRITE_DEADLINE_MS);
+
+      const finish = (error?: Error | null): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+
         if (error !== null && error !== undefined) {
           reject(error);
           return;
         }
 
-        this.port.drain((drainError) => {
-          if (drainError !== null && drainError !== undefined) {
-            reject(drainError);
-            return;
-          }
+        resolve();
+      };
 
-          resolve();
-        });
+      this.port.write(Buffer.from(bytes), (error) => {
+        if (error !== null && error !== undefined) {
+          finish(error);
+          return;
+        }
+
+        this.port.drain((drainError) => finish(drainError));
       });
     });
   }
@@ -351,8 +394,33 @@ class OpenSerialPort implements SerialTransport {
 
     if (!this.port.isOpen) return;
 
-    await new Promise<void>((resolve) => {
-      this.port.close(() => resolve());
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const deadline = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        // Nothing above can force an OS handle closed. Reporting the deadline
+        // is the honest answer: a caller that treats a silent close as success
+        // would drive a port the host still holds.
+        reject(
+          Object.assign(new Error("The serial port did not close."), {
+            code: "ETIMEDOUT",
+          }),
+        );
+      }, CLOSE_DEADLINE_MS);
+
+      this.port.close((error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+
+        if (error !== null && error !== undefined) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
     });
   }
 

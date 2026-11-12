@@ -166,6 +166,56 @@ describe("attachedTurzxPanels", () => {
     ]);
   });
 
+  it("reports a port that opened but stopped answering, and releases it", async () => {
+    // The device is attached and opens, then its USB endpoint stops consuming
+    // writes. The transport's deadline turns that into a rejection; discovery
+    // must close the port and still list the device, because restarting its USB
+    // node is the only way back and needs the instance id.
+    let closed = 0;
+    const transport: SerialTransport = {
+      write: async () => {
+        throw Object.assign(
+          new Error("The serial port stopped accepting data."),
+          { code: "ETIMEDOUT" },
+        );
+      },
+      read: async () => new Uint8Array(),
+      drainPending: () => new Uint8Array(),
+      close: async () => {
+        closed += 1;
+      },
+    };
+
+    const hints = await attachedTurzxPanels({
+      ports: async () => [
+        {
+          path: "COM5",
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serialNumber: "S1",
+          pnpId: "USB\\VID_1D6B&PID_0106&MI_00\\6&E9576A&5&0000",
+        },
+      ],
+      open: async () => transport,
+      sleep: async () => {},
+    });
+
+    expect(hints).toEqual([
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "S1",
+        label: 'TURZX 5" Panel',
+        status: "disconnected",
+        reason:
+          'TURZX 5" Panel is attached but did not answer: The serial port stopped accepting data. ' +
+          "Unplug and replug it, or restart its USB device.",
+        deviceId: "USB\\VID_1D6B&PID_0106&MI_00\\6&E9576A&5&0000",
+      },
+    ]);
+    expect(closed, "the silent port was not released").toBe(1);
+  });
+
   it("skips a port with no usable USB ids and a port that vanished", async () => {
     const hints = await attachedTurzxPanels({
       ports: async () => [
@@ -292,6 +342,41 @@ describe("a panel this host is driving", () => {
 });
 
 describe("openTurzxPanel", () => {
+  it("names a panel that opened but stopped answering, and releases it", async () => {
+    let closed = 0;
+    const transport: SerialTransport = {
+      write: async () => {
+        throw Object.assign(
+          new Error("The serial port stopped accepting data."),
+          { code: "ETIMEDOUT" },
+        );
+      },
+      read: async () => new Uint8Array(),
+      drainPending: () => new Uint8Array(),
+      close: async () => {
+        closed += 1;
+      },
+    };
+
+    await expect(
+      openTurzxPanel({
+        ports: async () => [
+          {
+            path: "COM5",
+            vendorId: 0x1d6b,
+            productId: 0x0106,
+            serialNumber: "S1",
+          },
+        ],
+        open: async () => transport,
+      }),
+    ).rejects.toThrow(
+      'TURZX 5" Panel is attached but did not answer: The serial port stopped accepting data. ' +
+        "Unplug and replug it, or restart its USB device.",
+    );
+    expect(closed, "the silent port was not released").toBe(1);
+  });
+
   it("asks for a lossless still because it is decoded, not streamed", async () => {
     const device = await opened(
       fakeTransport("chs_5inch.dev1_rom1.88").transport,

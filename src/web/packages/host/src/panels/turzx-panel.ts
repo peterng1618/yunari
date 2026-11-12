@@ -106,6 +106,8 @@ interface HeldPanel {
   readonly serial: string;
   readonly model: string;
   readonly firmware: string;
+  /** The OS instance id, for a reset that has to name the device. */
+  readonly deviceId?: string;
 }
 
 const heldPanels = new Map<string, HeldPanel>();
@@ -146,17 +148,40 @@ async function identify(
   transport: SerialTransport,
 ): Promise<TurzxIdentity | undefined> {
   await transport.write(frame(TURZX_COMMAND.hello));
-
   return parseHello(await transport.read(PROBE_TIMEOUT_MS));
 }
 
-async function quietlyClose(transport: SerialTransport): Promise<void> {
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function quietlyClose(transport: SerialTransport): Promise<void> {
   try {
-    await transport.close();
+    return transport.close().catch(() => undefined);
   } catch {
-    // A port that went away on its own cannot be closed again, and that is
-    // the unplug the caller already knows about.
+    return Promise.resolve();
   }
+}
+
+/**
+ * A listed port that opened but never answered, as the record's hint.
+ *
+ * It stays listed, with its OS instance id: the only way back is restarting the
+ * USB node, and that action cannot name a device the host has already forgotten.
+ */
+function silentHint(
+  port: SerialPortInfo & { vendorId: number; productId: number },
+  detail: string,
+): PanelHint {
+  return {
+    vendorId: port.vendorId,
+    productId: port.productId,
+    serial: port.serialNumber ?? "",
+    label: LABEL,
+    status: "disconnected",
+    reason: notAnswering(detail).message,
+    ...(port.pnpId === undefined ? {} : { deviceId: port.pnpId }),
+  };
 }
 
 /**
@@ -223,6 +248,7 @@ export async function attachedTurzxPanels(
       label: LABEL,
       model: panel.model,
       firmware: panel.firmware,
+      ...(panel.deviceId === undefined ? {} : { deviceId: panel.deviceId }),
     });
   }
 
@@ -243,6 +269,7 @@ export async function attachedTurzxPanels(
           label: LABEL,
           status: "disconnected",
           reason,
+          ...(port.pnpId === undefined ? {} : { deviceId: port.pnpId }),
         });
       }
       continue;
@@ -250,6 +277,9 @@ export async function attachedTurzxPanels(
 
     try {
       const identity = await identify(transport);
+      // Silence is not evidence of a wedged panel: a device that answers with
+      // something else is simply not this family. Only a write that never
+      // completes means the endpoint stopped taking data.
       if (identity === undefined) continue;
 
       hints.push({
@@ -259,9 +289,12 @@ export async function attachedTurzxPanels(
         label: LABEL,
         model: identity.model,
         firmware: identity.firmware,
+        ...(port.pnpId === undefined ? {} : { deviceId: port.pnpId }),
       });
-    } catch {
-      // A read that failed mid-probe is a port that did not answer HELLO.
+    } catch (error) {
+      // A device that opened and stopped taking data is present, not absent:
+      // the record needs it listed so its owner can restart the USB node.
+      hints.push(silentHint(port, messageOf(error)));
     } finally {
       await quietlyClose(transport);
     }
@@ -890,6 +923,8 @@ export async function openTurzxPanel(
   if (candidates.length === 0) throw notAttached();
 
   let held: string | undefined;
+  /** The first port that opened but never answered: attached, not absent. */
+  let unanswered: string | undefined;
 
   for (const port of candidates) {
     let transport: SerialTransport;
@@ -905,11 +940,13 @@ export async function openTurzxPanel(
     let identity: TurzxIdentity | undefined;
     try {
       identity = await identify(transport);
-    } catch {
+    } catch (error) {
+      unanswered = messageOf(error);
       identity = undefined;
     }
 
     if (identity === undefined) {
+      unanswered ??= "HELLO was not answered.";
       await quietlyClose(transport);
       continue;
     }
@@ -933,14 +970,28 @@ export async function openTurzxPanel(
       serial: port.serialNumber ?? "",
       model: identity.model,
       firmware: identity.firmware,
+      ...(port.pnpId === undefined ? {} : { deviceId: port.pnpId }),
     });
 
     return new TurzxPanel(transport, decode, port.path, transcode, sleep);
   }
 
   if (held !== undefined) throw new Error(held);
+  if (unanswered !== undefined) throw notAnswering(unanswered);
 
   throw notAttached();
+}
+
+/**
+ * A device that opened and then stopped taking data is neither absent nor held
+ * by another program: it needs its USB node reset, and that is an elevated
+ * action on this machine.
+ */
+function notAnswering(detail: string): Error {
+  return new Error(
+    `${LABEL} is attached but did not answer: ${detail} ` +
+      "Unplug and replug it, or restart its USB device.",
+  );
 }
 
 function notAttached(): Error {

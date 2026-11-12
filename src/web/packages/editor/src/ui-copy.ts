@@ -737,6 +737,15 @@ export const uiCopy = {
         disconnecting: "Disconnecting…",
         disconnectFailed: (reason: string): string =>
           `The panel could not be disconnected: ${reason}`,
+        /** The reclaim action for a panel that opened and then stopped taking
+         *  data. Windows restarts the USB node itself, which the panel's own
+         *  restart command cannot do, and elevating it is a prompt. */
+        resetDevice: "Restart USB device",
+        resettingDevice: "Restarting USB device…",
+        resetDeviceHint:
+          "Windows asks for permission first. Use this when the panel is detected but stops responding.",
+        resetDeviceFailed: (reason: string): string =>
+          `The panel's USB device could not be restarted: ${reason}`,
         dialogTitle: (panel: string): string => `Controls — ${panel}`,
         close: "Close",
         brightness: "Brightness",

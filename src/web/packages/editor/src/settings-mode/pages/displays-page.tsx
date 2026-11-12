@@ -75,6 +75,7 @@ export function DisplaysPage(state: HostState): React.JSX.Element {
               connection={display.panel}
               onReconnect={() => state.reconnectPanel(selected)}
               onDisconnect={() => state.disconnectPanel(selected)}
+              onResetDevice={() => state.resetPanelDevice(selected)}
               onCommand={(command) =>
                 state.settingsClient.panelCommand(selected, command)
               }

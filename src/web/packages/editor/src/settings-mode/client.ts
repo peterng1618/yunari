@@ -248,6 +248,10 @@ export interface HostSettingsClient {
   /** Closes the panel's device and keeps it closed until a reconnect or a host
    *  restart. Removing the record stays the permanent answer. */
   disconnectPanel(id: string): Promise<PanelConnectionStatus>;
+  /** Has Windows restart the USB device the panel hangs off, which clears a
+   *  device that stopped taking data. Prompts for elevation; resolves once the
+   *  elevated restart has finished, and the host's retry loop then reopens it. */
+  resetPanelDevice(id: string): Promise<void>;
 }
 
 /** One command the editor can send a panel, spelled as the host's route takes
@@ -319,6 +323,9 @@ export interface PanelHint {
   readonly status?: PanelConnectionStatus;
   /** Why the host cannot drive it, in the host's own words. */
   readonly reason?: string;
+  /** The OS instance id, when the host can name one. A device reset acts on
+   *  this, so a surface offers the action only when it is present. */
+  readonly deviceId?: string;
   /** The commands this host can send it; empty for a picture-only panel. */
   readonly commands: readonly PanelCommandKind[];
 }
@@ -394,6 +401,7 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
       readonly firmware?: unknown;
       readonly status?: unknown;
       readonly reason?: unknown;
+      readonly deviceId?: unknown;
       readonly commands?: unknown;
     };
 
@@ -428,6 +436,9 @@ function readPanelHints(input: unknown): readonly PanelHint[] {
               : {}),
             ...(typeof panel.reason === "string"
               ? { reason: panel.reason }
+              : {}),
+            ...(typeof panel.deviceId === "string"
+              ? { deviceId: panel.deviceId }
               : {}),
             // An older host names no commands: read it as a picture-only panel,
             // which is what the host before the field could drive.
@@ -1092,6 +1103,21 @@ export function createHostSettingsClient(options?: {
       return isPanelConnectionStatus(body?.status)
         ? body.status
         : "disconnected";
+    },
+
+    async resetPanelDevice(id) {
+      const response = await fetcher(
+        `${baseUrl}/api/displays/${encodeURIComponent(id)}/panel/reset-device`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        // The host's words carry the USB error or a declined prompt; a generic
+        // sentence here would hide the one thing the person has to act on.
+        throw await refusal(
+          response,
+          "Could not restart that panel's USB device",
+        );
+      }
     },
   };
 }

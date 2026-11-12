@@ -1,7 +1,7 @@
 import { EventEmitter, once } from "node:events";
 import { createRequire } from "node:module";
 import { SerialPort } from "serialport";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type SerialPortLike, transportOver } from "./serial-transport.js";
 
 /**
@@ -26,8 +26,13 @@ type PortBinding = ConstructorParameters<typeof SerialPort>[0]["binding"];
 /** A `SerialPort`-shaped emitter: enough for the transport's read seam. */
 class FakePort extends EventEmitter implements SerialPortLike {
   isOpen = true;
+  /** A write the USB stack never completes: the device stopped taking data. */
+  writeHangs = false;
+  /** A close the driver never completes. */
+  closeHangs = false;
 
   close(callback?: (error: Error | null | undefined) => void): void {
+    if (this.closeHangs) return;
     this.isOpen = false;
     callback?.(null);
   }
@@ -36,7 +41,7 @@ class FakePort extends EventEmitter implements SerialPortLike {
    *  which never comes: a fake that called back would hide the hang the
    *  transport's own guard exists to prevent. */
   write(_bytes: Uint8Array, callback: (error?: Error | null) => void): void {
-    if (!this.isOpen) return;
+    if (!this.isOpen || this.writeHangs) return;
     callback(null);
   }
 
@@ -378,5 +383,53 @@ describe("the serial transport's write", () => {
       port.listenerCount("error"),
       "a write that fails after close would crash the host",
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the serial transport's deadlines", () => {
+  it("gives up on a write the device never takes, and refuses later ones at once", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const port = new FakePort();
+      port.writeHangs = true;
+      const transport = transportOver(port);
+
+      // The panel stopped consuming USB data: the binding's callback never
+      // comes. An unbounded write holds the COM handle forever, and every
+      // later open is then refused as "another program holds the port".
+      const writing = transport.write(Uint8Array.of(1)).then(
+        () => "resolved",
+        (error: NodeJS.ErrnoException) => error.code,
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(await writing).toBe("ETIMEDOUT");
+      await expect(transport.write(Uint8Array.of(2))).rejects.toMatchObject({
+        code: "ERR_SERIAL_PORT_CLOSED",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a close the driver never completes", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const port = new FakePort();
+      port.closeHangs = true;
+      const transport = transportOver(port);
+
+      const closing = transport.close().then(
+        () => "resolved",
+        (error: NodeJS.ErrnoException) => error.code,
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      expect(await closing).toBe("ETIMEDOUT");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -2,6 +2,7 @@ import type http from "node:http";
 import type { DisplayPresentation } from "@yunari/renderer-core";
 import type { ListenableServer } from "../cli/net.js";
 import type { PanelControlCommand, PanelHint } from "../panels/panel-device.js";
+import { resetPanelDevice } from "../panels/panel-device-reset.js";
 import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import {
   DisplaySettingError,
@@ -22,6 +23,7 @@ import type { Monitor } from "../settings/monitors.js";
 import { readBody, sendJson, sendText } from "./http.js";
 import { displayFor, isLoopbackRemote, peerOf, tokenFor } from "./identity.js";
 import type { HostServerOptions } from "./options.js";
+import { resetDisplayPanel } from "./panel-reset-route.js";
 import { isPortFailure, panelCommand, usbId } from "./panels.js";
 
 export interface DisplayRouteDeps {
@@ -595,7 +597,7 @@ export function createDisplayRoutes(
       /^\/api\/displays\/([^/]+)\/panel\/command$/,
     );
     const connectionMatch = url.pathname.match(
-      /^\/api\/displays\/([^/]+)\/panel\/(reconnect|disconnect)$/,
+      /^\/api\/displays\/([^/]+)\/panel\/(reconnect|disconnect|reset-device)$/,
     );
 
     if (commandMatch !== null && request.method === "POST") {
@@ -704,6 +706,19 @@ export function createDisplayRoutes(
 
       if (display.kind !== "panel") {
         sendText(response, 400, "That display is not a panel.");
+        return true;
+      }
+
+      // A wedged device is neither absent nor another program's lock: only a
+      // restart of its USB node clears it. That action owns its own refusals,
+      // including that the instance id comes from the listing, not the caller.
+      if (connectionMatch[2] === "reset-device") {
+        await resetDisplayPanel({
+          response,
+          display,
+          attached: panelsAttached,
+          reset: options.resetPanelDevice ?? resetPanelDevice,
+        });
         return true;
       }
 

@@ -389,6 +389,7 @@ function hostSettings(
         return "connected";
       },
       disconnectPanel: async () => "disconnected",
+      resetPanelDevice: async () => {},
       renameDisplay: async (id, label) => {
         wrote.names.push({ id, label });
         return label;

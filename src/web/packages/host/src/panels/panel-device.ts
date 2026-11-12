@@ -53,6 +53,14 @@ export interface PanelHint {
   readonly status?: PanelConnectionStatus;
   /** Why a present device cannot be driven, in the host's own words. */
   readonly reason?: string;
+  /**
+   * The OS instance id, when discovery saw one.
+   *
+   * A hardware action that has to name the device to the operating system —
+   * restarting a wedged USB node — cannot use the COM number: it changes when
+   * the device re-enumerates.
+   */
+  readonly deviceId?: string;
 }
 
 /** A command a panel's control channel accepts. The manifest declares the same

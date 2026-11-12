@@ -182,6 +182,9 @@ export interface HostState {
   readonly replaceAlwaysOnTop: (id: string, saved: boolean) => void;
   readonly reconnectPanel: (id: string) => Promise<void>;
   readonly disconnectPanel: (id: string) => Promise<void>;
+  /** Restarts the panel's USB device behind an elevation prompt, then re-reads
+   *  the map so the retry loop's reopening shows up. */
+  readonly resetPanelDevice: (id: string) => Promise<void>;
   readonly addPanel: (panel: PanelHint) => void;
   readonly addDisplay: (
     label: string,
@@ -348,28 +351,32 @@ export function useHostSettings(props: {
     };
   }, [client, hasPanelDisplay]);
 
-  const reconnectPanel = async (id: string): Promise<void> => {
-    await settings.reconnectPanel(id);
+  /** Re-reads the display map after a connection action changed the host's
+   *  state. A failed read changes nothing: the poll above asks again. */
+  const rereadDisplays = async (): Promise<void> => {
     await client.listDisplays().then(
       (answer) => {
         if (mounted.current) setMap(answer);
       },
       () => {
-        // The reconnect itself succeeded; the poll above will re-read.
+        // The action itself succeeded; the poll above will re-read.
       },
     );
   };
 
+  const reconnectPanel = async (id: string): Promise<void> => {
+    await settings.reconnectPanel(id);
+    await rereadDisplays();
+  };
+
   const disconnectPanel = async (id: string): Promise<void> => {
     await settings.disconnectPanel(id);
-    await client.listDisplays().then(
-      (answer) => {
-        if (mounted.current) setMap(answer);
-      },
-      () => {
-        // The disconnect itself succeeded; the poll above will re-read.
-      },
-    );
+    await rereadDisplays();
+  };
+
+  const resetPanelDevice = async (id: string): Promise<void> => {
+    await settings.resetPanelDevice(id);
+    await rereadDisplays();
   };
 
   // **The questions belong to the display the surface is showing for, and to
@@ -715,6 +722,7 @@ export function useHostSettings(props: {
     replaceAlwaysOnTop,
     reconnectPanel,
     disconnectPanel,
+    resetPanelDevice,
     addPanel,
     addDisplay,
     removeDisplay,

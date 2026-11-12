@@ -6619,6 +6619,154 @@ describe("A local monitor is specified rather than paired", () => {
       }
     });
 
+    it("restarts the USB device of an attached panel, naming it from the listing", async () => {
+      const resets: string[] = [];
+      const hosting = host({
+        attachedPanels: () =>
+          Promise.resolve([
+            {
+              ...ATTACHED_PANEL,
+              status: "disconnected" as const,
+              deviceId: "USB\\VID_1CBE&PID_A092\\S1",
+            },
+          ]),
+        resetPanelDevice: (deviceId) => {
+          resets.push(deviceId);
+          return Promise.resolve();
+        },
+        panels: managerOver([], []),
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/strip/panel/reset-device",
+        );
+        expect(answer.status).toBe(200);
+        expect(answer.json()).toEqual({ ok: true });
+        // The listing's instance id, never one the caller sent.
+        expect(resets).toEqual(["USB\\VID_1CBE&PID_A092\\S1"]);
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a device reset for a panel that is not attached, or cannot be named", async () => {
+      const resets: string[] = [];
+      const resetPanelDevice = (deviceId: string): Promise<void> => {
+        resets.push(deviceId);
+        return Promise.resolve();
+      };
+
+      for (const attached of [
+        [],
+        [{ ...ATTACHED_PANEL, status: "disconnected" as const }],
+      ]) {
+        const hosting = host({
+          attachedPanels: () => Promise.resolve(attached),
+          resetPanelDevice,
+          panels: managerOver([], []),
+        });
+
+        try {
+          await request(
+            hosting.server,
+            "POST",
+            "/api/displays/panels",
+            json({ label: "Strip", panel: STRIP }),
+          );
+          const answer = await request(
+            hosting.server,
+            "POST",
+            "/api/displays/strip/panel/reset-device",
+          );
+          expect(answer.status).toBe(409);
+        } finally {
+          await hosting.close();
+        }
+      }
+
+      expect(resets).toEqual([]);
+    });
+
+    it("answers the reason a device reset did not happen", async () => {
+      const hosting = host({
+        attachedPanels: () =>
+          Promise.resolve([
+            {
+              ...ATTACHED_PANEL,
+              deviceId: "USB\\VID_1CBE&PID_A092\\S1",
+            },
+          ]),
+        resetPanelDevice: () =>
+          Promise.reject(new Error("The operation was canceled by the user.")),
+        panels: managerOver([], []),
+      });
+
+      try {
+        await request(
+          hosting.server,
+          "POST",
+          "/api/displays/panels",
+          json({ label: "Strip", panel: STRIP }),
+        );
+        const answer = await request(
+          hosting.server,
+          "POST",
+          "/api/displays/strip/panel/reset-device",
+        );
+        expect(answer.status).toBe(500);
+        expect(answer.text()).toContain("canceled by the user");
+      } finally {
+        await hosting.close();
+      }
+    });
+
+    it("refuses a device reset for a non-panel record and an unknown display", async () => {
+      const hosting = host({ panels: managerOver([], []) });
+
+      try {
+        const added = await request(
+          hosting.server,
+          "POST",
+          "/api/displays",
+          json({
+            label: "Left screen",
+            monitor: { deviceName: "\\\\.\\DISPLAY2" },
+          }),
+        );
+        const local = (added.json() as { display: { id: string } }).display;
+
+        expect(
+          (
+            await request(
+              hosting.server,
+              "POST",
+              `/api/displays/${local.id}/panel/reset-device`,
+            )
+          ).status,
+        ).toBe(400);
+        expect(
+          (
+            await request(
+              hosting.server,
+              "POST",
+              "/api/displays/nope/panel/reset-device",
+            )
+          ).status,
+        ).toBe(404);
+      } finally {
+        await hosting.close();
+      }
+    });
+
     it("refuses a reconnect for a non-panel record and an unknown display", async () => {
       const hosting = host({ panels: managerOver([], []) });
 
