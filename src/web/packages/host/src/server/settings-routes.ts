@@ -8,11 +8,12 @@ import type { ActiveThemeStore } from "../settings/active-theme.js";
 import type { DeviceSettingsStore } from "../settings/devices.js";
 import type { DisplaySettingsStore } from "../settings/display.js";
 import type { FontFavoritesStore } from "../settings/font-favorites.js";
+import type { SignalRgbBridgeSettingsStore } from "../settings/signalrgb-bridge.js";
 import {
   searchWeatherPlaces,
   type WeatherSettingsStore,
 } from "../settings/weather.js";
-import type { DevicesDescriptor } from "../signalrgb/bridge.js";
+import type { SignalRgbBridge } from "../signalrgb/bridge.js";
 import type { ThemeStore } from "../themes/store.js";
 import type { SseConnection } from "../transport/sse.js";
 import { isPlatformError, readBody, sendJson, sendText } from "./http.js";
@@ -60,7 +61,9 @@ export interface SettingsRouteDeps {
    * both ignore the other's fields. A second route on the same path would
    * break one of them.
    */
-  readonly bridge: () => DevicesDescriptor | undefined;
+  readonly bridge: () => SignalRgbBridge | undefined;
+  /** The receiver's stored port, and the only writer of its settings file. */
+  readonly signalRgbBridge: SignalRgbBridgeSettingsStore | undefined;
 }
 
 /**
@@ -88,6 +91,7 @@ export function createSettingsRoutes(
     lastUnmapped,
     moveLan,
     bridge,
+    signalRgbBridge,
   } = deps;
   const displays = options.displays;
 
@@ -119,6 +123,57 @@ export function createSettingsRoutes(
     response: http.ServerResponse,
     url: URL,
   ): Promise<boolean> {
+    // The SignalRGB receiver's port. Loopback only, like every other machine
+    // fact: the listener is bound to this PC and its settings are this PC's.
+    // Taking a new port applies on the next host start; the page says so rather
+    // than implying a live rebind.
+    if (url.pathname === "/api/signalrgb-bridge") {
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(
+          response,
+          403,
+          "SignalRGB bridge settings are available on this PC only.",
+        );
+        return true;
+      }
+
+      if (signalRgbBridge === undefined) {
+        sendText(
+          response,
+          404,
+          "SignalRGB bridge settings are not enabled on this host.",
+        );
+        return true;
+      }
+
+      if (request.method !== "PUT") {
+        sendText(response, 405, "This path supports PUT.");
+        return true;
+      }
+
+      try {
+        const body = JSON.parse(await readBody(request)) as unknown;
+        const udpPort = (body as { readonly udpPort?: unknown })?.udpPort;
+        sendJson(response, 200, {
+          udpPort: await signalRgbBridge.writeUdpPort(udpPort),
+        });
+      } catch (error: unknown) {
+        // The file's failures name this machine's paths; the detail goes to the
+        // host's console, not to the caller.
+        if (isPlatformError(error)) {
+          console.error(error);
+          sendText(response, 400, "The bridge port could not be saved.");
+          return true;
+        }
+        sendText(
+          response,
+          400,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      return true;
+    }
+
     // Device assignments are an admin action, like pairing: they change what
     // every display shows, so they stay loopback-only.
     if (url.pathname.startsWith("/api/devices")) {
@@ -141,11 +196,24 @@ export function createSettingsRoutes(
       }
 
       if (url.pathname === "/api/devices" && request.method === "GET") {
-        const descriptor = bridge();
+        const running = bridge();
+        const descriptor = running?.describe();
+        // The receiver's own state rides beside the descriptor: a bridge that
+        // never bound has no devices to describe, and a consumer must be able
+        // to tell that from a host that has none. `configuredPort` is what the
+        // next start will bind, so the port field still has a value to show.
+        const configuredPort =
+          signalRgbBridge === undefined ? null : await signalRgbBridge.read();
         sendJson(response, 200, {
           available: await availableDevices(),
           assigned: await devices.read(),
-          ...(descriptor === undefined ? {} : descriptor),
+          bridge: {
+            listening: running !== undefined,
+            port: running?.port ?? null,
+            configuredPort,
+            error: options.bridgeError ?? null,
+          },
+          ...(descriptor ?? {}),
         });
         return true;
       }

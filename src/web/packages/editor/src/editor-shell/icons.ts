@@ -191,6 +191,9 @@ export const DISPLAYS_GLYPH: LucideIcon = Monitor;
 export const HARDWARE_GLYPH: LucideIcon = Cpu;
 export const UNITS_GLYPH: LucideIcon = Gauge;
 export const READINGS_GLYPH: LucideIcon = Activity;
+/** The SignalRGB seam: a receiver on this machine's loopback, so the network
+ *  mark rather than a screen one. */
+export const SIGNALRGB_GLYPH: LucideIcon = Network;
 /** The header's readings-source toggle. It keeps one glyph in both states, so
  *  the selected state — not a second picture — says which source is shown. */
 export const MONITOR_ACTIVITY_GLYPH: LucideIcon = MonitorActivity;

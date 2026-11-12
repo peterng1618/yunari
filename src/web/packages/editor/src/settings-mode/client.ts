@@ -61,6 +61,70 @@ export interface DeviceSettings {
  *  the slot absent where the theme follows this PC's own device settings. */
 export type ThemeAnswers = Readonly<Partial<Record<AssignableGroup, string>>>;
 
+/** The SignalRGB receiver's own state, carried beside the descriptor it
+ *  publishes. A receiver that never bound and one this host never built are the
+ *  same absence without this. */
+export interface SignalRgbBridgeState {
+  readonly listening: boolean;
+  /** The port the socket bound, or `null` when nothing listens. */
+  readonly port: number | null;
+  /** The port the next host start will bind; `null` when this host keeps no
+   *  such setting. */
+  readonly configuredPort: number | null;
+  /** Why the last bind attempt failed, in the host's words. */
+  readonly error: string | null;
+}
+
+/** One independently addressable run of LEDs. */
+export interface SignalRgbChannel {
+  readonly name: string;
+  readonly leds: number;
+}
+
+/** How LEDs are arranged on a device, as the sink declares it. */
+export interface SignalRgbLayout {
+  readonly shape: "ring" | "strip";
+  readonly width: number;
+  readonly height: number;
+}
+
+/** One device as `GET /api/devices` describes it to the SignalRGB consumer. */
+export interface SignalRgbDevice {
+  readonly id: string;
+  readonly kind: string;
+  readonly name: string;
+  readonly lighting?: {
+    readonly ledCount: number;
+    readonly udpPort: number;
+    readonly channels: readonly SignalRgbChannel[];
+    readonly layout: SignalRgbLayout;
+    readonly stats: { readonly received: number; readonly dropped: number };
+  };
+  readonly controls?: {
+    readonly pump: boolean;
+    readonly fans: boolean;
+    readonly telemetry: boolean;
+  };
+  readonly display?: {
+    readonly kind: "panel";
+    readonly width: number;
+    readonly height: number;
+  };
+}
+
+/** The receiver's answer: its state, the devices it publishes, and the frame
+ *  counters. A host with no receiver answers no devices rather than an empty
+ *  description of one. */
+export interface SignalRgbRead {
+  readonly bridge: SignalRgbBridgeState;
+  readonly devices: readonly SignalRgbDevice[];
+  readonly stats?: {
+    readonly received: number;
+    readonly malformed: number;
+    readonly dropped: number;
+  };
+}
+
 /**
  * One monitor attached to this PC, as `GET /api/displays/monitors` reports it.
  *
@@ -156,6 +220,13 @@ export interface WeatherPlace {
 
 export interface HostSettingsClient {
   readDevices(): Promise<DeviceSettings>;
+  /** The SignalRGB receiver's state and the devices it publishes. The same
+   *  `GET /api/devices` answer the assignment page reads, parsed for its
+   *  descriptor half. */
+  readSignalRgbBridge(): Promise<SignalRgbRead>;
+  /** Stores the receiver's port and answers what the host stored. The new port
+   *  applies on the next host start; there is no live rebind. */
+  saveSignalRgbUdpPort(port: number): Promise<number>;
   /** Writes the whole object, because the route replaces it: a caller merges
    *  its own change in and sends both fields. Answers what was written, which
    *  is the settings file's own reading of it rather than the caller's. */
@@ -462,6 +533,126 @@ function readDevices(input: unknown): readonly AvailableDevice[] {
   });
 }
 
+/** A finite number the host reported, or `undefined` where it sent none. */
+function finite(input: unknown): number | undefined {
+  return typeof input === "number" && Number.isFinite(input)
+    ? input
+    : undefined;
+}
+
+function readSignalRgbLighting(input: unknown): SignalRgbDevice["lighting"] {
+  if (typeof input !== "object" || input === null) return undefined;
+  const lighting = input as Record<string, unknown>;
+  const ledCount = finite(lighting["ledCount"]);
+  const udpPort = finite(lighting["udpPort"]);
+  const layout = lighting["layout"];
+  const stats = lighting["stats"];
+
+  if (
+    ledCount === undefined ||
+    udpPort === undefined ||
+    typeof layout !== "object" ||
+    layout === null ||
+    typeof stats !== "object" ||
+    stats === null
+  ) {
+    return undefined;
+  }
+
+  const shape = (layout as Record<string, unknown>)["shape"];
+  const width = finite((layout as Record<string, unknown>)["width"]);
+  const height = finite((layout as Record<string, unknown>)["height"]);
+  const received = finite((stats as Record<string, unknown>)["received"]);
+  const dropped = finite((stats as Record<string, unknown>)["dropped"]);
+  const channels = Array.isArray(lighting["channels"])
+    ? lighting["channels"].flatMap((entry) => {
+        const channel = entry as {
+          readonly name?: unknown;
+          readonly leds?: unknown;
+        };
+        const leds = finite(channel?.leds);
+        return typeof channel?.name === "string" && leds !== undefined
+          ? [{ name: channel.name, leds }]
+          : [];
+      })
+    : [];
+
+  if (
+    (shape !== "ring" && shape !== "strip") ||
+    width === undefined ||
+    height === undefined ||
+    received === undefined ||
+    dropped === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    ledCount,
+    udpPort,
+    channels,
+    layout: { shape, width, height },
+    stats: { received, dropped },
+  };
+}
+
+/** The descriptor half of `GET /api/devices`, kept only where it has the shape
+ *  a page can draw. A missing `bridge` is a host that does not answer it, which
+ *  reads as not listening. */
+function readSignalRgbAnswer(input: unknown): SignalRgbRead {
+  const answer = (input ?? {}) as Record<string, unknown>;
+  const bridge = answer["bridge"];
+  const state =
+    typeof bridge === "object" && bridge !== null
+      ? (bridge as Record<string, unknown>)
+      : {};
+  const port = finite(state["port"]);
+  const configuredPort = finite(state["configuredPort"]);
+
+  return {
+    bridge: {
+      listening: state["listening"] === true,
+      port: port ?? null,
+      configuredPort: configuredPort ?? null,
+      error: typeof state["error"] === "string" ? state["error"] : null,
+    },
+    devices: Array.isArray(answer["devices"])
+      ? answer["devices"].flatMap((entry) => {
+          const device = entry as Record<string, unknown>;
+          if (
+            typeof device["id"] !== "string" ||
+            typeof device["name"] !== "string" ||
+            typeof device["kind"] !== "string"
+          ) {
+            return [];
+          }
+          const lighting = readSignalRgbLighting(device["lighting"]);
+          return [
+            {
+              id: device["id"],
+              kind: device["kind"],
+              name: device["name"],
+              ...(lighting === undefined ? {} : { lighting }),
+            },
+          ];
+        })
+      : [],
+    ...(typeof answer["stats"] === "object" && answer["stats"] !== null
+      ? (() => {
+          const stats = answer["stats"] as Record<string, unknown>;
+          const received = finite(stats["received"]);
+          const malformed = finite(stats["malformed"]);
+          const dropped = finite(stats["dropped"]);
+          return received === undefined ||
+            malformed === undefined ||
+            dropped === undefined
+            ? {}
+            : { stats: { received, malformed, dropped } };
+        })()
+      : {}),
+  };
+}
+
 /** The monitors a probe reported, kept only where they carry the name and the
  *  geometry a window needs. A partial entry is dropped rather than offered as a
  *  choice the add route would read as no monitor at all. */
@@ -699,6 +890,32 @@ export function createHostSettingsClient(options?: {
         throw await refusal(response, "Could not read the devices");
       }
       return readDeviceSettings(await response.json());
+    },
+
+    async readSignalRgbBridge(): Promise<SignalRgbRead> {
+      const response = await fetcher(`${baseUrl}/api/devices`);
+      if (!response.ok) {
+        throw await refusal(response, "Could not read the SignalRGB bridge");
+      }
+      return readSignalRgbAnswer(await response.json());
+    },
+
+    async saveSignalRgbUdpPort(port: number): Promise<number> {
+      const response = await fetcher(`${baseUrl}/api/signalrgb-bridge`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ udpPort: port }),
+      });
+      if (!response.ok) {
+        throw await refusal(response, "Could not save the bridge port");
+      }
+      const saved = finite(
+        ((await response.json()) as { readonly udpPort?: unknown })?.udpPort,
+      );
+      if (saved === undefined) {
+        throw new Error("The host saved a port it did not answer.");
+      }
+      return saved;
     },
 
     async saveDevices(next) {

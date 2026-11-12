@@ -77,7 +77,7 @@ import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
 import { KeyProtectorUnavailable } from "./settings/secret-store.js";
-import { readSignalRgbUdpPort } from "./settings/signalrgb-bridge.js";
+import { createSignalRgbBridgeSettings } from "./settings/signalrgb-bridge.js";
 import { type CustomSource, createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
@@ -454,6 +454,9 @@ export async function run(argv: readonly string[]): Promise<number> {
   // Everything the host knows about *this* machine lives in one settings
   // folder, so a theme folder is only ever a theme.
   const deviceSettings = createDeviceSettingsStore(settingsDir);
+  // The SignalRGB receiver's port: this machine's fact, written by the settings
+  // surface and read when the receiver is built.
+  const signalRgbBridgeSettings = createSignalRgbBridgeSettings(settingsDir);
   // The consumer's display preferences, read by the provider that acquires the
   // readings they apply to.
   const displaySettings = createDisplaySettingsStore(settingsDir);
@@ -534,6 +537,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   // The SignalRGB seam: the loopback UDP receiver, built once the panel manager
   // exists because it publishes that manager's open devices.
   let signalRgb: SignalRgbBridge | undefined;
+  // Why the last bind attempt failed, for the settings surface. A receiver
+  // that never started and one the owner stopped are the same absence without
+  // this sentence.
+  let signalRgbError: string | undefined;
 
   // A thumbnail is this machine's rendering of a theme, so it lives in that
   // theme's own folder rather than in a directory of its own. The editor
@@ -594,6 +601,12 @@ export async function run(argv: readonly string[]): Promise<number> {
     get bridge() {
       return signalRgb;
     },
+    // And why it is absent, when the bind failed.
+    get bridgeError() {
+      return signalRgbError;
+    },
+    // The receiver's stored port, which the settings page reads and replaces.
+    signalRgbBridge: signalRgbBridgeSettings,
     // One entry at sign-in covers every local monitor, including one added
     // later. Registering writes the hidden entry, so this only ever asks; a
     // refusal is answered with the registrar's own message.
@@ -817,18 +830,15 @@ export async function run(argv: readonly string[]): Promise<number> {
   // the reason this process exists.
   try {
     signalRgb = await createSignalRgbBridge({
-      port: await readSignalRgbUdpPort(settingsDir),
+      port: await signalRgbBridgeSettings.read(),
       sinks: () => panels?.sinks() ?? [],
       onError: (message) => {
         console.error(`SignalRGB bridge: ${message}`);
       },
     });
   } catch (error) {
-    console.error(
-      `The SignalRGB bridge could not listen: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
+    signalRgbError = error instanceof Error ? error.message : String(error);
+    console.error(`The SignalRGB bridge could not listen: ${signalRgbError}`);
   }
 
   await panels.reconcile();

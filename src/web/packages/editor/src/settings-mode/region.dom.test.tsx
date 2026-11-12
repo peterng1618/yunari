@@ -311,6 +311,16 @@ function hostSettings(
     wrote,
     client: {
       readDevices: async () => devices,
+      readSignalRgbBridge: async () => ({
+        bridge: {
+          listening: false,
+          port: null,
+          configuredPort: null,
+          error: null,
+        },
+        devices: [],
+      }),
+      saveSignalRgbUdpPort: async (port) => port,
       saveDevices: async (next) => {
         wrote.devices.push(next);
         if (refuse?.devices !== undefined) throw new Error(refuse.devices);

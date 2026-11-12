@@ -10,6 +10,7 @@ import {
   PALETTE_GLYPH,
   PREVIEW_RATIOS_GLYPH,
   READINGS_GLYPH,
+  SIGNALRGB_GLYPH,
   UNITS_GLYPH,
 } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
@@ -19,6 +20,7 @@ import { uiCopy } from "../ui-copy.js";
 export type BuiltinSettingsPage =
   | "displays"
   | "hardware"
+  | "signalrgb"
   | "units"
   | "readings"
   | "appearance"
@@ -65,6 +67,12 @@ export const SETTINGS_PAGES: readonly SettingsPageEntry[] = [
     group: "this-pc",
     label: uiCopy.settings.pages.hardware,
     glyph: HARDWARE_GLYPH,
+  },
+  {
+    id: "signalrgb",
+    group: "this-pc",
+    label: uiCopy.settings.pages.signalrgb,
+    glyph: SIGNALRGB_GLYPH,
   },
   {
     id: "units",

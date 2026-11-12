@@ -52,7 +52,8 @@ as the Jungle Leopard L10 hub with its ports.
         "ledCount": 40,
         "udpPort": 7788,
         "channels": [ { "name": "Kraken Z", "leds": 40 } ],
-        "layout": { "shape": "ring", "width": 4, "height": 4 }
+        "layout": { "shape": "ring", "width": 4, "height": 4 },
+        "stats": { "received": 0, "dropped": 0 }
       },
       "controls": { "pump": true, "fans": true, "telemetry": true },
       "display": { "kind": "panel", "width": 320, "height": 320 }
@@ -70,6 +71,23 @@ as the Jungle Leopard L10 hub with its ports.
 - `/api/devices` already answers the host's device-assignment surface
   (`available`, `assigned`). Those fields ride in the same JSON answer and the
   plugin ignores them; the descriptor fields above are unchanged.
+- The same answer carries the receiver's own state, so a settings surface can
+  tell a host with no device from a receiver that never bound:
+
+  ```json
+  "bridge": { "listening": true, "port": 7788, "configuredPort": 7788, "error": null }
+  ```
+
+  `port` is the socket's bound port (`null` when nothing listens),
+  `configuredPort` is the stored setting the next host start will bind, and
+  `error` is a failed bind in the host's words.
+
+`PUT /api/signalrgb-bridge` with `{"udpPort": 1-65535}` stores a new port. The
+receiver does not rebind while it runs: the value applies on the next host
+start. Both routes are loopback only.
+
+Settings → **SignalRGB** in the editor shows this state, edits the port and lists
+the published devices; it polls `GET /api/devices` every 2 s while mounted.
 
 ## Colour frames (UDP)
 
