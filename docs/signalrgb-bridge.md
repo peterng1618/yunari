@@ -52,7 +52,7 @@ as the Jungle Leopard L10 hub with its ports.
         "ledCount": 40,
         "udpPort": 7788,
         "channels": [ { "name": "Kraken Z", "leds": 40 } ],
-        "layout": { "shape": "ring", "width": 4, "height": 4 },
+        "layout": { "shape": "ring", "width": 11, "height": 11 },
         "stats": { "received": 0, "dropped": 0 }
       },
       "controls": { "pump": true, "fans": true, "telemetry": true },
@@ -66,6 +66,10 @@ as the Jungle Leopard L10 hub with its ports.
   listed, but the plugin creates no channel for them.
 - `layout.shape` is `ring` (perimeter of `width`×`height`) or `strip` (`width` LEDs per row,
   `height` rows). The plugin turns it into `setControllableLeds` positions.
+- `width`/`height` are the **LED ring**, not the device's canvas: the smallest square whose
+  perimeter (`4n − 4`) holds `ledCount`. The Kraken Z's 40 LEDs are 11×11, not the 4×4 block the
+  shipped plugin draws its device on. A geometry that cannot hold the count makes a consumer
+  rebuild the subdevice (and lose its saved layout position) on every descriptor change.
 - `id` is stable across restarts; the plugin keys its saved layout by it.
 - Unknown fields are ignored by the plugin; missing devices answer `404`.
 - `/api/devices` already answers the host's device-assignment surface

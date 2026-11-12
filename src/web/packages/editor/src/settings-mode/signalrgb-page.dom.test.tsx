@@ -35,7 +35,7 @@ const READING: SignalRgbRead = {
         ledCount: 40,
         udpPort: 7788,
         channels: [{ name: "Kraken Z", leds: 40 }],
-        layout: { shape: "ring", width: 4, height: 4 },
+        layout: { shape: "ring", width: 11, height: 11 },
         stats: { received: 12, dropped: 3 },
       },
     },
@@ -118,7 +118,7 @@ it("draws a device's LEDs, channels, layout, port and counters", async () => {
   expect(container.textContent).toContain("NZXT Kraken Z");
   expect(container.textContent).toContain("40 LEDs");
   expect(container.textContent).toContain("Kraken Z (40)");
-  expect(container.textContent).toContain("ring 4×4");
+  expect(container.textContent).toContain("ring 11×11");
   expect(container.textContent).toContain("UDP 7788");
   expect(container.textContent).toContain("12 received · 3 dropped");
   expect(container.textContent).toContain(copy.listening(7788));
