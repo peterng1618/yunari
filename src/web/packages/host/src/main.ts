@@ -77,11 +77,16 @@ import { acquireHostLock } from "./settings/host-lock.js";
 import { readOrMintHostRecord } from "./settings/host-record.js";
 import { createHostingSettingsStore } from "./settings/hosting.js";
 import { KeyProtectorUnavailable } from "./settings/secret-store.js";
+import { readSignalRgbUdpPort } from "./settings/signalrgb-bridge.js";
 import { type CustomSource, createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
 import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import { createWeatherSettingsStore } from "./settings/weather.js";
+import {
+  createSignalRgbBridge,
+  type SignalRgbBridge,
+} from "./signalrgb/bridge.js";
 import { normalizeVideoCommand } from "./themes/normalize-video.js";
 import { createThemeStore } from "./themes/store.js";
 import { createThemeMedia, panelVideoPlacement } from "./themes/theme-media.js";
@@ -526,6 +531,10 @@ export async function run(argv: readonly string[]): Promise<number> {
   // same reason `launcher` is.
   let panels: PanelManager | undefined;
 
+  // The SignalRGB seam: the loopback UDP receiver, built once the panel manager
+  // exists because it publishes that manager's open devices.
+  let signalRgb: SignalRgbBridge | undefined;
+
   // A thumbnail is this machine's rendering of a theme, so it lives in that
   // theme's own folder rather than in a directory of its own. The editor
   // writes it after the save that replaced the folder, which is why the
@@ -580,6 +589,10 @@ export async function run(argv: readonly string[]): Promise<number> {
     // The USB panels, for the same reason: a panel's page names the port.
     get panels() {
       return panels;
+    },
+    // The SignalRGB bridge, which reads those same open panels.
+    get bridge() {
+      return signalRgb;
     },
     // One entry at sign-in covers every local monitor, including one added
     // later. Registering writes the hidden entry, so this only ever asks; a
@@ -797,6 +810,27 @@ export async function run(argv: readonly string[]): Promise<number> {
       console.error(`Raster browser: ${message}`);
     },
   });
+
+  // Before the panels reconcile, so a sender finds the seam as soon as the host
+  // answers; the descriptor fills in as each device opens. A port already in
+  // use is reported and the host otherwise runs: it is an optional seam, not
+  // the reason this process exists.
+  try {
+    signalRgb = await createSignalRgbBridge({
+      port: await readSignalRgbUdpPort(settingsDir),
+      sinks: () => panels?.sinks() ?? [],
+      onError: (message) => {
+        console.error(`SignalRGB bridge: ${message}`);
+      },
+    });
+  } catch (error) {
+    console.error(
+      `The SignalRGB bridge could not listen: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
   await panels.reconcile();
 
   const displayHost =
@@ -1032,6 +1066,18 @@ export async function run(argv: readonly string[]): Promise<number> {
           // list is read now, so a plugin installed during this run is closed.
           for (const plugin of await pluginInstaller.list().catch(() => [])) {
             await deviceBroker.closeAll(plugin.key);
+          }
+
+          // The receiver stops before the devices it writes through: a frame
+          // arriving while the handles close has nowhere to go.
+          try {
+            await signalRgb?.close();
+          } catch (error) {
+            console.error(
+              `The SignalRGB bridge could not close: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
           }
 
           // The panels before the server: a runner still opening has to be

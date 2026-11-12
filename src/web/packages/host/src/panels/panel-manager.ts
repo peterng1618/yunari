@@ -1,5 +1,6 @@
 import { findBrowser } from "../serve/display-launcher.js";
 import type { DisplayRecord, DisplayStore } from "../settings/displays.js";
+import { type DeviceSink, orderedSinks } from "./device-sink.js";
 import { createPageCapture } from "./panel-capture.js";
 import type {
   PanelConnectionStatus,
@@ -141,6 +142,8 @@ export interface PanelManager {
   disconnect(displayId: string): Promise<void>;
   /** Whether a disconnect, not a missing device, keeps this panel stopped. */
   stopped(displayId: string): boolean;
+  /** The open devices' sinks, in the stable order that is the UDP index. */
+  sinks(): readonly DeviceSink[];
   /** What the manager holds, for a surface that reports it. */
   running(): readonly string[];
   stopAll(): Promise<void>;
@@ -704,6 +707,13 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       enqueue(displayId, () => disconnectNow(displayId)),
 
     stopped: (displayId) => disconnected.has(displayId),
+    sinks(): readonly DeviceSink[] {
+      const open = [...entries.values()]
+        .filter((entry) => entry.runner?.running === true)
+        .map((entry) => entry.device?.sink)
+        .filter((sink): sink is DeviceSink => sink !== undefined);
+      return orderedSinks(open);
+    },
 
     running(): readonly string[] {
       return [...entries.entries()]

@@ -2,6 +2,8 @@ import type { DisplayRenderMode } from "@yunari/renderer-core";
 import HID from "node-hid";
 import { usb } from "usb";
 import { reportedSerial } from "../settings/displays.js";
+import type { DeviceSink } from "./device-sink.js";
+import { createKrakenSink } from "./kraken-lighting.js";
 import { toPalettedFrame } from "./kraken-palette.js";
 import type {
   PanelControlCommand,
@@ -253,6 +255,19 @@ class KrakenPanel implements PanelDevice {
     commands: ["brightness", "screen", "status"],
     run: (command) => this.runControl(command),
   };
+  /**
+   * The device as the SignalRGB seam sees it.
+   *
+   * Its writers are bound to this panel, so the lighting and fan reports share
+   * the handle, the reply matching and the `exclusive` queue every LCD command
+   * already uses. Nothing here opens a second interface.
+   */
+  readonly sink: DeviceSink = createKrakenSink({
+    size: SIZE,
+    exclusive: (work) => this.exclusive(work),
+    write: (report) => this.control.write(report),
+    readUntil: (first, second) => this.control.readUntil(first, second),
+  });
   /** The level a screen-on restores: the last brightness this host wrote. Full
    *  before the first write, so turning the glass back on shows a picture. */
   private brightnessLevel = 100;

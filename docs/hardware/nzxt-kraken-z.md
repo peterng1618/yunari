@@ -76,6 +76,56 @@ proven report carries them.
 
 Reads use a 120 ms timeout and 8 attempts.
 
+## Lighting and fan reports
+
+Recovered from SignalRGB's shipped `Nzxt_Kraken_Z3_AIO.js` and **verified on
+the attached Z73 on 2026-11-12** (firmware not re-queried during the run; the
+LCD reported its usual behaviour). All of these are 64-byte reports on
+**interface 1**, the same handle the LCD commands use, so they are serialised
+with the bucket commands and never overlap a transfer.
+
+**Lighting — one channel, 40 LEDs.** Two data reports carry 60 colour bytes
+each, twenty LEDs per report, then a commit:
+
+| Send | Bytes | Reply |
+|---|---|---|
+| Data 0 | `22 10 01 00` + 20 LEDs × **G R B** | none |
+| Data 1 | `22 11 01 00` + the next 20 LEDs × G R B | none |
+| Commit | `22 A0 01 00 01 00 00 28 00 00 80 00 32 00 00 01` | none |
+
+The mask byte is `1 << channel`; the Kraken Z has channel 0 only. **The wire
+order is GRB, not RGB** — the shipped plugin asks the runtime for
+`getColors("Inline", "GRB")` before packing, while the SignalRGB bridge's UDP
+frame carries RGB triples. The conversion belongs at this boundary.
+
+**Fans and pump — forty appended percentages.** The same value is repeated in
+40 slots; the pump's firmware floor is **25%**, so a lower request is raised to
+it, while fans may stop at 0%.
+
+| Send | Meaning | Reply |
+|---|---|---|
+| `72 01 00 00` + 40 bytes | pump speed, percent | none |
+| `72 02 00 00` + 40 bytes | fan speed, percent | none |
+
+**Status.** Write `74 01` and read until a `75 01` reply (never "the next
+report", because the firmware broadcasts `75 01` on its own):
+
+| Bytes | Field |
+|---|---|
+| 15, 16 | liquid temperature: whole °C, then tenths |
+| 18:17 | pump RPM, little-endian |
+| 19 | pump percent |
+| 24:23 | fan RPM, little-endian |
+| 25 | fan percent |
+
+Measured on 2026-11-12: the status reply returned 43.5 °C, 1775 RPM pump at
+50%, 1022 RPM fan at 50%. Writing `72 01` / `72 02` was reflected in the next
+status reply (pump 30%, then 35%; fan 40%, then 50%) while the LCD kept taking
+frames on the same handle and reported no refusals. Lighting writes drew no
+error, but **the LEDs were not watched** — no person was at the glass during
+the run, so emission and colour order are unconfirmed visually (see *Open
+questions*).
+
 ## What CAM exposes beyond these reports
 
 Recovered 2026-11-10 from the shipped `@nzxt/cam-core` addon and the packed
@@ -294,6 +344,14 @@ length, the slot count and the settle differ.
 
 ## Open questions
 
+- **LED emission and colour order are unverified visually.** The report bytes
+  came from the shipped plugin and the device accepted them without an error,
+  but nobody watched the ring during the 2026-11-12 run. A human should confirm
+  red/green/blue reach the ring in the expected order.
+- Whether the 40 fan slots correspond to one fan header each, or the firmware
+  broadcasts one value to every header.
+- Whether lighting writes are safe *during* an open bucket transfer. The driver
+  serialises them so the question is untested, not accepted.
 - Firmware versions other than 5.11.0 and any command differences.
 - The rest of `31 01`'s field layout beyond brightness (`0x18`) and orientation
   (`0x1A`). CAM's reader names a `sleep_mode` and a `current_graphics_mode` for

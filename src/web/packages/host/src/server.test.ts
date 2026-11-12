@@ -1003,6 +1003,7 @@ describe("Host theme routes", () => {
       reconnect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
       stopped: () => false,
+      sinks: () => [],
       stopAll: () => Promise.resolve(),
       capturePreview: (displayId, themeId, clip) => {
         captured.push({ displayId, themeId, clip });
@@ -1149,6 +1150,7 @@ describe("Host theme routes", () => {
       reconnect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
       stopped: () => false,
+      sinks: () => [],
       stopAll: () => Promise.resolve(),
       capturePreview: () =>
         Promise.reject(new Error("The preview browser is not running.")),
@@ -1205,6 +1207,7 @@ describe("Host theme routes", () => {
       reconnect: () => Promise.resolve(),
       disconnect: () => Promise.resolve(),
       stopped: () => false,
+      sinks: () => [],
       stopAll: () => Promise.resolve(),
       capturePreview: () => Promise.reject(new Error("Not a preview.")),
       captureTheme: (
@@ -5612,6 +5615,7 @@ describe("A local monitor is specified rather than paired", () => {
         reconnect: () => Promise.resolve(),
         disconnect: () => Promise.resolve(),
         stopped: () => false,
+        sinks: () => [],
         stopAll: () => Promise.resolve(),
       };
     }
@@ -9149,6 +9153,66 @@ describe("A theme's own device answers", () => {
         ).toBe(`id-${group}`);
       }
     });
+  });
+});
+
+describe("The SignalRGB device descriptor", () => {
+  it("rides in the assignment answer without displacing it", async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-bridge-"));
+    const descriptor = {
+      hub: { name: "Yunari", vendor: "Yunari" },
+      devices: [
+        {
+          id: "kraken-z",
+          kind: "kraken",
+          name: "NZXT Kraken Z",
+          lighting: {
+            ledCount: 40,
+            udpPort: 7788,
+            channels: [{ name: "Kraken Z", leds: 40 }],
+            layout: { shape: "ring", width: 4, height: 4 },
+            stats: { malformed: 0, dropped: 0 },
+          },
+          controls: { pump: true, fans: true, telemetry: true },
+          display: { kind: "panel", width: 320, height: 320 },
+        },
+      ],
+      stats: { malformed: 0, dropped: 0 },
+    } as const;
+    const hosted = createHostServer({
+      registry: new ProviderRegistry([]),
+      bundles: { player: tmpDir, editor: tmpDir },
+      devices: createDeviceSettingsStore(tmpDir),
+      bridge: {
+        port: 7788,
+        describe: () => descriptor,
+        controls: () => Promise.resolve(),
+        telemetry: () =>
+          Promise.resolve({
+            liquidTempC: 0,
+            pumpRpm: 0,
+            fanRpm: 0,
+            pumpPercent: 0,
+            fanPercent: 0,
+          }),
+        lightingMode: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+      },
+    });
+
+    try {
+      const answer = await request(hosted.server, "GET", "/api/devices");
+      expect(answer.status).toBe(200);
+      expect(answer.json()).toMatchObject({
+        available: { gpus: [], disks: [] },
+        hub: descriptor.hub,
+        devices: descriptor.devices,
+        stats: descriptor.stats,
+      });
+    } finally {
+      await hosted.close();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

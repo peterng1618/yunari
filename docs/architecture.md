@@ -82,7 +82,16 @@ drives the hardware. Current driver families cover Lian Li 9.2-inch and Universa
 Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
 
 - `panels/panel-device.ts` defines the seam: geometry, still format and minimum
-  frame interval, optional video and hardware controls, open/present/close.
+  frame interval, optional video, hardware controls and an optional `DeviceSink`,
+  and open/present/close. A sink is the same opened device's lighting and
+  fan/pump controls; its writers use the driver's own handle and write queue, so
+  a lighting report cannot interleave with an LCD command sequence.
+- `panel-manager.ts` answers `sinks()`, the devices open right now, in the stable
+  order that is the SignalRGB bridge's UDP device index. The bridge
+  (`signalrgb/bridge.ts`) owns the loopback UDP receiver, newest-frame
+  coalescing and lighting modes; its HTTP subpaths live in
+  `server/devices-routes.ts` and the descriptor rides in `GET /api/devices`.
+  Neither opens hardware.
 - Each driver owns discovery, protocol, transport and its `PanelFamily` rows.
   `panel-families.ts` is `PanelFamilyRegistry`: built-in rows first, plugin rows
   after. A plugin row cannot shadow a built-in or an earlier plugin row, and

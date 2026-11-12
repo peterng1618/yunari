@@ -67,6 +67,9 @@ as the Jungle Leopard L10 hub with its ports.
   `height` rows). The plugin turns it into `setControllableLeds` positions.
 - `id` is stable across restarts; the plugin keys its saved layout by it.
 - Unknown fields are ignored by the plugin; missing devices answer `404`.
+- `/api/devices` already answers the host's device-assignment surface
+  (`available`, `assigned`). Those fields ride in the same JSON answer and the
+  plugin ignores them; the descriptor fields above are unchanged.
 
 ## Colour frames (UDP)
 
