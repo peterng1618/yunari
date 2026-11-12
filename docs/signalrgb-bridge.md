@@ -34,22 +34,39 @@ SignalRGB ──HTTP (controls, discovery)──> Yunari host ──HID iface 1�
 
 ## Device descriptor (HTTP)
 
+SignalRGB sees **one hub** named "Yunari". Every device Yunari owns that has lighting becomes a
+subdevice, so each one can be placed independently on the SignalRGB layout canvas — the same model
+as the Jungle Leopard L10 hub with its ports.
+
 `GET http://127.0.0.1:5227/api/devices` →
 
 ```json
-[
-  {
-    "id": "kraken-z",
-    "kind": "kraken",
-    "name": "NZXT Kraken Z",
-    "lighting": { "ledCount": 40, "channels": [ { "name": "Channel 1", "leds": 40 } ] },
-    "controls": { "pump": true, "fans": true, "telemetry": true },
-    "display": { "kind": "panel", "width": 320, "height": 320 }
-  }
-]
+{
+  "hub": { "name": "Yunari", "vendor": "Yunari" },
+  "devices": [
+    {
+      "id": "kraken-z",
+      "kind": "kraken",
+      "name": "NZXT Kraken Z",
+      "lighting": {
+        "ledCount": 40,
+        "udpPort": 7788,
+        "channels": [ { "name": "Kraken Z", "leds": 40 } ],
+        "layout": { "shape": "ring", "width": 4, "height": 4 }
+      },
+      "controls": { "pump": true, "fans": true, "telemetry": true },
+      "display": { "kind": "panel", "width": 320, "height": 320 }
+    }
+  ]
+}
 ```
 
-Unknown fields are ignored by the plugin; missing devices answer `404`.
+- `devices` order defines the UDP **device index** (0-based). Devices without lighting are still
+  listed, but the plugin creates no channel for them.
+- `layout.shape` is `ring` (perimeter of `width`×`height`) or `strip` (`width` LEDs per row,
+  `height` rows). The plugin turns it into `setControllableLeds` positions.
+- `id` is stable across restarts; the plugin keys its saved layout by it.
+- Unknown fields are ignored by the plugin; missing devices answer `404`.
 
 ## Colour frames (UDP)
 
