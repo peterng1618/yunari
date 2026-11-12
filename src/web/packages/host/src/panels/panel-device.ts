@@ -12,6 +12,7 @@ import type {
   DisplayRenderMode,
   PalettePaint,
 } from "@yunari/renderer-core";
+import type { DeviceSink } from "./device-sink.js";
 
 /** A panel's own raster size, in the orientation the wire expects. */
 export interface PanelGeometry {
@@ -193,6 +194,15 @@ export interface PanelDevice {
   readonly controls?: PanelControls | undefined;
   /** Present when the device takes video as well as stills. */
   readonly video?: PanelVideo | undefined;
+  /**
+   * The device as the rest of the host sees it: its lighting and hardware
+   * controls, on this already-open handle.
+   *
+   * **The sink writes through this device's own queue**, so a report cannot
+   * land in the middle of an LCD command sequence. It never opens hardware;
+   * the manager's one open instance is the only handle.
+   */
+  readonly sink?: DeviceSink | undefined;
   close(): Promise<void>;
 }
 

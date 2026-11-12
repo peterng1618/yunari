@@ -35,6 +35,7 @@ import type { StoreSessionStore } from "../settings/store-session.js";
 import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import type { WeatherSettingsStore } from "../settings/weather.js";
+import type { SignalRgbBridge } from "../signalrgb/bridge.js";
 import type { ThemeStore } from "../themes/store.js";
 import type { ThemeMedia } from "../themes/theme-media.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
@@ -80,6 +81,14 @@ export interface HostServerOptions {
    *  Omit to disable pairing entirely: a loopback-only server needs none, and a
    *  non-loopback display is then refused rather than trusted. */
   readonly displays?: DisplayStore;
+  /**
+   * The SignalRGB bridge: the UDP colour receiver and the sinks it publishes
+   * over `/api/devices`. Omitted when this host runs none; the routes then
+   * answer that the bridge is not running. **Included as `undefined`
+   * explicitly** because the bridge needs the panel manager, so `main` hands
+   * over a getter read per request.
+   */
+  readonly bridge?: SignalRgbBridge | undefined;
   /** The one-time code a display with no camera types, and the window it is
    *  valid in. Supplied so the launcher can print a link carrying the same code
    *  the claim route accepts; a caller with no launcher gets a store of its

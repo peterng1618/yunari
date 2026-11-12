@@ -12,6 +12,7 @@ import {
   searchWeatherPlaces,
   type WeatherSettingsStore,
 } from "../settings/weather.js";
+import type { DevicesDescriptor } from "../signalrgb/bridge.js";
 import type { ThemeStore } from "../themes/store.js";
 import type { SseConnection } from "../transport/sse.js";
 import { isPlatformError, readBody, sendJson, sendText } from "./http.js";
@@ -50,6 +51,16 @@ export interface SettingsRouteDeps {
   readonly connections: Set<SseConnection>;
   readonly lastUnmapped: () => readonly string[];
   readonly moveLan: (on: boolean) => Promise<void>;
+  /**
+   * The SignalRGB device descriptor, when the bridge runs.
+   *
+   * **`/api/devices` already belongs to the assignment surface**, so the
+   * descriptor rides in that answer rather than replacing it: the editor reads
+   * `available`/`assigned`, the SignalRGB plugin reads `hub`/`devices`, and
+   * both ignore the other's fields. A second route on the same path would
+   * break one of them.
+   */
+  readonly bridge: () => DevicesDescriptor | undefined;
 }
 
 /**
@@ -76,6 +87,7 @@ export function createSettingsRoutes(
     connections,
     lastUnmapped,
     moveLan,
+    bridge,
   } = deps;
   const displays = options.displays;
 
@@ -129,9 +141,11 @@ export function createSettingsRoutes(
       }
 
       if (url.pathname === "/api/devices" && request.method === "GET") {
+        const descriptor = bridge();
         sendJson(response, 200, {
           available: await availableDevices(),
           assigned: await devices.read(),
+          ...(descriptor === undefined ? {} : descriptor),
         });
         return true;
       }

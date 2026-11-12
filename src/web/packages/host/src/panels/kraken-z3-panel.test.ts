@@ -32,6 +32,14 @@ const fake = vi.hoisted(() => {
     /** What `31 01` reports as the LCD state. */
     lcdBrightness: 55,
     lcdOrientation: 2,
+    /** What the `75 01` status reply reports. */
+    status: {
+      liquidTempC: 34.5,
+      pumpRpm: 2_100,
+      pumpPercent: 60,
+      fanRpm: 1_200,
+      fanPercent: 45,
+    },
   };
 
   const reply = (first: number, second: number, status = 1): number[] => {
@@ -92,6 +100,19 @@ const fake = vi.hoisted(() => {
         state.queue.push(reply(0x33, 0x02));
       } else if (first === 0x32 && second === 0x01) {
         state.queue.push(reply(0x33, 0x01, state.createStatus));
+      } else if (first === 0x74 && second === 0x01) {
+        const status = reply(0x75, 0x01);
+        status[15] = Math.floor(state.status.liquidTempC);
+        status[16] = Math.round((state.status.liquidTempC % 1) * 10);
+        status[17] = state.status.pumpRpm & 0xff;
+        status[18] = state.status.pumpRpm >> 8;
+        status[19] = state.status.pumpPercent;
+        status[23] = state.status.fanRpm & 0xff;
+        status[24] = state.status.fanRpm >> 8;
+        status[25] = state.status.fanPercent;
+        state.queue.push(status);
+      } else if (first === 0x22 || first === 0x72) {
+        // Lighting and fan writes draw no reply.
       } else {
         throw new Error(`unexpected report ${value}`);
       }
@@ -289,6 +310,129 @@ describe("KrakenPanel mode B", () => {
       ([first, second]) => first === 0x36 && second === 0x02,
     );
     expect(frameWrites[end + 1]?.slice(0, 2)).toEqual([0x38, 0x01]);
+
+    await panel.close();
+  });
+});
+
+describe("KrakenPanel device sink", () => {
+  beforeEach(() => {
+    fake.state.writes.length = 0;
+    fake.state.queue.length = 0;
+  });
+
+  const rgb = (): Uint8Array => {
+    const frame = new Uint8Array(120);
+    for (let index = 0; index < 120; index += 1) frame[index] = index;
+    return frame;
+  };
+
+  it("describes the one LED channel and the controls it accepts", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const sink = panel.sink;
+    if (sink === undefined) throw new Error("no sink");
+
+    expect(sink.id).toBe("kraken-z");
+    expect(sink.lighting).toEqual({
+      ledCount: 40,
+      channels: [{ name: "Kraken Z", leds: 40 }],
+      layout: { shape: "ring", width: 4, height: 4 },
+    });
+    expect(sink.controls).toMatchObject({
+      pump: true,
+      fans: true,
+      telemetry: true,
+    });
+    expect(sink.display).toEqual({ kind: "panel", width: 320, height: 320 });
+
+    await panel.close();
+  });
+
+  it("writes two 20-LED reports in GRB and then commits", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const frame = rgb();
+    const sink = panel.sink;
+    if (sink === undefined) throw new Error("no sink");
+    await sink.writeColors(frame);
+
+    const lighting = fake.state.writes.filter((write) => write[0] === 0x22);
+    expect(lighting).toHaveLength(3);
+    expect(lighting[0]?.slice(0, 4)).toEqual([0x22, 0x10, 0x01, 0x00]);
+    expect(lighting[1]?.slice(0, 4)).toEqual([0x22, 0x11, 0x01, 0x00]);
+    // GRB: the frame's green component leads its red one.
+    expect(lighting[0]?.[4]).toBe(frame[1]);
+    expect(lighting[0]?.[5]).toBe(frame[0]);
+    expect(lighting[0]?.[6]).toBe(frame[2]);
+    expect(lighting[0]?.[63]).toBe(frame[59]);
+    expect(lighting[1]?.[4]).toBe(frame[61]);
+    expect(lighting[2]?.slice(0, 16)).toEqual([
+      0x22, 0xa0, 0x01, 0x00, 0x01, 0x00, 0x00, 0x28, 0x00, 0x00, 0x80, 0x00,
+      0x32, 0x00, 0x00, 0x01,
+    ]);
+
+    await panel.close();
+  });
+
+  it("queues a lighting write behind an LCD frame instead of interleaving", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const sink = panel.sink;
+    if (sink === undefined) throw new Error("no sink");
+    fake.state.writes.length = 0;
+
+    const presenting = panel.present(pngOf(320, 320));
+    await sink.writeColors(rgb());
+    await presenting;
+
+    const firstLighting = fake.state.writes.findIndex(
+      (write) => write[0] === 0x22,
+    );
+    const lastSwitch = fake.state.writes
+      .map((write) => write[0])
+      .lastIndexOf(0x38);
+    expect(firstLighting).toBeGreaterThan(lastSwitch);
+    expect(
+      fake.state.writes
+        .slice(firstLighting)
+        .filter(
+          (write) =>
+            write[0] === 0x32 || write[0] === 0x36 || write[0] === 0x38,
+        ),
+    ).toHaveLength(0);
+
+    await panel.close();
+  });
+
+  it("clamps the pump to its 25% floor and the fans to 0-100", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const controls = panel.sink?.controls;
+    if (controls === undefined) throw new Error("no controls");
+
+    await controls.set({ pumpPercent: 0, fanPercent: 150 });
+
+    const pump = fake.state.writes.find(
+      ([first, second]) => first === 0x72 && second === 0x01,
+    );
+    const fan = fake.state.writes.find(
+      ([first, second]) => first === 0x72 && second === 0x02,
+    );
+    expect(pump?.slice(4, 44)).toEqual(new Array(40).fill(25));
+    expect(fan?.slice(4, 44)).toEqual(new Array(40).fill(100));
+
+    await panel.close();
+  });
+
+  it("answers the status reply's measured fields", async () => {
+    const panel = await openKraken("The NZXT Kraken");
+    const controls = panel.sink?.controls;
+    if (controls === undefined) throw new Error("no controls");
+
+    await expect(controls.read()).resolves.toEqual({
+      liquidTempC: 34.5,
+      pumpRpm: 2_100,
+      pumpPercent: 60,
+      fanRpm: 1_200,
+      fanPercent: 45,
+    });
 
     await panel.close();
   });

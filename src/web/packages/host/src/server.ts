@@ -15,6 +15,7 @@ import type { ListenableServer } from "./cli/net.js";
 import { createPanelFamilyRegistry } from "./panels/panel-families.js";
 import type { DeviceAssignment } from "./providers/lhm-mapping.js";
 import { createPublishedStore } from "./serve/published.js";
+import { createDeviceRoutes } from "./server/devices-routes.js";
 import { createDisplayRoutes } from "./server/displays-routes.js";
 import { createExtensionRoutes } from "./server/extension-routes.js";
 import { handleExtensionUiRoutes } from "./server/extension-ui-routes.js";
@@ -356,6 +357,11 @@ export function createHostServer(options: HostServerOptions): HostServer {
     panelFamilies,
     server,
   });
+  /** The SignalRGB seam: the descriptor, controls, telemetry and lighting mode.
+   *  A getter, because the bridge is built once the panel manager exists. */
+  const deviceRoutes = createDeviceRoutes({
+    bridge: () => options.bridge,
+  });
   const pairingRoutes = createPairingRoutes({ displays, pairingCodes });
   const extensionRoutes = createExtensionRoutes({
     extensions,
@@ -374,6 +380,9 @@ export function createHostServer(options: HostServerOptions): HostServer {
     connections,
     lastUnmapped: streaming.lastUnmapped,
     moveLan,
+    // The descriptor rides in `GET /api/devices`, the path the assignment
+    // surface already owns; see the settings route's `bridge` option.
+    bridge: () => options.bridge?.describe(),
   });
   const secretRoutes = createSecretRoutes({
     sourceRoutes,
@@ -443,6 +452,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     }
 
     if (await displayRoutes(request, response, url)) return;
+    if (await deviceRoutes(request, response, url)) return;
     if (await pairingRoutes(request, response, url)) return;
 
     if (url.pathname === SAMPLE_STREAM_PATH) {
