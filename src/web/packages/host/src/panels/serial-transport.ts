@@ -249,6 +249,9 @@ class OpenSerialPort implements SerialTransport {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      /** Which half of the send is still outstanding when the deadline fires:
+       *  the OS handing bytes to the port, or the device draining them. */
+      let phase: "write" | "drain" = "write";
       const deadline = setTimeout(() => {
         if (settled) return;
         settled = true;
@@ -257,10 +260,19 @@ class OpenSerialPort implements SerialTransport {
         // than queue behind the one the USB stack is still holding, and lets
         // the caller's own stop reach `close`.
         this.closed = true;
+        // The size and the half that stalled are the diagnosis: a stalled
+        // 1.5 MB frame write is the picture, a stalled 12-byte command is the
+        // device's reply path, and Windows not completing the send at all is
+        // the USB stack, not the panel.
         reject(
-          Object.assign(new Error("The serial port stopped accepting data."), {
-            code: "ETIMEDOUT",
-          }),
+          Object.assign(
+            new Error(
+              phase === "write"
+                ? `The serial port stopped accepting data: Windows did not complete a ${bytes.length}-byte send.`
+                : `The serial port stopped accepting data: the device did not take a ${bytes.length}-byte send.`,
+            ),
+            { code: "ETIMEDOUT" },
+          ),
         );
       }, WRITE_DEADLINE_MS);
 
@@ -283,6 +295,7 @@ class OpenSerialPort implements SerialTransport {
           return;
         }
 
+        phase = "drain";
         this.port.drain((drainError) => finish(drainError));
       });
     });

@@ -28,6 +28,8 @@ class FakePort extends EventEmitter implements SerialPortLike {
   isOpen = true;
   /** A write the USB stack never completes: the device stopped taking data. */
   writeHangs = false;
+  /** The port takes the bytes, and the device never drains them. */
+  drainHangs = false;
   /** A close the driver never completes. */
   closeHangs = false;
 
@@ -46,7 +48,7 @@ class FakePort extends EventEmitter implements SerialPortLike {
   }
 
   drain(callback: (error?: Error | null) => void): void {
-    if (!this.isOpen) return;
+    if (!this.isOpen || this.drainHangs) return;
     callback(null);
   }
 }
@@ -408,6 +410,37 @@ describe("the serial transport's deadlines", () => {
       await expect(transport.write(Uint8Array.of(2))).rejects.toMatchObject({
         code: "ERR_SERIAL_PORT_CLOSED",
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("names the half of a send that stalled, and how much was outstanding", async () => {
+    vi.useFakeTimers();
+
+    try {
+      // Windows never completed the send: the USB stack, not the panel.
+      const stuck = new FakePort();
+      stuck.writeHangs = true;
+      const writing = transportOver(stuck)
+        .write(new Uint8Array(1532))
+        .catch((error: Error) => error.message);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await writing).toBe(
+        "The serial port stopped accepting data: Windows did not complete a 1532-byte send.",
+      );
+
+      // The port took the bytes and the device stopped draining them: the
+      // panel's own endpoint, which is what a USB restart clears.
+      const draining = new FakePort();
+      draining.drainHangs = true;
+      const drainingWrite = transportOver(draining)
+        .write(new Uint8Array(12))
+        .catch((error: Error) => error.message);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await drainingWrite).toBe(
+        "The serial port stopped accepting data: the device did not take a 12-byte send.",
+      );
     } finally {
       vi.useRealTimers();
     }

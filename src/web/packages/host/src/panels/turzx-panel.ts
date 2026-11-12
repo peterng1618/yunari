@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
   PanelControlCommand,
   PanelControls,
@@ -517,6 +520,11 @@ class TurzxPanel implements PanelDevice {
       const update = overlayUpdate(previous, current.rgba, this.geometry);
 
       const count = this.overlayCount;
+      if (process.env["YUNARI_PANEL_DEBUG"] !== undefined) {
+        console.error(
+          `[turzx ${this.path}] overlay ${count}: image ${update.imageSize} B, visible ${update.visibleBytes} B, body ${update.body.length} B`,
+        );
+      }
       await this.send(
         overlayHeader(update.imageSize, count, update.visibleBytes),
       );
@@ -803,7 +811,38 @@ class TurzxPanel implements PanelDevice {
   }
 
   private send(bytes: Uint8Array): Promise<void> {
-    return this.transport.write(frame(bytes));
+    const framed = frame(bytes);
+    const debugging = process.env["YUNARI_PANEL_DEBUG"] !== undefined;
+    if (!debugging) return this.transport.write(framed);
+
+    // Temporary diagnosis for a device that stops consuming mid-write: the
+    // duration says whether the wire is keeping up, and the last line before
+    // the stall names the write that met the stopped endpoint.
+    const began = Date.now();
+    return this.transport.write(framed).then(
+      () => {
+        console.error(
+          `[turzx ${this.path}] sent ${framed.length} B in ${Date.now() - began} ms`,
+        );
+      },
+      (error: unknown) => {
+        // The exact payload that met the stopped endpoint: replaying it after a
+        // USB restart is what tells a malformed frame apart from a device that
+        // fell over on its own.
+        try {
+          writeFileSync(
+            join(tmpdir(), `turzx-stall-${Date.now()}.bin`),
+            framed,
+          );
+        } catch {
+          // The dump is diagnosis; failing to write it must not hide the send.
+        }
+        console.error(
+          `[turzx ${this.path}] send ${framed.length} B failed after ${Date.now() - began} ms: ${String(error)}`,
+        );
+        throw error;
+      },
+    );
   }
 
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
