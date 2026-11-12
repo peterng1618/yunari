@@ -1728,7 +1728,12 @@ test.describe("the per-kind inspector column", () => {
     await openBlank(page);
 
     const report = async (kind: string): Promise<void> => {
-      expect(await sectionIds(page), `${kind} sections`).not.toHaveLength(0);
+      // The column is drawn from the selection, one render behind the action
+      // that made it. A read taken straight after that action found no section
+      // at all on CI, which reports the kind as columnless rather than late.
+      await expect
+        .poll(() => sectionIds(page), { message: `${kind} sections` })
+        .not.toHaveLength(0);
       expect(await controlCount(page), `${kind} controls`).toBeGreaterThan(0);
     };
 
