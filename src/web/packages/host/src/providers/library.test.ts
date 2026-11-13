@@ -105,6 +105,7 @@ function sampleOf(
     semanticKey: string;
     sample: {
       status: string;
+      timestamp?: string;
       value?: number;
       textValue?: string;
       booleanValue?: boolean;
@@ -572,7 +573,7 @@ describe("the machine-wide reads each family needs", () => {
     expect(calls.filter((name) => name === "currentLoad")).toHaveLength(1);
   });
 
-  it("starts a fresh read on the next tick", async () => {
+  it("starts a family's next read once the refresh window has passed", async () => {
     const calls: string[] = [];
     const provider = new LibrarySensorProvider(recordingMachine(calls));
 
@@ -580,6 +581,72 @@ describe("the machine-wide reads each family needs", () => {
     await provider.sample(["cpu.load"], 1000);
 
     expect(calls.filter((name) => name === "currentLoad")).toHaveLength(2);
+  });
+
+  it("reads the machine's identity strings once across ticks", async () => {
+    const machine = fakeMachine();
+    let reads = 0;
+    const provider = new LibrarySensorProvider({
+      ...machine,
+      osInfo: async () => {
+        reads += 1;
+        return osReport;
+      },
+    });
+
+    // A hostname, OS name and build cannot change while the host runs, and the
+    // read costs about a second: it is paid once, not once per tick.
+    await provider.sample(["system.hostname"], 0);
+    await provider.sample(["system.hostname"], 1_000);
+    await provider.sample(["system.os"], 2_000);
+
+    expect(reads).toBe(1);
+  });
+
+  it("answers with the last read while a stale family refreshes behind the tick", async () => {
+    const calls: string[] = [];
+    const machine = recordingMachine(calls);
+    let release: (() => void) | undefined;
+    let reads = 0;
+    const provider = new LibrarySensorProvider({
+      ...machine,
+      currentLoad: async () => {
+        reads += 1;
+        calls.push("currentLoad");
+        if (reads === 1) return { currentLoad: 12 };
+        return new Promise((resolve) => {
+          release = () => resolve({ currentLoad: 40 });
+        });
+      },
+    });
+
+    const first = await provider.sample(["cpu.load"], 0);
+    expect(sampleOf(first, "cpu.load")?.value).toBe(12);
+    expect(sampleOf(first, "cpu.load")?.timestamp).toBe(
+      new Date(0).toISOString(),
+    );
+
+    // Past the window the tick answers the figure it has and leaves the walk
+    // running, so a read longer than the tick no longer holds the batch back.
+    const second = await provider.sample(["cpu.load"], 1_000);
+    expect(sampleOf(second, "cpu.load")?.value).toBe(12);
+    expect(reads).toBe(2);
+
+    // A second stale tick finds that read in flight: it answers from the cache
+    // and starts no third walk.
+    const waiting = await provider.sample(["cpu.load"], 2_500);
+    expect(sampleOf(waiting, "cpu.load")?.value).toBe(12);
+    expect(reads).toBe(2);
+
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const refreshed = await provider.sample(["cpu.load"], 3_000);
+    expect(sampleOf(refreshed, "cpu.load")?.value).toBe(40);
+    // Stamped with the instant its read began, not with this tick.
+    expect(sampleOf(refreshed, "cpu.load")?.timestamp).toBe(
+      new Date(1_000).toISOString(),
+    );
   });
 
   it("returns only the keys it owns, never an unrequested family's", async () => {
@@ -658,7 +725,7 @@ describe("the machine-wide reads each family needs", () => {
     });
   });
 
-  it("keeps the tick's failure for a later group that needs nothing failing", async () => {
+  it("keeps a failing family's verdict for a group that needs nothing failing", async () => {
     const machine = fakeMachine();
     const provider = new LibrarySensorProvider({
       ...machine,
@@ -670,11 +737,31 @@ describe("the machine-wide reads each family needs", () => {
     await provider.sample(["gpu.load"], 0);
     await provider.sample(["cpu.load"], 0);
 
-    // A cpu-only group must not erase the fact that this tick's GPU read
-    // failed: health is the tick's verdict, not the last group's.
+    // A cpu-only group must not erase the GPU family's verdict: health is the
+    // families' last reads, not the last group's.
+    expect(provider.health()).toMatchObject({ available: false });
+  });
+
+  it("clears a family's failure when a later read of it succeeds", async () => {
+    const machine = fakeMachine();
+    let reads = 0;
+    const provider = new LibrarySensorProvider({
+      ...machine,
+      graphics: async () => {
+        reads += 1;
+        if (reads === 1) throw new Error("wmi said no");
+        return { controllers: [] };
+      },
+    });
+
+    await provider.sample(["gpu.load"], 0);
     expect(provider.health()).toMatchObject({ available: false });
 
-    await provider.sample(["cpu.load"], 1000);
+    // Past the refresh window the read starts behind the tick, so the flush
+    // is what lets it land before the next sample reads the cache.
+    await provider.sample(["gpu.load"], 1_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await provider.sample(["gpu.load"], 2_000);
 
     expect(provider.health()).toMatchObject({ available: true });
   });

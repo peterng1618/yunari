@@ -55,19 +55,51 @@ const READ_FAMILIES = {
 
 type ReadFamily = keyof typeof READ_FAMILIES;
 
+const READ_FAMILY_NAMES = Object.keys(READ_FAMILIES) as readonly ReadFamily[];
+
+/** The read family that supplies a semantic key, when one does. */
+function familyOf(semanticKey: string): ReadFamily | undefined {
+  return READ_FAMILY_NAMES.find((family) => READ_FAMILIES[family](semanticKey));
+}
+
 /**
- * A family's answer for one tick. A failure is this tick's answer too: every
- * ask group at the same `nowMs` must see one verdict, or two displays would be
- * told `ok` and `missing` for the same machine read.
+ * A family's answer. A failure is its answer too: every ask group that reads
+ * the same cached answer must be told the same verdict, or two displays would
+ * see `ok` and `missing` for one machine read.
  */
 type FamilyRead<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly reason: string };
 
-interface TickReads {
+/** A family's answer for one tick, with the instant the read it came from began. */
+interface FamilyAnswer<T> {
+  readonly outcome: FamilyRead<T>;
   readonly atMs: number;
-  readonly reads: Map<ReadFamily, Promise<FamilyRead<unknown>>>;
 }
+
+/**
+ * One family's last answer and the read that may be replacing it.
+ *
+ * **A family's reads do not fit inside the sample tick.** They are synchronous
+ * `systeminformation` walks served one at a time by `library-worker.ts`, and
+ * their sum measured 2.2 s on average against a 1 s tick (2026-11-14) — which
+ * made every surface's clock jump 2–5 s. The provider therefore keeps the last
+ * answer, refreshes it behind the tick, and stamps its entries with `atMs` so a
+ * cached figure never claims to be newer than it is.
+ */
+interface FamilyReadState {
+  /** When the read that produced `outcome` started. */
+  readonly atMs: number;
+  /** Absent while the family's first read is still in flight. */
+  readonly outcome: FamilyRead<unknown> | undefined;
+  /** The read in flight, shared by every group that asks for this family. */
+  readonly pending: Promise<FamilyAnswer<unknown>>;
+  /** False while that read is running, so no refresh stacks on it. */
+  readonly settled: boolean;
+}
+
+/** How long a family's answer serves before a background read replaces it. */
+const FAMILY_REFRESH_MS = 1_000;
 
 export const LIBRARY_PROVIDER_ID = "library";
 
@@ -829,6 +861,9 @@ export class LibrarySensorProvider implements SensorProvider {
   /** Read once like the drive index, but *not* refreshed by `describeDevices`:
    * a CPU's identity cannot change while the host runs. */
   private cpu: Promise<CpuLike> | undefined;
+  /** Read once for the same reason: `osInfo()` costs up to 1.2 s and its
+   * strings — hostname, OS, build — cannot change while the host runs. */
+  private os: Promise<OsInfoLike> | undefined;
   /**
    * `processes()` walks every process and costs more than the poll interval,
    * while the count moves slowly. A rejected read is never cached.
@@ -839,12 +874,11 @@ export class LibrarySensorProvider implements SensorProvider {
     | { readonly count: number; readonly atMs: number }
     | undefined;
   /**
-   * The machine-wide reads already started for the tick at `atMs`. Ask groups
-   * are sampled one after another against the same clock, so without this a
-   * family two groups both need is walked twice; four displays were four walks.
-   * Replaced whole at a new tick, so neither a figure nor a failure outlives it.
+   * Each family's last answer and the read refreshing it. Kept across ticks —
+   * a machine-wide walk costs more than the tick and its figures move slowly —
+   * and stamped with the instant its read started.
    */
-  private tick: TickReads | undefined;
+  private readonly families = new Map<ReadFamily, FamilyReadState>();
 
   /** The worker that serves `systeminformation`'s blocking reads. */
   private threaded: Promise<LibraryWorker> | undefined;
@@ -865,10 +899,9 @@ export class LibrarySensorProvider implements SensorProvider {
       const library = await this.module();
       const [graphics, drives] = await Promise.all([
         library.graphics(),
-        this.driveIndex(library),
+        this.refreshDrives(library),
       ]);
 
-      this.drives = undefined;
       const gpus = (graphics.controllers ?? [])
         .map((controller) => controller.model)
         .filter(
@@ -887,6 +920,38 @@ export class LibrarySensorProvider implements SensorProvider {
     } catch {
       return { gpus: [], disks: [] };
     }
+  }
+
+  /**
+   * The drive index, read again for a settings page.
+   *
+   * Opening that page is the moment a drive plugged in mid-session should
+   * appear, so the walk is repeated — and its answer becomes the cache. Simply
+   * dropping the cache made the next sample pay the same ~1.6 s walk again
+   * (measured 2026-11-14).
+   */
+  private refreshDrives(
+    library: LibraryModule,
+  ): Promise<readonly DriveDevice[]> {
+    const fresh = Promise.all([
+      library.diskLayout(),
+      library.blockDevices(),
+    ]).then(([layout, blockDevices]) => drivesFrom(layout, blockDevices));
+
+    // **The old list serves until the new one lands.** Replacing the cache with
+    // the pending read made every sample in between wait for the walk — which
+    // the worker serves behind the family refreshes, so it can take seconds
+    // (measured 2026-11-14).
+    fresh.then(
+      (drives) => {
+        this.drives = Promise.resolve(drives);
+      },
+      () => {
+        // A failed refresh leaves the last good list in place.
+      },
+    );
+
+    return fresh;
   }
 
   /**
@@ -928,58 +993,98 @@ export class LibrarySensorProvider implements SensorProvider {
   }
 
   /**
-   * Starts a tick's cache when `nowMs` differs from the recorded one, so the
-   * previous tick's verdict — a figure or a failure — is not carried forward.
+   * The machine's identity strings, read once like the CPU's: `osInfo()` cost
+   * 0.4–1.2 s per tick measured 2026-11-14 (it shells out on Windows), and a
+   * hostname, OS name or build cannot change while the host runs.
    */
-  private beginTick(nowMs: number): TickReads {
-    const current = this.tick;
+  private systemText(library: LibraryModule): Promise<OsInfoLike> {
+    this.os ??= library.osInfo().catch((error: unknown) => {
+      this.os = undefined;
+      throw error;
+    });
 
-    if (current?.atMs === nowMs) {
-      return current;
-    }
-
-    const tick: TickReads = { atMs: nowMs, reads: new Map() };
-    this.tick = tick;
-    this.failure = undefined;
-    return tick;
+    return this.os;
   }
 
   /**
-   * One machine-wide read per family per tick. Every ask group sampled at
-   * `nowMs` awaits the same promise, so a family starts at most once and a
-   * failure is the tick's answer rather than a reason to retry it per display.
-   * A rejection is folded into the promise, so `sample` never throws from it;
-   * the outcome is dropped only when the tick is replaced.
+   * A family's answer for this tick, read only when there is none to reuse.
+   *
+   * The first demand for a family waits for its read; after that a tick answers
+   * from the cache and a family at least one tick old is re-read behind it. A
+   * refresh never stacks on the read still in flight, so the worker is asked
+   * no faster than it answers.
    */
-  private readOnce<T>(
-    nowMs: number,
+  private async familyRead<T>(
     family: ReadFamily,
+    nowMs: number,
     start: () => Promise<T>,
-  ): Promise<FamilyRead<T>> {
-    const tick = this.beginTick(nowMs);
-    const started = tick.reads.get(family);
+  ): Promise<FamilyAnswer<T>> {
+    const state = this.families.get(family);
 
-    if (started !== undefined) {
-      return started as Promise<FamilyRead<T>>;
+    if (state === undefined) {
+      return await this.startRead(family, nowMs, start);
     }
 
-    const pending = start().then(
-      (value): FamilyRead<T> => ({ ok: true, value }),
-      (error: unknown): FamilyRead<T> => {
-        const reason = redactForBrowser(
-          error instanceof Error ? error.message : String(error),
-        );
+    if (state.outcome === undefined) {
+      // The first read is still running: every group in this tick shares it,
+      // because there is no figure to answer with until it lands.
+      return (await state.pending) as FamilyAnswer<T>;
+    }
 
-        // Only the tick that started this read owns its verdict.
-        if (this.tick === tick) {
-          this.failure ??= reason;
+    if (state.settled && nowMs - state.atMs >= FAMILY_REFRESH_MS) {
+      // Behind the tick: this tick answers with the figure already read, and
+      // the next one with what the refresh finds.
+      void this.startRead(family, nowMs, start);
+    }
+
+    return { outcome: state.outcome as FamilyRead<T>, atMs: state.atMs };
+  }
+
+  /**
+   * One read of a family. A rejection is folded into its outcome so `sample`
+   * never throws from it, and the answer is cached with the instant the read
+   * started — the time its figures were measured.
+   */
+  private startRead<T>(
+    family: ReadFamily,
+    nowMs: number,
+    start: () => Promise<T>,
+  ): Promise<FamilyAnswer<T>> {
+    // A refresh keeps the figure it is replacing: the tick that started it,
+    // and every tick while it runs, answers with that one.
+    const prior = this.families.get(family);
+    const pending: Promise<FamilyAnswer<T>> = Promise.resolve()
+      .then(start)
+      .then(
+        (value): FamilyRead<T> => ({ ok: true, value }),
+        (error: unknown): FamilyRead<T> => ({
+          ok: false,
+          reason: redactForBrowser(
+            error instanceof Error ? error.message : String(error),
+          ),
+        }),
+      )
+      .then((outcome) => {
+        // A read started by a later tick owns the cache; this one's answer is
+        // still returned to whoever awaited it, and takes no further part.
+        const current = this.families.get(family);
+        if (current === undefined || current.pending === pending) {
+          this.families.set(family, {
+            atMs: nowMs,
+            outcome,
+            pending,
+            settled: true,
+          });
         }
+        return { outcome, atMs: nowMs };
+      });
 
-        return { ok: false, reason };
-      },
-    );
-    tick.reads.set(family, pending);
-
+    this.families.set(family, {
+      atMs: prior?.atMs ?? nowMs,
+      outcome: prior?.outcome,
+      pending,
+      settled: false,
+    });
     return pending;
   }
 
@@ -1039,13 +1144,15 @@ export class LibrarySensorProvider implements SensorProvider {
 
     try {
       const library = await this.module();
-      // A new tick is judged by its own reads: this also keeps a group with no
-      // machine-wide keys from carrying the previous tick's verdict forward.
-      this.beginTick(nowMs);
+      // A working module clears whatever the last failed load said; the family
+      // verdicts are their own, reported by `health` from their cache.
+      this.failure = undefined;
       // A family is started only when an owned key needs a figure it supplies,
       // and each is contained: graphics failing still answers CPU load, while
       // its own keys become gaps with the reason.
       const failed = new Map<ReadFamily, string>();
+      /** When each family's figures were measured, for their entries' stamps. */
+      const readAt = new Map<ReadFamily, number>();
       const read = async <T>(
         family: ReadFamily,
         start: () => Promise<T>,
@@ -1054,7 +1161,8 @@ export class LibrarySensorProvider implements SensorProvider {
           return undefined;
         }
 
-        const outcome = await this.readOnce(nowMs, family, start);
+        const { outcome, atMs } = await this.familyRead(family, nowMs, start);
+        readAt.set(family, atMs);
 
         if (outcome.ok) {
           return outcome.value;
@@ -1111,7 +1219,9 @@ export class LibrarySensorProvider implements SensorProvider {
         wantsProcesses
           ? this.processCount(library, nowMs).catch(() => undefined)
           : undefined,
-        wantsSystemText ? library.osInfo().catch(() => undefined) : undefined,
+        wantsSystemText
+          ? this.systemText(library).catch(() => undefined)
+          : undefined,
         wantsBattery ? library.battery().catch(() => undefined) : undefined,
       ]);
 
@@ -1186,21 +1296,21 @@ export class LibrarySensorProvider implements SensorProvider {
         nowMs,
       );
 
-      if (failed.size === 0) {
-        return entries;
-      }
-
-      // A family that rejects is a gap for its own keys alone, carrying the
-      // reason; every other family's entries stand.
-      const timestamp = new Date(nowMs).toISOString();
-
+      // One pass for both corrections: a family that rejects is a gap for its
+      // own keys alone, and every key is stamped with the instant its family
+      // was read — a cached figure must never claim to be newer than it is.
       return entries.map((entry) => {
-        const family = [...failed.keys()].find((candidate) =>
-          READ_FAMILIES[candidate](entry.semanticKey),
-        );
+        const family = familyOf(entry.semanticKey);
+        const at = family === undefined ? undefined : readAt.get(family);
+        const timestamp = new Date(at ?? nowMs).toISOString();
+        const reason = family === undefined ? undefined : failed.get(family);
 
-        if (family === undefined) {
-          return entry;
+        if (reason === undefined) {
+          if (at === undefined) return entry;
+          return {
+            semanticKey: entry.semanticKey,
+            sample: { ...entry.sample, timestamp },
+          };
         }
 
         // The name comes from the drive index, not from `fsSize`: a failed
@@ -1216,7 +1326,7 @@ export class LibrarySensorProvider implements SensorProvider {
             sensorId: `${LIBRARY_PROVIDER_ID}:${entry.semanticKey}`,
             timestamp,
             status: "missing" as const,
-            message: `system information is unavailable: ${failed.get(family)}`,
+            message: `system information is unavailable: ${reason}`,
           },
         };
       });
@@ -1243,8 +1353,18 @@ export class LibrarySensorProvider implements SensorProvider {
   }
 
   health(): ProviderHealth {
-    return this.failure === undefined
-      ? { available: true }
-      : { available: false, message: this.failure };
+    if (this.failure !== undefined) {
+      return { available: false, message: this.failure };
+    }
+
+    // A family's last read is its verdict until a later read replaces it: a
+    // group that needs nothing failing must not hide one that does.
+    for (const state of this.families.values()) {
+      if (state.outcome !== undefined && !state.outcome.ok) {
+        return { available: false, message: state.outcome.reason };
+      }
+    }
+
+    return { available: true };
   }
 }

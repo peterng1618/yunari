@@ -138,7 +138,11 @@ nobody measured stays unmapped rather than becoming zero.
 
 1. The host's `ProviderRegistry` takes the union of semantic keys requested by
    connected displays and polls each provider once per distinct device
-   assignment and language.
+   assignment and language. A provider whose reads cost more than the tick
+   answers its last completed reading and refreshes it behind the tick, and the
+   entries carry the instant the read began rather than the tick's own
+   (`LibrarySensorProvider` is the one that needs this: `systeminformation`'s
+   walks are serialised on its worker).
 2. Provider failures are isolated and reported; unanswered keys are returned as
    unmapped rather than filled.
 3. The host emits a `SampleBatch` Server-Sent Event on `/ws` every 1000 ms. The
