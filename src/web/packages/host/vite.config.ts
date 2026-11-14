@@ -30,9 +30,9 @@ export default defineConfig({
     },
   },
   build: {
-    /** SSR keeps `node:` builtins external and avoids browser shims. Two
-     *  entries: the host itself and the forked plugin child, which
-     *  `main.ts` resolves as its sibling. */
+    /** SSR keeps `node:` builtins external and avoids browser shims. Three
+     *  entries: the host itself, the forked plugin child and the panel worker,
+     *  which the host resolves as its siblings. */
     ssr: true,
     target: "node22",
     outDir: "dist",
@@ -44,6 +44,7 @@ export default defineConfig({
       input: {
         main: "src/main.ts",
         "plugin-host": "src/extensions/runtime/plugin-host.ts",
+        "panel-worker": "src/panels/panel-worker.ts",
       },
       output: {
         format: "esm",

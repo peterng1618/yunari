@@ -81,6 +81,17 @@ export class PanelFamilyRegistry {
     );
   }
 
+  /**
+   * Whether this row is one the host ships rather than an installed plugin.
+   *
+   * A built-in's driver runs in this process, so the manager hands it a worker
+   * of its own; a plugin row's driver already lives in the supervisor's child.
+   * Asked here so both surfaces read one answer about which a row is.
+   */
+  isBuiltin(family: PanelFamily): boolean {
+    return this.#builtins.includes(family);
+  }
+
   /** Replaces the plugin rows. A row shadowing a built-in or an earlier plugin
    *  row is dropped by the same rule the initial build uses. */
   setPlugins(plugins: readonly PanelFamily[]): void {

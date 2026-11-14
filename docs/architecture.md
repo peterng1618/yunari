@@ -118,10 +118,19 @@ Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
   consent and revocation are the controls, not an OS sandbox.
 - `panel-manager.ts` owns one serialized runner per display. It opens attached
   hardware, coordinates start/stop/refresh, and owns cadence.
+- A built-in family's device and page rasteriser run on a worker thread of their
+  own: `panel-session.ts` opens the device, reads its clip and attaches its page,
+  `panel-worker-client.ts` is the `PanelDevice`/`Rasterizer` proxy the manager and
+  the runner drive, and `panel-worker.ts` is the thread's program. A panel's
+  synchronous HID wait and frame decode therefore cannot delay another panel, the
+  sample tick or an HTTP reply. Bytes cross as copies; the handle never leaves the
+  thread. Plugin families already run in the extension supervisor's child.
 - One `panel-raster-browser.ts` Chromium runtime serves every panel: one profile,
   one target per display, each target its own headless window. `panel-raster.ts`
-  captures one display's page through that target. The browser stops after the
-  last panel closes.
+  captures one display's page through that target. The browser stays in the host;
+  for a built-in panel the host opens the target and leases the page's socket to
+  the worker, so the browser's idle stop cannot close a live panel's runtime. The
+  browser stops after the last panel closes.
 - Streaming panels receive frames; storage panels write pixels to the device.
   The driver declares the minimum interval so a storage write does not become a
   per-second flash rewrite. Video-capable adapters own conversion and authored

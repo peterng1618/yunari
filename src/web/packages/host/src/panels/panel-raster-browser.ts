@@ -39,11 +39,28 @@ export interface TargetHandle {
 export interface RasterBrowser {
   /** Opens one panel's page in its own window; the caller owns the result. */
   create(options: RasterPageOptions): Promise<Rasterizer>;
+  /**
+   * Opens one panel's page target and answers its socket, without touching it.
+   *
+   * A page rasterised off this process's loop — a panel's worker — still has to
+   * live in the one browser, and the browser has to know the target is in use
+   * or its idle stop would close the runtime under a running panel. The caller
+   * closes the lease when the page is done; that is the whole contract.
+   */
+  leasePage(): Promise<RasterPageLease>;
   /** Opens one page, captures it once and closes its target. */
   capturePage(options: RasterPageOptions): Promise<Uint8Array>;
   /** Stops the child and removes the profile. Idempotent. */
   stop(): Promise<void>;
   readonly closed: boolean;
+}
+
+/** A page target opened for a caller that will drive it itself. */
+export interface RasterPageLease {
+  /** The page-level devtools socket for this target. */
+  readonly pageUrl: string;
+  /** Closes the target. Idempotent. */
+  close(): Promise<void>;
 }
 
 export interface RasterBrowserOptions {
@@ -255,60 +272,56 @@ export function createRasterBrowser(
     options.openTarget ??
     ((client: Devtools) => openWindow(client, endpoint ?? ""));
 
-  const openPage = async (page: RasterPageOptions): Promise<Rasterizer> => {
-    assertOpen();
-
+  const acquireTarget = async (): Promise<{
+    readonly client: Devtools;
+    readonly target: TargetHandle;
+  }> => {
     let browserClient: Devtools | undefined;
     let target: TargetHandle | undefined;
-    let pageClient: Devtools | undefined;
-    let rasterizer: Rasterizer | undefined;
 
     try {
       browserClient = await startOnce();
-      const client = browserClient;
       assertOpen();
 
-      target = await openTarget(client);
+      target = await openTarget(browserClient);
       assertOpen();
 
-      pageClient = await connect(target.webSocketDebuggerUrl);
-      assertOpen();
-
-      const targetId = target.targetId;
-      rasterizer = await createPageRasterizer(pageClient, page, () =>
-        closeTarget(client, targetId),
-      );
-      assertOpen();
+      // Counted before the answer: from here the target exists and the idle
+      // stop must not reclaim the runtime it lives in.
+      active += 1;
+      clearIdle();
+      return { client: browserClient, target };
     } catch (error) {
-      if (rasterizer !== undefined) {
-        await rasterizer.close().catch(() => {});
-      } else {
-        pageClient?.close();
-        if (browserClient !== undefined && target !== undefined) {
-          await closeTarget(browserClient, target.targetId).catch(() => {});
-        }
+      if (browserClient !== undefined && target !== undefined) {
+        await closeTarget(browserClient, target.targetId).catch(() => {});
       }
 
       throw error;
+    } finally {
+      pending -= 1;
+      // A failed target leaves no page, but the browser may have started for
+      // it: let the idle stop reclaim it rather than leave it running.
+      if (active === 0 && !closed && browser !== undefined) armIdle();
     }
+  };
 
-    if (rasterizer === undefined) throw new Error(CLOSED);
-    const opened = rasterizer;
-
-    active += 1;
+  const leasePage = async (): Promise<RasterPageLease> => {
+    assertOpen();
     clearIdle();
+    pending += 1;
+
+    const { client, target } = await acquireTarget();
 
     let released = false;
     return {
-      capture: () => opened.capture(),
-      captureOverlay: () => opened.captureOverlay(),
+      pageUrl: target.webSocketDebuggerUrl,
 
       async close(): Promise<void> {
         if (released) return;
         released = true;
 
         try {
-          await opened.close();
+          await closeTarget(client, target.targetId);
         } finally {
           active -= 1;
           if (active === 0 && !closed) armIdle();
@@ -318,22 +331,34 @@ export function createRasterBrowser(
   };
 
   const create = async (page: RasterPageOptions): Promise<Rasterizer> => {
-    assertOpen();
-    clearIdle();
-    pending += 1;
+    const lease = await leasePage();
+    let pageClient: Devtools | undefined;
 
     try {
-      return await openPage(page);
-    } finally {
-      pending -= 1;
-      // A failed create leaves no rasterizer, but the browser may have started
-      // for it: let the idle stop reclaim it rather than leave it running.
-      if (active === 0 && !closed && browser !== undefined) armIdle();
+      pageClient = await connect(lease.pageUrl);
+      assertOpen();
+
+      const opened = await createPageRasterizer(pageClient, page, () =>
+        lease.close(),
+      );
+      assertOpen();
+
+      return {
+        capture: () => opened.capture(),
+        captureOverlay: () => opened.captureOverlay(),
+        // The rasteriser's own close gives the target back through `closePage`.
+        close: () => opened.close(),
+      };
+    } catch (error) {
+      pageClient?.close();
+      await lease.close().catch(() => {});
+      throw error;
     }
   };
 
   return {
     create,
+    leasePage,
     async capturePage(page: RasterPageOptions): Promise<Uint8Array> {
       const rasterizer = await create({ ...page, oneShot: true });
       try {

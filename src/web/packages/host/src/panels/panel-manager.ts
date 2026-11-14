@@ -7,17 +7,19 @@ import type {
   PanelControlCommand,
   PanelDevice,
   PanelGeometry,
+  PanelOpenOptions,
   PanelVideoSource,
 } from "./panel-device.js";
 import { samePanelVideo } from "./panel-device.js";
 import type { PanelFamilyRegistry } from "./panel-families.js";
-import type { Rasterizer } from "./panel-raster.js";
 import {
   createRasterBrowser,
   type RasterBrowser,
   type RasterBrowserOptions,
 } from "./panel-raster-browser.js";
 import { createPanelRunner, type PanelRunner } from "./panel-runner.js";
+import { openPanelSession } from "./panel-session.js";
+import type { PanelWorker, PanelWorkerOptions } from "./panel-worker-client.js";
 
 /**
  * Every panel this host drives, one runner each.
@@ -84,6 +86,13 @@ export interface PanelManagerOptions {
    * leaves the driver's own fallback, which is only for callers with no host.
    */
   readonly videoCacheDir?: string;
+  /**
+   * Opens one built-in panel's worker thread. Absent starts the real one; a
+   * test injects a thread-shaped stand-in so no isolate is spawned.
+   */
+  readonly panelWorkerFactory?: (
+    options: PanelWorkerOptions,
+  ) => Promise<PanelWorker>;
 }
 
 /** A command aimed at a display whose device is not being driven now. */
@@ -347,7 +356,7 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       );
     }
 
-    const device = await family.open({
+    const openOptions: PanelOpenOptions = {
       ...(options.videoCacheDir === undefined
         ? {}
         : { cacheDir: options.videoCacheDir }),
@@ -356,37 +365,28 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       ...(record.renderMode === undefined
         ? {}
         : { renderMode: record.renderMode }),
+    };
+
+    const videoFor = options.videoFor;
+    const workerFactory = options.panelWorkerFactory;
+
+    // The device, its clip and its page, in that order; a failure releases
+    // whatever was opened. A built-in family's device and page are driven on a
+    // thread of their own, which is `panel-session`'s rule, not this loop's.
+    const { device, video, rasterizer } = await openPanelSession({
+      family,
+      builtin: options.families.isBuiltin(family),
+      open: openOptions,
+      pageFor: (clip) => options.pageFor(displayId, clip),
+      ...(videoFor === undefined
+        ? {}
+        : { videoFor: () => videoFor(displayId) }),
+      browser: rasterBrowserFor(executable),
+      ...(workerFactory === undefined ? {} : { workerFactory }),
+      report: (message) => report(displayId, message),
     });
 
-    // A clip the device plays itself, when this display's theme has one. A
-    // theme that cannot be read is a still panel, not a failed one.
-    let video: PanelVideoSource | undefined;
-    if (device.video !== undefined && options.videoFor !== undefined) {
-      try {
-        video = await options.videoFor(displayId);
-      } catch (error) {
-        report(displayId, messageOf(error));
-      }
-    }
-
     entry.video = video;
-
-    let rasterizer: Rasterizer;
-
-    try {
-      rasterizer = await rasterBrowserFor(executable).create({
-        url: options.pageFor(displayId, video !== undefined),
-        geometry: device.geometry,
-        // The device says which still it consumes; a panel that decodes to raw
-        // pixels takes PNG rather than paying for a lossy intermediate.
-        ...(device.stillFormat === undefined
-          ? {}
-          : { stillFormat: device.stillFormat }),
-      });
-    } catch (error) {
-      await device.close();
-      throw error;
-    }
 
     // A video theme is read before the runner exists: a panel whose assignment
     // cannot be read is a still panel, not a panel with no runner.

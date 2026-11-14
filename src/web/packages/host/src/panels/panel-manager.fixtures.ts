@@ -109,6 +109,19 @@ export function fakeBrowser(
   const browser: FakeBrowser = {
     closed: false,
     create: vi.fn(async () => rasterizer() as Rasterizer),
+    leasePage: vi.fn(async () => {
+      events.push("page:lease");
+      let released = false;
+
+      return {
+        pageUrl: "ws://127.0.0.1:1/devtools/page/fake",
+        close: async () => {
+          if (released) return;
+          released = true;
+          events.push("page:release");
+        },
+      };
+    }),
     capturePage: vi.fn(async () => {
       const page = rasterizer() as Rasterizer;
       try {
