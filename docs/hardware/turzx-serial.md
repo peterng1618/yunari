@@ -13,7 +13,7 @@
 - **Last hardware verification:** 2026-11-14 (status-loop overlay on `COM5`:
   910 updates, 33.6 MB of bodies, no stall, owner confirmed the picture; before
   that 2026-11-13, 2026-11-10, and the first successful run 2026-10-30)
-- **Last known good revision:** `bb2af254` (2026-11-14) — the status loop below,
+- **Last known good revision:** `bfa06290d` (2026-11-14) — the status loop below,
   watched on the attached 5" and confirmed by eye. Compare a future playback
   regression against this revision; `fd7a3637f` (2026-11-13) is the last
   known-good before it, and `988cda820713` (2026-11-06) the last before any
