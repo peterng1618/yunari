@@ -44,6 +44,23 @@ function fakeTransport(...replies: string[]) {
   };
 }
 
+/**
+ * The index of the last UPDATE_BITMAP header a test wrote, or -1.
+ *
+ * Every update is followed by its status query, so a frame is found by its
+ * command rather than by its distance from the end of the wire.
+ */
+function lastUpdateAt(writes: readonly Uint8Array[]): number {
+  for (let index = writes.length - 1; index >= 0; index -= 1) {
+    const write = writes[index];
+    if (write?.[0] === 0xcc && write[1] === 0xef && write[2] === 0x69) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 /** A black RGBA→RGB PNG of `width`x`height`, as Chromium would write one. */
 function pngOf(width: number, height: number): Uint8Array {
   const chunk = (kind: string, data: Uint8Array): Uint8Array => {
@@ -1101,8 +1118,9 @@ describe("a panel's overlay", () => {
     try {
       await panel.video!.presentOverlay(Uint8Array.of(1));
 
-      const header = writes[writes.length - 2]!;
-      const body = writes[writes.length - 1]!;
+      const firstAt = lastUpdateAt(writes);
+      const header = writes[firstAt]!;
+      const body = writes[firstAt + 1]!;
       expect(header.length).toBe(250);
       // cc ef 69 00, imageSize 15 (3 BE), three zeros, count 0, visible bytes 5.
       expect([...header.slice(0, 18)]).toEqual([
@@ -1120,12 +1138,13 @@ describe("a panel's overlay", () => {
       // re-sent, and the count climbs.
       clock.mockReturnValue(1_000_000 + 4_000);
       await panel.video!.presentOverlay(Uint8Array.of(2));
-      const second = writes[writes.length - 2]!;
+      const secondAt = lastUpdateAt(writes);
+      const second = writes[secondAt]!;
       expect([...second.slice(0, 7)]).toEqual([
         0xcc, 0xef, 0x69, 0x00, 0x00, 0x00, 0x07,
       ]);
       expect([...second.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x01]);
-      expect([...writes[writes.length - 1]!.slice(0, 7)]).toEqual([
+      expect([...writes[secondAt + 1]!.slice(0, 7)]).toEqual([
         0x00, 0x00, 0x00, 0x00, 0x01, 0xef, 0x69,
       ]);
     } finally {
@@ -1134,9 +1153,153 @@ describe("a panel's overlay", () => {
     }
   });
 
-  it("holds an update back inside the pacing gap and sends the whole change after it", async () => {
-    // The panel's ingest wedges on a stream of updates; one inside the gap is
-    // not lost, because the wire's base frame moves only when an update lands.
+  it("asks the panel after every update and re-initializes when it asks for a resend", async () => {
+    // The panel reports a stopped overlay only in its status: `needReSend`
+    // non-zero. Every write keeps succeeding while the glass is frozen.
+    const pixels = new Uint8Array(800 * 480 * 4);
+    pixels[3] = 255;
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "file_rev_done",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1", // the start's init
+      "needReSend:0|renderCnt:40", // healthy: the counter moved
+      "needReSend:1|renderCnt:41", // the panel dropped that frame
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({
+        width,
+        height,
+        rgba: pixels,
+      }),
+    });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(3_000_000);
+    const inits = (): number =>
+      fake.writes.filter((write) => write[0] === 0xd0 && write[1] === 0xef)
+        .length;
+    const queries = (): number =>
+      fake.writes.filter((write) => write[0] === 0xcf && write[1] === 0xef)
+        .length;
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      expect(inits()).toBe(1);
+
+      clock.mockReturnValue(3_000_000 + 10_000);
+      expect(await panel.video!.presentOverlay(Uint8Array.of(1))).toBe(true);
+      expect(inits()).toBe(1);
+      // One at open, one from the init, one from this update.
+      expect(queries()).toBe(3);
+
+      // A resend request revives the compositor and carries the repaint in the
+      // same tick, so the glass never waits out a pacing gap on an empty layer.
+      clock.mockReturnValue(3_000_000 + 20_000);
+      expect(await panel.video!.presentOverlay(Uint8Array.of(2))).toBe(true);
+      expect(inits()).toBe(2);
+      expect(queries()).toBe(5);
+    } finally {
+      clock.mockRestore();
+      await panel.close();
+    }
+  });
+
+  it("re-initializes when the panel's render counter has stopped advancing", async () => {
+    const pixels = new Uint8Array(800 * 480 * 4);
+    pixels[3] = 255;
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "file_rev_done",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+      "needReSend:0|renderCnt:70",
+      "needReSend:0|renderCnt:70", // stopped: the render task is wedged
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({
+        width,
+        height,
+        rgba: pixels,
+      }),
+    });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(3_000_000);
+    const inits = (): number =>
+      fake.writes.filter((write) => write[0] === 0xd0 && write[1] === 0xef)
+        .length;
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      clock.mockReturnValue(3_000_000 + 10_000);
+      await panel.video!.presentOverlay(Uint8Array.of(1));
+      expect(inits()).toBe(1);
+
+      clock.mockReturnValue(3_000_000 + 20_000);
+      expect(await panel.video!.presentOverlay(Uint8Array.of(2))).toBe(true);
+      expect(inits()).toBe(2);
+    } finally {
+      clock.mockRestore();
+      await panel.close();
+    }
+  });
+
+  it("re-initializes after three status queries the panel does not answer", async () => {
+    const pixels = new Uint8Array(800 * 480 * 4);
+    pixels[3] = 255;
+    const fake = fakeTransport(
+      "chs_5inch.dev1_rom1.88",
+      "0",
+      "create_success",
+      "file_rev_done",
+      "play_video_success",
+      "seq_png_init_sucessneedReSend:0|renderCnt:1",
+    );
+    const panel = await opened(fake.transport, {
+      transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
+      sleep: async () => {},
+      decode: async (_bytes, width, height) => ({
+        width,
+        height,
+        rgba: pixels,
+      }),
+    });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(3_000_000);
+    const inits = (): number =>
+      fake.writes.filter((write) => write[0] === 0xd0 && write[1] === 0xef)
+        .length;
+
+    try {
+      await panel.video!.start(Uint8Array.of(1, 2, 3), {
+        offsetX: 0,
+        offsetY: 0,
+      });
+      for (let round = 1; round <= 3; round += 1) {
+        clock.mockReturnValue(3_000_000 + round * 10_000);
+        await panel.video!.presentOverlay(Uint8Array.of(round));
+      }
+      expect(inits()).toBe(2);
+    } finally {
+      clock.mockRestore();
+      await panel.close();
+    }
+  });
+
+  it("sends every capture, leaving the rate to the panel's status", async () => {
+    // There is no fixed gap: the vendor app's own loop queries the panel after
+    // every frame and lets that answer decide, and a held frame here would show
+    // a clock that moves in steps the panel never asked for.
     let pixels = new Uint8Array(800 * 480 * 4);
     pixels[0] = 255;
     pixels[3] = 255;
@@ -1147,6 +1310,8 @@ describe("a panel's overlay", () => {
       "file_rev_done", // the panel finished writing the clip
       "play_video_success", // START_VIDEO
       "seq_png_init_sucessneedReSend:0|renderCnt:1", // INIT_VIDEO_OVERLAY
+      "needReSend:0|renderCnt:40",
+      "needReSend:0|renderCnt:80",
     );
     const panel = await opened(fake.transport, {
       transcode: async () => ({ ok: true as const, bytes: Uint8Array.of(9) }),
@@ -1164,26 +1329,18 @@ describe("a panel's overlay", () => {
         offsetX: 0,
         offsetY: 0,
       });
-      expect(await panel.video!.presentOverlay(Uint8Array.of(1))).toBe(true);
 
-      // The first pixel clears and the second turns red: a change the gap holds.
       pixels = new Uint8Array(800 * 480 * 4);
       pixels[4] = 255;
       pixels[7] = 255;
-      const sent = fake.writes.length;
-      expect(await panel.video!.presentOverlay(Uint8Array.of(2))).toBe(false);
-      expect(fake.writes.length).toBe(sent);
 
-      // After the gap the same capture carries everything since the panel's
-      // last update: the new pixel, diffed from the base that is still there.
-      clock.mockReturnValue(2_000_000 + 4_000);
+      // Two captures in the same millisecond: both are sent.
+      expect(await panel.video!.presentOverlay(Uint8Array.of(2))).toBe(true);
       expect(await panel.video!.presentOverlay(Uint8Array.of(3))).toBe(true);
-      const body = fake.writes[fake.writes.length - 1]!;
-      // Offset 1, width 1, one opaque red pixel — the cleared pixel at 0 is
-      // absent from the visible list, which is how it clears.
-      expect([...body.slice(0, 9)]).toEqual([
-        0x00, 0x00, 0x01, 0x00, 0x01, 0x03, 0x03, 0xff, 0x00,
-      ]);
+      expect(
+        fake.writes.filter((write) => write[0] === 0xcc && write[1] === 0xef)
+          .length,
+      ).toBe(2);
     } finally {
       clock.mockRestore();
       await panel.close();
@@ -1222,6 +1379,7 @@ describe("a panel's overlay", () => {
       "file_rev_done", // the panel finished writing the clip
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
+      "needReSend:0|renderCnt:2", // the first update's status query
       "1", // a second init: the one-byte clip is already stored
       "play_video_success",
       "seq_png_init_sucessneedReSend:0|renderCnt:1",
@@ -1248,7 +1406,7 @@ describe("a panel's overlay", () => {
       });
       await panel.video!.presentOverlay(Uint8Array.of(2));
 
-      const header = fake.writes[fake.writes.length - 2]!;
+      const header = fake.writes[lastUpdateAt(fake.writes)]!;
       expect([...header.slice(10, 14)]).toEqual([0x00, 0x00, 0x00, 0x00]);
     } finally {
       await panel.close();

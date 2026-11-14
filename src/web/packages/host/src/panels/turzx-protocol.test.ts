@@ -5,9 +5,34 @@ import {
   overlayTrailer,
   overlayUpdate,
   parseHello,
+  parsePanelStatus,
   TURZX_COMMAND,
   TURZX_GEOMETRY,
 } from "./turzx-protocol.js";
+
+describe("parsePanelStatus", () => {
+  it("reads the healthy status the panel answers on hardware", () => {
+    // Captured on rom1.88: the reply is NUL-padded to about 1 KB, so the
+    // pattern is matched anywhere in the burst rather than at its start.
+    const text = `needReSend:0|renderCnt:3381${"\0".repeat(60)}`;
+    expect(parsePanelStatus(text)).toEqual({
+      resend: false,
+      renderCnt: 3381,
+    });
+  });
+
+  it("reads a resend request and the trailing theme index", () => {
+    expect(parsePanelStatus("needReSend:2|renderCnt:9|themeIndex:3")).toEqual({
+      resend: true,
+      renderCnt: 9,
+    });
+  });
+
+  it("ignores a reply that is not a status", () => {
+    expect(parsePanelStatus("chs_5inch.dev1_rom1.88")).toBeUndefined();
+    expect(parsePanelStatus("")).toBeUndefined();
+  });
+});
 
 describe("frame", () => {
   it("pads HELLO to exactly 250 bytes with the verified prefix", () => {

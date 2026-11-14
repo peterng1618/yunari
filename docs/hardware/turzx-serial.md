@@ -10,13 +10,14 @@
   so a display record's rotation is composed into the picture by the host
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
-- **Last hardware verification:** 2026-11-13 (paced overlay run on `COM5`, owner
-  confirmed the picture; before that 2026-11-10, and the first successful run
-  2026-10-30)
-- **Last known good revision:** `fd7a3637f` (2026-11-13) — the overlay pacing
-  below, watched on the attached 5" and confirmed by eye. Compare a future
-  playback regression against this revision; `988cda820713` (2026-11-06) is the
-  last known-good before the pacing rule.
+- **Last hardware verification:** 2026-11-14 (status-loop overlay on `COM5`:
+  910 updates, 33.6 MB of bodies, no stall, owner confirmed the picture; before
+  that 2026-11-13, 2026-11-10, and the first successful run 2026-10-30)
+- **Last known good revision:** `bb2af254` (2026-11-14) — the status loop below,
+  watched on the attached 5" and confirmed by eye. Compare a future playback
+  regression against this revision; `fd7a3637f` (2026-11-13) is the last
+  known-good before it, and `988cda820713` (2026-11-06) the last before any
+  overlay throttling.
 
 **Update this document with every new fact.** Record a firmware string, a command
 the driver starts using, a refused sequence and its cause, a timing constraint —
@@ -214,8 +215,20 @@ Behaviour that matters:
   16 flat bands; a 4×4 Bayer offset is added before quantising, trading the band
   edge for a fixed texture. The changed-pixel test runs first, so dithering does
   not inflate the wire.
-- The panel cannot run QUERY_STATUS in the middle of a frame update; a query
-  between updates stopped rendering during probing.
+- **The status query belongs between completed updates.** A query inside a
+  frame — between the header and the body — breaks it. After a completed update
+  it is the vendor app's own per-frame exchange (2026-11-14), and it is how the
+  panel reports a stalled overlay:
+
+  ```
+  QUERY_STATUS  →  needReSend:0|renderCnt:1576   (NUL-padded to ~1 KB)
+  ```
+
+  `needReSend:0` is healthy; any other value means the panel dropped pixels and
+  wants a full repaint. `renderCnt` is the panel's render counter and advances
+  on its own — three answers 400 ms apart on rom1.88 read 3381, 3393, 3406 — so
+  two answers carrying the same count are a panel whose render task has stopped.
+  A trailing `|themeIndex:N` names the panel's own theme.
 
 ## Controls
 
@@ -236,17 +249,32 @@ answer. Status is recognised by `needReSend` / `renderCnt` in the reply.
 - **The visible list is the clear mechanism** — do not invent a clear command.
 - **Keep one writer.** All commands run through one queue; a status query slipped
   between an update's header and body breaks the frame.
-- **Do not query status during video.** Unverified on hardware; the class's own
-  note says a query is never appended after a frame.
+- **Do not query status inside a frame.** After a completed update it is the
+  health channel; between an update's header and body it breaks the frame.
 - **A held port is not a missing panel.** Close the vendor app, then retry.
-- **Pace the overlay updates.** The firmware stops draining its OUT endpoint
-  under a live stream of diffs: 20–41 KB updates every 1.5–2.5 s stalled it at
-  update 87 (56–90 across runs) while every payload was well formed, and full
-  still frames push far more data safely, so the panel's own ingest is the
-  ceiling. The host keeps a 3 s minimum gap between updates (measured
-  2026-11-12: 332 updates over 22 minutes, and 5 s carried 296 over 31) and
-  re-sends the accumulated diff on the next update, so a held-back frame is
-  neither lost nor shown late.
+- **The panel's status sets the rate; a pacing gap only caused freezes.** A
+  minimum gap was tried and removed: 1.5–2.5 s stalled the firmware, and 3 s
+  merely moved the freeze later, while 2026-11-14 carried 910 updates and
+  33.6 MB of bodies at a 1 s cadence with zero stalls — ten times the data
+  that used to wedge it. What keeps the overlay alive is the status loop below,
+  not the gap, so the host sends every capture and lets the panel's answer be
+  the brake.
+- **The overlay can die without reporting it.** Writes keep succeeding and the
+  clip keeps playing while the compositor holds its last frame: frozen at
+  06:36:19 after 57 updates and 3.1 MB of bodies, and again after 17 updates and
+  1.5 MB (both 2026-11-14). The only channel that reports it is the status
+  query above, so the host asks after every update and treats `needReSend` ≠ 0,
+  a render counter that has not moved, or three unanswered queries as a stall.
+- **Full still frames are the one thing the firmware never stalls on.** They
+  carried a stalled panel for minutes at 1.54 MB/s, which is what the panel
+  looks like when the runner falls back to stills — rapid flashing while each
+  frame overwrites the last. A failed overlay therefore must never throw into
+  that fallback.
+- **A stalled overlay is revived without waiting for the init's ack.** The wedged
+  panel does not answer `seq_png_init_`, so the host sends the init sequence,
+  does not wait for it, and immediately sends a full repaint from the
+  transparent base the init restored. The vendor app's reviving sequence is the
+  same shape: re-init, then a full image.
 - **A device that stops consuming is a USB wedge, not a held port** (measured
   2026-11-10). After the panel's OUT endpoint stops accepting data, every write
   fails with `ERROR_SEM_TIMEOUT` ("The semaphore timeout period has expired"),
@@ -285,7 +313,11 @@ only Rev C firmware `1.88`.
   `seq_png_init_sucess` is verified. A run that sees a refusal must record the
   exact text.
 - `GET_FILE_SIZE`'s reply for a file that does not exist is unverified.
-- Whether `QUERY_STATUS` works while the overlay is playing is unverified.
+- Whether the panel ever reports `needReSend` non-zero *before* it freezes, or
+  only after, is unverified. The host now logs its reason for every re-init,
+  which is what a long run has to answer.
+- `themeIndex` in the status reply is the panel's own theme number and its
+  numbering is unverified; the host does not use it.
 - UPDATE_BITMAP's `count` field: the verified probe sent 0 first and the panel
   accepted it, so the field's meaning is unverified.
 - Whether other 5" boards report different `chs_<model>` strings, and which

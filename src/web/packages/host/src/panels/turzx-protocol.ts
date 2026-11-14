@@ -44,6 +44,33 @@ export function frame(
   return padded;
 }
 
+/**
+ * The panel's own verdict on its overlay, as QUERY_STATUS answers it.
+ *
+ * `needReSend:0` is the healthy state. Any other value means the panel dropped
+ * pixels and wants the host to repaint in full, and `renderCnt` is the panel's
+ * render counter, which advances on its own while it is rendering: two answers
+ * carrying the same count are a panel whose render task has stopped.
+ */
+export interface PanelStatus {
+  readonly resend: boolean;
+  readonly renderCnt: number;
+}
+
+/** `needReSend:0|renderCnt:1576`, the panel's status reply, anywhere in a burst. */
+const PANEL_STATUS = /needReSend:(\d+)\|renderCnt:(\d+)/;
+
+/** The status an already-decoded reply carries, or `undefined`. */
+export function parsePanelStatus(text: string): PanelStatus | undefined {
+  const match = PANEL_STATUS.exec(text);
+  if (match === null) return undefined;
+
+  const [, resend, renderCnt] = match;
+  if (resend === undefined || renderCnt === undefined) return undefined;
+
+  return { resend: resend !== "0", renderCnt: Number(renderCnt) };
+}
+
 /** The identity a HELLO reply carries, or `undefined` for any other answer. */
 export function parseHello(reply: Uint8Array): TurzxIdentity | undefined {
   return parseHelloText(

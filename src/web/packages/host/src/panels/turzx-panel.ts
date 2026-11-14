@@ -24,8 +24,10 @@ import {
   frame,
   overlayHeader,
   overlayUpdate,
+  type PanelStatus,
   parseHello,
   parseHelloText,
+  parsePanelStatus,
   TURZX_COMMAND,
   TURZX_GEOMETRY,
   type TurzxIdentity,
@@ -58,17 +60,15 @@ export const SIZE_PROBE_TIMEOUT_MS = 2_000;
 /** The panel dropped an overlay update sent 8 ms after init; 1.5 s worked. */
 const OVERLAY_SETTLE_MS = 1500;
 /**
- * Shortest gap between two overlay updates, in milliseconds.
+ * How long one QUERY_STATUS answer may take before it counts as unanswered.
  *
- * The firmware stops draining its OUT endpoint under a live stream of updates:
- * 20–41 KB diffs sent every 1.5–2.5 s stalled it at update 87 (and at 56–90
- * across other runs), while the payloads were all well formed. The bytes are
- * not the cause — full still frames push far more data safely — so the panel's
- * own ingest is the ceiling. A 3 s floor carried 332 updates over 22 minutes and
- * 5 s carried 296 over 31 (measured 2026-11-12); a held-back frame is not a lost
- * one, because `previousOverlay` advances only when an update lands.
+ * The panel answers in milliseconds while its render task is alive; a second
+ * is long enough to outlast a burst that shares the read, and short enough that
+ * three unanswered queries are still cheaper than the stall they warn about.
  */
-const OVERLAY_MIN_GAP_MS = 3_000;
+const OVERLAY_STATUS_TIMEOUT_MS = 1_000;
+/** Consecutive unanswered status queries that mean the panel stopped talking. */
+const UNANSWERED_QUERIES_BEFORE_REINIT = 3;
 /** A 249-byte chunk plus its `0x00` pad is one frame. */
 const FILE_CHUNK_BYTES = 249;
 /**
@@ -355,8 +355,14 @@ class TurzxPanel implements PanelDevice {
   private previousOverlay: Uint8Array | undefined;
   /** UPDATE_BITMAP's count field: the verified probe sent 0 first. */
   private overlayCount = 0;
-  /** When the last overlay update was sent, for the gap below. */
-  private lastOverlayAt = 0;
+  /** The render counter of the last status the panel answered, if any. */
+  private lastRenderCnt: number | undefined;
+  /** Consecutive status queries the panel did not answer. */
+  private unansweredQueries = 0;
+  /** Overlay body bytes sent while `YUNARI_PANEL_DEBUG` runs. */
+  private debugBodyBytes = 0;
+  /** When this adapter was constructed, for the debug timings. */
+  private readonly sinceOpen = Date.now();
   /**
    * The brightness byte this host last wrote, full by default.
    *
@@ -445,36 +451,7 @@ class TurzxPanel implements PanelDevice {
         await this.readFor("play_video_success");
         const started = Date.now();
 
-        await this.send(TURZX_COMMAND.preUpdate);
-        await this.send(TURZX_COMMAND.startBitmap);
-        await this.send(TURZX_COMMAND.displayOnVideo);
-
-        // The overlay starts fully transparent: every pixel the UI does not
-        // paint shows the playing video underneath.
-        const transparent = new Uint8Array(
-          this.geometry.width * this.geometry.height * 4,
-        );
-        await this.send(bgraPayload(transparent));
-        await this.send(frame(TURZX_COMMAND.initVideoOverlay));
-        await this.send(frame(TURZX_COMMAND.overlayTerminate));
-
-        // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
-        // update must wait out the panel's settle. A failed init says so in the
-        // same territory and must not be treated as a ready overlay. The full
-        // word is matched: a reply split after the shared prefix is not an
-        // answer either way.
-        const init = await this.readUntil('"seq_png_init_"', (text) =>
-          text.includes(OVERLAY_INIT_OK) || text.includes(OVERLAY_INIT_FAILED)
-            ? text
-            : undefined,
-        );
-        if (init.includes(OVERLAY_INIT_FAILED)) {
-          throw new Error(
-            `The panel could not initialize its overlay: ${init}.`,
-          );
-        }
-        await this.sleep(OVERLAY_SETTLE_MS);
-        await this.send(TURZX_COMMAND.queryStatus);
+        await this.initOverlay();
         const settled = Date.now();
 
         // One line per start, as the panel manager keeps one per runner: the
@@ -487,14 +464,6 @@ class TurzxPanel implements PanelDevice {
             `overlay ${settled - started}).`,
         );
 
-        this.previousOverlay = transparent;
-        // A fresh init re-renders from scratch, so a count carried over from the
-        // last session is meaningless. The probe sent 0 first and the panel took
-        // it, so the field's meaning is unverified; Task 12 observes it.
-        this.overlayCount = 0;
-        // The settle above is the wait this first update needed; the pacing gap
-        // belongs to a stream, not to the frame after an init.
-        this.lastOverlayAt = 0;
         if (
           this.previousVideoPath !== undefined &&
           this.previousVideoPath !== remotePath
@@ -516,21 +485,104 @@ class TurzxPanel implements PanelDevice {
   }
 
   /**
+   * Puts the panel's overlay back to a transparent, initialized state.
+   *
+   * Runs once when a clip starts and again whenever the panel's own status says
+   * its overlay has stopped — it reports that as `needReSend`, as a render
+   * counter that has not moved, or by not answering at all. Runs inside the
+   * write queue, so no update lands between the init's steps.
+   *
+   * **A re-init does not wait for the init's ack.** The vendor app's reviving
+   * sequence is fire-and-forget, and a panel whose overlay task is wedged is
+   * exactly the one that will not answer; waiting would fail the update, drop
+   * the runner to full-frame stills and push 1.5 MB at the same wedged device
+   * (measured 2026-11-14). The ack is read when it comes and logged otherwise.
+   */
+  private async initOverlay(clear = true, expectAck = true): Promise<void> {
+    await this.send(TURZX_COMMAND.preUpdate);
+    await this.send(TURZX_COMMAND.startBitmap);
+    await this.send(TURZX_COMMAND.displayOnVideo);
+
+    // The overlay starts fully transparent: every pixel the UI does not paint
+    // shows the playing video underneath. **Only a clip start pays for that
+    // frame.** An initialized layer holds nothing, so the repaint that follows
+    // a re-init is the clearer, and writing 1.5 MB beforehand measured a 5.4 s
+    // blank on a panel already at the end of its budget (2026-11-14).
+    const transparent = new Uint8Array(
+      this.geometry.width * this.geometry.height * 4,
+    );
+    if (clear) await this.send(bgraPayload(transparent));
+    await this.send(frame(TURZX_COMMAND.initVideoOverlay));
+    await this.send(frame(TURZX_COMMAND.overlayTerminate));
+
+    // Init answers `seq_png_init_sucessneedReSend:0|renderCnt:N`; the first
+    // update must wait out the panel's settle. A failed init says so in the
+    // same territory and must not be treated as a ready overlay. The full word
+    // is matched: a reply split after the shared prefix is not an answer
+    // either way.
+    const accept = (text: string): string | undefined =>
+      text.includes(OVERLAY_INIT_OK) || text.includes(OVERLAY_INIT_FAILED)
+        ? text
+        : undefined;
+    const init = expectAck
+      ? await this.readUntil('"seq_png_init_"', accept)
+      : (await this.readReplies(accept, OVERLAY_STATUS_TIMEOUT_MS)).accepted;
+    if (init?.includes(OVERLAY_INIT_FAILED) === true) {
+      throw new Error(`The panel could not initialize its overlay: ${init}.`);
+    }
+    if (process.env["YUNARI_PANEL_DEBUG"] !== undefined) {
+      console.error(
+        `[turzx ${this.path}] overlay init: ${init ?? "no ack (not waited for)"}`,
+      );
+    }
+    await this.sleep(OVERLAY_SETTLE_MS);
+    await this.send(TURZX_COMMAND.queryStatus);
+
+    this.previousOverlay = transparent;
+    // A fresh init re-renders from scratch, so a count carried over from the
+    // last session is meaningless. The probe sent 0 first and the panel took
+    // it, so the field's meaning is unverified.
+    this.overlayCount = 0;
+    // A revived compositor starts its counter wherever it likes; the first
+    // status after this init is a baseline, not a stall.
+    this.lastRenderCnt = undefined;
+    this.unansweredQueries = 0;
+  }
+
+  /**
+   * Asks the panel how its overlay is doing: one QUERY_STATUS and its answer.
+   *
+   * The panel reports `needReSend` and its render counter here, and it is the
+   * only channel on which a stopped overlay says so. It answers this on the
+   * same queue as the frames, so the reply cannot be read as a later command's.
+   */
+  private async askStatus(): Promise<PanelStatus | undefined> {
+    await this.send(TURZX_COMMAND.queryStatus);
+
+    const { accepted } = await this.readReplies(
+      (text) => parsePanelStatus(text),
+      OVERLAY_STATUS_TIMEOUT_MS,
+    );
+
+    return accepted;
+  }
+
+  /**
    * Sends one overlay diff over the playing video: the UPDATE_BITMAP header and
    * its body in one queue slot, so no control command lands between them, then
-   * keeps the frame as the base for the next diff. Answers `false` inside the
-   * pacing gap, having sent nothing and kept the older base.
+   * keeps the frame as the base for the next diff. **The panel's own status is
+   * the brake**: there is no fixed gap, so the rate is the capture cadence until
+   * the panel says it has fallen behind.
    */
   private async presentOverlay(png: Uint8Array): Promise<boolean> {
     return this.enqueue(async () => {
-      const previous = this.previousOverlay;
-      if (previous === undefined) {
+      if (this.previousOverlay === undefined) {
         throw new Error(
           "The panel's overlay is not initialized; start the video before sending an update.",
         );
       }
 
-      if (Date.now() - this.lastOverlayAt < OVERLAY_MIN_GAP_MS) return false;
+      const previous = this.previousOverlay as Uint8Array;
 
       const current = await this.decode(
         png,
@@ -541,19 +593,79 @@ class TurzxPanel implements PanelDevice {
 
       const count = this.overlayCount;
       if (process.env["YUNARI_PANEL_DEBUG"] !== undefined) {
+        this.debugBodyBytes += update.body.length;
         console.error(
-          `[turzx ${this.path}] overlay ${count}: image ${update.imageSize} B, visible ${update.visibleBytes} B, body ${update.body.length} B`,
+          `[turzx ${this.path}] overlay ${count} at ${Math.round((Date.now() - this.sinceOpen) / 1000)}s, bodies ${this.debugBodyBytes} B: image ${update.imageSize} B, visible ${update.visibleBytes} B, body ${update.body.length} B`,
         );
       }
       await this.send(
         overlayHeader(update.imageSize, count, update.visibleBytes),
       );
       await this.send(update.body);
+      // **The panel is asked after every frame.** QUERY_STATUS answers
+      // `needReSend` and a render counter that advances on its own, and those
+      // are the only ways a stalled overlay says so: every write keeps
+      // succeeding while the glass keeps showing the last composited second
+      // (frozen at 06:36:19, measured 2026-11-14).
+      const status = await this.askStatus();
+      if (process.env["YUNARI_PANEL_DEBUG"] !== undefined) {
+        console.error(
+          `[turzx ${this.path}] overlay ${count}: panel says ${
+            status === undefined
+              ? "nothing"
+              : `needReSend ${status.resend ? "yes" : "no"}, renderCnt ${status.renderCnt}`
+          }`,
+        );
+      }
+      this.unansweredQueries =
+        status === undefined ? this.unansweredQueries + 1 : 0;
+
+      let stall: string | undefined;
+      if (status === undefined) {
+        if (this.unansweredQueries >= UNANSWERED_QUERIES_BEFORE_REINIT) {
+          stall = `${this.unansweredQueries} unanswered status queries`;
+        }
+      } else {
+        if (status.resend) stall = "the panel asked for a full repaint";
+        else if (
+          this.lastRenderCnt !== undefined &&
+          status.renderCnt === this.lastRenderCnt
+        ) {
+          stall = `its render counter stopped at ${status.renderCnt}`;
+        }
+        this.lastRenderCnt = status.renderCnt;
+      }
+
+      if (stall !== undefined) {
+        console.error(`[turzx ${this.path}] overlay re-init: ${stall}`);
+        await this.initOverlay(false, false);
+
+        // **The repaint is part of the recovery**, and it waits out the settle
+        // the panel needs after an INIT_VIDEO_OVERLAY (an update sent 8 ms
+        // after one was dropped, 1.5 s worked). Waiting for the next tick
+        // instead would show the clip alone until the next capture; the
+        // vendor's reviving sequence sends its full image with the init for
+        // the same reason. The base is the transparent frame the init
+        // restored, so this frame carries the whole UI.
+        await this.sleep(OVERLAY_SETTLE_MS);
+
+        const full = overlayUpdate(
+          this.previousOverlay as Uint8Array,
+          current.rgba,
+          this.geometry,
+        );
+        await this.send(overlayHeader(full.imageSize, 0, full.visibleBytes));
+        await this.send(full.body);
+
+        this.overlayCount = 1;
+        this.previousOverlay = current.rgba;
+        return true;
+      }
+
       // Advance only once both writes landed, so a failed update does not skip
       // a number. The first update carries 0, the value the verified probe
       // sent; whether the count matters is Task 12's observation.
       this.overlayCount = count + 1;
-      this.lastOverlayAt = Date.now();
       this.previousOverlay = current.rgba;
       return true;
     });
