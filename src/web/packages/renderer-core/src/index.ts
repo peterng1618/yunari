@@ -371,6 +371,11 @@ export {
   cataloguePackageUrl,
   catalogueThumbnailUrl,
 } from "./theme/catalogue-location.js";
+export type {
+  CollectionPlan,
+  CollectionPlanMember,
+  CollectionPlanMissing,
+} from "./theme/collection-plan.js";
 export {
   ASSIGNABLE_GROUPS,
   type AssignableGroup,

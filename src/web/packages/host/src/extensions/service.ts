@@ -48,6 +48,9 @@ export interface ExtensionService {
   remove(key: string): Promise<void>;
   /** False when the plugin is killed, stale, or its consent is missing. */
   mayLoad(key: string): Promise<boolean>;
+  /** True when the store's revoke list names this plugin key. A host with no
+   *  store origin kills nothing. */
+  isKilled?(key: string): Promise<boolean>;
   /** The installed record, including the directory this host serves the
    *  plugin's own files from; undefined when no such plugin is installed. */
   installedPlugin(key: string): Promise<InstalledPlugin | undefined>;
@@ -289,6 +292,10 @@ export function createExtensionService(options: {
         // An unreadable grant is no grant.
         return false;
       }
+    },
+
+    async isKilled(key) {
+      return (await options.killList?.isKilled(key)) === true;
     },
 
     async consentRecord(key) {

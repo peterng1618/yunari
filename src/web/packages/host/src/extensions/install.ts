@@ -15,7 +15,7 @@ import { contentHash } from "./content-hash.js";
 
 /** A local install is its own publisher: the manifest's `publisher` is a
  *  published-plugin field and never decides where a local package lives. */
-const LOCAL_PUBLISHER = "local";
+export const LOCAL_PLUGIN_PUBLISHER = "local";
 const INDEX_FILE = "installed.json";
 const CONTENT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -117,7 +117,7 @@ function createIndex(root: string) {
         );
       // The publisher is not echoed from the file: this installer only owns
       // local installs, and a hand-edited segment must never steer a path.
-      if (publisher !== LOCAL_PUBLISHER)
+      if (publisher !== LOCAL_PLUGIN_PUBLISHER)
         throw new Error(
           `Plugin index refused: entry ${JSON.stringify(key)} names an unknown publisher.`,
         );
@@ -136,7 +136,7 @@ function createIndex(root: string) {
       // tree this index may remove or trust.
       const expected = path.join(
         root,
-        LOCAL_PUBLISHER,
+        LOCAL_PLUGIN_PUBLISHER,
         manifest.manifest.id,
         manifest.manifest.version,
       );
@@ -147,7 +147,7 @@ function createIndex(root: string) {
 
       plugins[key] = {
         key,
-        publisher: LOCAL_PUBLISHER,
+        publisher: LOCAL_PLUGIN_PUBLISHER,
         manifest: manifest.manifest,
         directory: expected,
         contentHash: hash,
@@ -171,10 +171,15 @@ function bindPackage(
   files: Readonly<Record<string, Uint8Array>>,
 ): InstalledPlugin {
   return {
-    key: qualifiedPluginKey(LOCAL_PUBLISHER, manifest.id),
-    publisher: LOCAL_PUBLISHER,
+    key: qualifiedPluginKey(LOCAL_PLUGIN_PUBLISHER, manifest.id),
+    publisher: LOCAL_PLUGIN_PUBLISHER,
     manifest,
-    directory: path.join(root, LOCAL_PUBLISHER, manifest.id, manifest.version),
+    directory: path.join(
+      root,
+      LOCAL_PLUGIN_PUBLISHER,
+      manifest.id,
+      manifest.version,
+    ),
     contentHash: contentHash(files),
   };
 }

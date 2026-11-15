@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -8,7 +8,9 @@ import {
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
 } from "@yunari/theme-package";
+import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ExtensionService } from "../extensions/service.js";
 import type { PublishedStore } from "../serve/published.js";
 import {
   type CatalogueOriginsStore,
@@ -191,5 +193,197 @@ describe("the editor theme listing", () => {
 
     expect(answer.status).toBe(403);
     expect(answer.text).toBe("Editor themes are available on this PC only.");
+  });
+});
+
+describe("the collection plan route", () => {
+  const origin = "https://store.test";
+  const collectionId = "11111111-1111-4111-8111-111111111111";
+  const pluginId = "55555555-5555-4555-8555-555555555555";
+
+  function pluginBytes(): Uint8Array {
+    return zipSync(
+      {
+        "yunari-plugin.json": strToU8(
+          JSON.stringify({
+            manifestVersion: 1,
+            id: "acme-sensors",
+            name: "Acme Sensors",
+            version: "1.0.0",
+            description: "Reads the room's sensors.",
+            engines: { yunari: ">=0.1.0" },
+            pluginApi: 1,
+            execution: "trusted-worker",
+            capabilities: ["sensor:provide"],
+            contributes: {},
+            main: "main.js",
+          }),
+        ),
+        "main.js": strToU8("export default {};"),
+      },
+      { level: 0 },
+    );
+  }
+
+  function extensionService(calls: string[]): ExtensionService {
+    return {
+      list: async () => [],
+      install: async () => {
+        calls.push("install");
+        return { ok: false, message: "not called" };
+      },
+      grantConsent: async () => ({ ok: false }),
+      remove: async () => undefined,
+      mayLoad: async () => false,
+      installedPlugin: async () => undefined,
+      consentRecord: async () => undefined,
+      readProviderOrder: async () => ({ version: 1, pluginOrder: [] }),
+      writeProviderOrder: async () => ({ ok: true }),
+    };
+  }
+
+  function post(
+    handle: ReturnType<typeof createThemeWrites>,
+    body: string,
+  ): Promise<{ readonly status: number; readonly json: () => unknown }> {
+    return new Promise((resolve) => {
+      const request = new Readable({
+        read() {
+          this.push(Buffer.from(body));
+          this.push(null);
+        },
+      }) as unknown as http.IncomingMessage;
+
+      request.method = "POST";
+      request.url = "/api/store/collection/plan";
+      request.headers = {
+        host: "127.0.0.1:5173",
+        "content-length": String(Buffer.byteLength(body)),
+      };
+      (request as { socket: { remoteAddress: string } }).socket = {
+        remoteAddress: "127.0.0.1",
+      };
+
+      const chunks: Buffer[] = [];
+      let statusCode = 200;
+      const response = new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          chunks.push(Buffer.from(chunk));
+          callback();
+        },
+      }) as unknown as http.ServerResponse;
+      response.writeHead = ((status: number) => {
+        statusCode = status;
+        return response;
+      }) as unknown as typeof response.writeHead;
+      response.end = ((data?: unknown) => {
+        if (data) chunks.push(Buffer.from(data as string | Uint8Array));
+        const text = Buffer.concat(chunks).toString("utf8");
+        resolve({ status: statusCode, json: () => JSON.parse(text) });
+        return response;
+      }) as unknown as typeof response.end;
+
+      void handle(request, response, new URL(request.url, "http://host"));
+    });
+  }
+
+  it("returns verified members with consent and writes nothing", async () => {
+    const plugin = pluginBytes();
+    const collection = strToU8(
+      JSON.stringify({
+        format: "yunari-collection-package",
+        version: 1,
+        name: "Ops Pack",
+        description: "",
+        includes: [{ id: pluginId }],
+      }),
+    );
+    const digest = (bytes: Uint8Array) =>
+      crypto.subtle.digest("SHA-256", bytes as unknown as BufferSource);
+    const hex = (buffer: ArrayBuffer) =>
+      [...new Uint8Array(buffer)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    const item = strToU8(
+      JSON.stringify({
+        kind: "plugin",
+        name: "Acme Sensors",
+        version: "1.0.0",
+        createdAt: "2026-11-01T00:00:00Z",
+        updatedAt: "2026-11-02T00:00:00Z",
+        downloads: 0,
+        favorites: 0,
+        packageUrl: `${origin}/catalogue/${pluginId}/1.0.0.zip`,
+        thumbnail: "catalogue/thumb.png",
+        members: [],
+        sha256: hex(await digest(plugin)),
+        bytes: plugin.byteLength,
+        publisher: "acme",
+      }),
+    );
+    const routes = new Map<string, Uint8Array>([
+      [`${origin}/catalogue/${collectionId}/1.0.0.zip`, collection],
+      [`${origin}/catalogue/${pluginId}/item.json`, item],
+      [`${origin}/catalogue/${pluginId}/1.0.0.zip`, plugin],
+    ]);
+    const calls: string[] = [];
+    const handle = createThemeWrites({
+      options: {
+        extensions: extensionService(calls),
+      } as unknown as HostServerOptions,
+      themeStore: {} as ThemeStore,
+      catalogueOrigins: origins,
+      thumbnails: undefined,
+      themeMedia: undefined,
+      fetcher: (async (input: RequestInfo | URL) => {
+        const body = routes.get(String(input));
+        return body === undefined
+          ? new Response("Not found", { status: 404 })
+          : new Response(body as unknown as BodyInit);
+      }) as unknown as typeof fetch,
+      largeBody: {
+        run: async <T>(work: () => Promise<T>): Promise<T> => work(),
+      },
+      published: {} as PublishedStore,
+      now: () => 0,
+      storeOrigin: origin,
+      storeSession: undefined,
+    });
+
+    const answer = await post(
+      handle,
+      JSON.stringify({
+        packageUrl: `${origin}/catalogue/${collectionId}/1.0.0.zip`,
+        catalogueId: collectionId,
+        kind: "collection",
+        version: "1.0.0",
+        sha256: hex(await digest(collection)),
+        bytes: collection.byteLength,
+        publisher: "acme",
+      }),
+    );
+
+    expect(answer.status).toBe(200);
+    expect(answer.json()).toMatchObject({
+      ok: true,
+      plan: {
+        members: [
+          {
+            id: pluginId,
+            kind: "plugin",
+            consent: {
+              key: "local/acme-sensors",
+              capabilities: ["sensor:provide"],
+              devices: [],
+            },
+          },
+        ],
+        missing: [],
+      },
+    });
+    expect(calls).toEqual([]);
+    await expect(
+      readFile(path.join(directory, "settings", "catalogue-origins.json")),
+    ).rejects.toThrow();
   });
 });

@@ -2,18 +2,45 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   consentRequired,
+  deviceAllowlistOf,
+  deviceIdentity,
   type ExecutionProfile,
   type InstallResult as PluginInstallResult,
+  qualifiedPluginKey,
+  readPluginPackage,
 } from "@yunari/extension-api";
 import {
+  CATALOGUE_ORIGIN,
+  type CollectionPlan,
+  type CollectionPlanMember,
   isCatalogueId,
   isStoreItemKind,
+  parseCatalogueItemFile,
   type StoreItemKind,
 } from "@yunari/renderer-core";
-import { readEditorThemePackage } from "@yunari/theme-package";
+import {
+  type CollectionInclude,
+  MAX_COLLECTION_INCLUDES,
+  readCollectionPackage,
+  readEditorThemePackage,
+  readPathPresetPack,
+  readThemePackage,
+  readWidgetPackage,
+  themeVideoRefusals,
+} from "@yunari/theme-package";
+import { LOCAL_PLUGIN_PUBLISHER } from "../extensions/install.js";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
-import type { PathPresetStore } from "../presets/path-presets.js";
+import {
+  MAX_PATH_PRESET_PACK_BYTES,
+  type PathPresetStore,
+} from "../presets/path-presets.js";
+import {
+  type CatalogueOrigin,
+  type CatalogueOriginsStore,
+  catalogueInstalledIds,
+  catalogueOriginOf,
+} from "../settings/catalogue-origins.js";
 import { downloadPackage } from "../themes/download.js";
 import {
   installThemeBytes,
@@ -32,6 +59,11 @@ import {
  * The editor posts the store's facts; it never sends bytes. A plugin's consent
  * is required from the execution profile its own manifest declares, never from
  * the request.
+ *
+ * A collection is the same rule once per chosen member. Every member is
+ * fetched, verified, read and consented before the first write; a refused
+ * member refuses the collection and writes nothing. The plan route runs that
+ * same pre-flight and answers it, and an install never reads a plan back.
  */
 
 export interface CatalogueInstallRequest {
@@ -45,15 +77,27 @@ export interface CatalogueInstallRequest {
   readonly executionProfile?: ExecutionProfile;
   /** The approval press for an update the update policy held. */
   readonly approveUpdate?: boolean;
+  /** A collection's chosen includes. Absent means every include; present must
+   *  name every required include and may omit optional ones. */
+  readonly items?: readonly string[];
 }
 
 export type HeldUpdate = NonNullable<PluginInstallResult["held"]>;
+
+/** One chosen collection member's outcome, after the install applied it. */
+export interface CollectionMemberOutcome {
+  readonly id: string;
+  readonly ok: boolean;
+  readonly reason?: string;
+}
 
 export type CatalogueInstallResult =
   | {
       readonly ok: true;
       readonly id: string;
       readonly consentRequired: boolean;
+      /** Present for a collection; absent for a single item. */
+      readonly members?: readonly CollectionMemberOutcome[];
     }
   | {
       readonly ok: false;
@@ -68,6 +112,8 @@ export type CatalogueInstallResult =
         | "review";
       /** Present only for the `review` stage. */
       readonly held?: HeldUpdate;
+      /** Present for a collection that started applying members. */
+      readonly members?: readonly CollectionMemberOutcome[];
     };
 
 export interface CatalogueInstallStores {
@@ -86,7 +132,23 @@ export interface CatalogueInstallOptions {
   readonly fetch?: typeof fetch;
   /** The configured store origin; absent uses the shipped catalogue. */
   readonly storeOrigin?: string;
+  /** Where each write's catalogue origin is recorded. Absent records none,
+   *  which also removes collection retry's already-installed skip. */
+  readonly origins?: CatalogueOriginsStore;
 }
+
+export type CollectionPlanResult =
+  | { readonly ok: true; readonly plan: CollectionPlan }
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly stage: "download" | "integrity" | "package" | "store";
+    };
+
+type MemberStage = Extract<
+  CatalogueInstallResult,
+  { readonly ok: false }
+>["stage"];
 
 export async function installCatalogueItem(
   request: CatalogueInstallRequest,
@@ -96,6 +158,112 @@ export async function installCatalogueItem(
     return refuse("address", "That install names no catalogue item.");
   }
 
+  const fetched = await fetchVerified(request, options);
+  if (!fetched.ok) return refuse(fetched.stage, fetched.message);
+
+  return installByKind(request, fetched.bytes, options);
+}
+
+/**
+ * The collection install sheet's verified answer, without writing.
+ *
+ * A member that cannot be resolved is a `missing` row rather than a whole
+ * refusal: the sheet shows which members are unavailable and the install is
+ * refused for the same reason when it is pressed. Only the collection itself
+ * failing to read, verify or select is a refusal.
+ */
+export async function planCollection(
+  request: CatalogueInstallRequest,
+  options: CatalogueInstallOptions,
+): Promise<CollectionPlanResult> {
+  if (request.kind !== "collection") {
+    return {
+      ok: false,
+      stage: "package",
+      message: "A collection plan needs a collection request.",
+    };
+  }
+
+  const fetched = await fetchVerified(request, options);
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      message: fetched.message,
+      // An address the catalogue cannot produce is the request's fault; the
+      // plan's stages are the collection's own, so it reads as a package.
+      stage: fetched.stage === "address" ? "package" : fetched.stage,
+    };
+  }
+
+  const parsed = readCollectionPackage(fetched.bytes);
+  if (!parsed.ok)
+    return { ok: false, stage: "package", message: parsed.message };
+
+  const selection = selectIncludes(parsed.package.includes, request.items);
+  if (!selection.ok) {
+    return { ok: false, stage: "package", message: selection.message };
+  }
+
+  let origins: Readonly<Record<string, CatalogueOrigin>> = {};
+  if (options.origins !== undefined) {
+    try {
+      origins = await options.origins.read();
+    } catch (error) {
+      return { ok: false, stage: "store", message: messageOf(error) };
+    }
+  }
+
+  const members: CollectionPlanMember[] = [];
+  const missing: { readonly id: string; readonly reason: string }[] = [];
+  let totalBytes = 0;
+
+  for (const include of selection.includes) {
+    const resolved = await resolveMember(include, options);
+    if (!resolved.ok) {
+      missing.push({ id: include.id, reason: resolved.reason });
+      continue;
+    }
+
+    const member = resolved.member;
+    const installedVersion = installedVersionOf(
+      origins,
+      member.listing.kind,
+      include.id,
+    );
+    members.push({
+      id: include.id,
+      kind: member.listing.kind,
+      name: member.listing.name,
+      version: member.listing.version,
+      bytes: member.size,
+      publisher: member.listing.publisher ?? "",
+      optional: include.optional,
+      ...(installedVersion === undefined ? {} : { installedVersion }),
+      ...(member.consent === undefined ? {} : { consent: member.consent }),
+    });
+    totalBytes += member.size;
+  }
+
+  return { ok: true, plan: { members, missing, totalBytes } };
+}
+
+/**
+ * The bytes a request names, after the store's declared size and digest held.
+ *
+ * One download and one check for the single-item path and the collection path
+ * alike, so a collection package is held to exactly what a member is.
+ */
+async function fetchVerified(
+  request: CatalogueInstallRequest,
+  options: CatalogueInstallOptions,
+): Promise<
+  | { readonly ok: true; readonly bytes: Uint8Array }
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly stage: "address" | "download" | "integrity";
+    }
+> {
   const downloaded = await downloadPackage(request.packageUrl, {
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.storeOrigin === undefined
@@ -103,7 +271,11 @@ export async function installCatalogueItem(
       : { origin: options.storeOrigin }),
   });
   if (!downloaded.ok) {
-    return refuse(downloaded.stage, downloaded.message);
+    return {
+      ok: false,
+      stage: downloaded.stage,
+      message: downloaded.message,
+    };
   }
 
   const digest = await sha256Hex(downloaded.bytes);
@@ -111,16 +283,120 @@ export async function installCatalogueItem(
     downloaded.bytes.byteLength !== request.bytes ||
     digest !== request.sha256
   ) {
-    return refuse(
-      "integrity",
-      "The downloaded package does not match the size and SHA-256 the store declared.",
-    );
+    return {
+      ok: false,
+      stage: "integrity",
+      message:
+        "The downloaded package does not match the size and SHA-256 the store declared.",
+    };
   }
-
-  return installByKind(request, downloaded.bytes, options.stores);
+  return { ok: true, bytes: downloaded.bytes };
 }
 
 async function installByKind(
+  request: CatalogueInstallRequest,
+  bytes: Uint8Array,
+  options: CatalogueInstallOptions,
+  collectionId?: string,
+): Promise<CatalogueInstallResult> {
+  if (request.kind === "collection") {
+    return installCollection(request, bytes, options);
+  }
+
+  // Read before the write: a theme install rewrites its own origin row, so the
+  // memberships it arrived with must be carried into the row written after it.
+  const carried = await carriedCollections(request, options);
+  const installed = await installOne(request, bytes, options.stores);
+  if (!installed.ok) return installed;
+
+  const recorded = await recordInstalled(
+    request,
+    installed.id,
+    collectionId,
+    carried,
+    options,
+  );
+  if (!recorded.ok) return refuse("store", recorded.message);
+  return installed;
+}
+
+async function installCollection(
+  request: CatalogueInstallRequest,
+  bytes: Uint8Array,
+  options: CatalogueInstallOptions,
+): Promise<CatalogueInstallResult> {
+  const parsed = readCollectionPackage(bytes);
+  if (!parsed.ok) return refuse("package", parsed.message);
+
+  const selection = selectIncludes(parsed.package.includes, request.items);
+  if (!selection.ok) return refuse("package", selection.message);
+
+  // Pre-flight: every chosen member is fetched, verified, read and consented
+  // before the first write, so one refused member leaves every store untouched.
+  const resolved: ResolvedMember[] = [];
+  for (const include of selection.includes) {
+    const member = await resolveMember(include, options);
+    if (!member.ok) {
+      return refuse(
+        member.stage,
+        `Collection member "${include.id}": ${member.reason}`,
+      );
+    }
+    resolved.push(member.member);
+  }
+
+  const outcomes: CollectionMemberOutcome[] = [];
+  let consentNeeded = false;
+
+  for (const [index, member] of resolved.entries()) {
+    const held = await installedRow(
+      options.origins,
+      member.listing.kind,
+      member.id,
+    );
+    if (held !== undefined && held.origin.version === member.listing.version) {
+      try {
+        await mergeCollection(options.origins, held, request.catalogueId);
+      } catch (error) {
+        outcomes.push({ id: member.id, ok: false, reason: messageOf(error) });
+        return stopped(outcomes, member.id, messageOf(error), "store");
+      }
+      outcomes.push({ id: member.id, ok: true, reason: "Already installed." });
+      continue;
+    }
+
+    const installed = await installByKind(
+      memberRequest(member),
+      member.bytes,
+      options,
+      request.catalogueId,
+    );
+    if (!installed.ok) {
+      outcomes.push({ id: member.id, ok: false, reason: installed.message });
+      for (const rest of resolved.slice(index + 1)) {
+        outcomes.push({
+          id: rest.id,
+          ok: false,
+          reason: "Not attempted after an earlier member failed.",
+        });
+      }
+      return stopped(outcomes, member.id, installed.message, installed.stage);
+    }
+
+    consentNeeded = consentNeeded || installed.consentRequired;
+    outcomes.push({ id: member.id, ok: true });
+  }
+
+  return {
+    ok: true,
+    id: request.catalogueId,
+    consentRequired: consentNeeded,
+    members: outcomes,
+  };
+}
+
+/** The one item's path after the bytes are held. */
+async function installOne(
   request: CatalogueInstallRequest,
   bytes: Uint8Array,
   stores: CatalogueInstallStores,
@@ -207,7 +483,486 @@ async function installByKind(
         consentRequired: consentRequired(installed.plugin.manifest.execution),
       };
     }
+
+    case "collection":
+      // Handled before this switch: a collection has no archive of its own.
+      return refuse(
+        "package",
+        "A collection cannot install itself as a member.",
+      );
   }
+}
+
+/** One chosen include after every pre-flight check held. */
+interface ResolvedMember {
+  readonly id: string;
+  readonly optional: boolean;
+  readonly listing: {
+    readonly kind: StoreItemKind;
+    readonly name: string;
+    readonly version: string;
+    readonly packageUrl: string;
+    readonly publisher?: string;
+    readonly executionProfile?: string;
+  };
+  readonly bytes: Uint8Array;
+  readonly size: number;
+  readonly sha256: string;
+  readonly consent?: NonNullable<CollectionPlanMember["consent"]>;
+  readonly consentRequired: boolean;
+}
+
+type MemberResolution =
+  | { readonly ok: true; readonly member: ResolvedMember }
+  | {
+      readonly ok: false;
+      readonly stage: MemberStage;
+      readonly reason: string;
+    };
+
+/**
+ * One include, resolved from its listing and its package: the store's size and
+ * digest, then the kind's own reader, then the kill list and consent. Nothing
+ * is written here, which is what lets the plan and the pre-flight share it.
+ */
+async function resolveMember(
+  include: CollectionInclude,
+  options: CatalogueInstallOptions,
+): Promise<MemberResolution> {
+  const fetched = await fetchListing(include.id, options);
+  if (!fetched.ok) {
+    return { ok: false, stage: "download", reason: fetched.reason };
+  }
+  const listing = fetched.file;
+
+  if (listing.kind === "collection") {
+    return {
+      ok: false,
+      stage: "package",
+      reason: "A collection cannot include another collection.",
+    };
+  }
+
+  const storeGap = missingStoreMessage(listing.kind, options.stores);
+  if (storeGap !== undefined) {
+    return { ok: false, stage: "store", reason: storeGap };
+  }
+
+  if (listing.sha256 === undefined || listing.bytes === undefined) {
+    return {
+      ok: false,
+      stage: "package",
+      reason: "The listing records no package size and SHA-256.",
+    };
+  }
+
+  const downloaded = await downloadPackage(listing.packageUrl, {
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.storeOrigin === undefined
+      ? {}
+      : { origin: options.storeOrigin }),
+  });
+  if (!downloaded.ok) {
+    return {
+      ok: false,
+      stage: downloaded.stage,
+      reason: downloaded.message,
+    };
+  }
+
+  const digest = await sha256Hex(downloaded.bytes);
+  if (
+    downloaded.bytes.byteLength !== listing.bytes ||
+    digest !== listing.sha256
+  ) {
+    return {
+      ok: false,
+      stage: "integrity",
+      reason:
+        "The package does not match the size and SHA-256 its listing declares.",
+    };
+  }
+
+  let consent: NonNullable<CollectionPlanMember["consent"]> | undefined;
+  let needsConsent = false;
+
+  if (listing.kind === "plugin") {
+    const read = readPluginPackage(downloaded.bytes);
+    if (!read.ok) return { ok: false, stage: "package", reason: read.message };
+
+    const manifest = read.package.manifest;
+    // The key the install will record, and the key the host's own kill-list
+    // check already uses for an installed plugin.
+    const key = qualifiedPluginKey(LOCAL_PLUGIN_PUBLISHER, manifest.id);
+    if (await isKilled(options.stores.extensions, key)) {
+      return {
+        ok: false,
+        stage: "package",
+        reason: `The store has revoked the plugin "${key}".`,
+      };
+    }
+
+    consent = {
+      key,
+      name: manifest.name,
+      execution: manifest.execution,
+      capabilities: manifest.capabilities,
+      devices: deviceAllowlistOf(manifest).map(deviceIdentity),
+    };
+    needsConsent = consentRequired(manifest.execution);
+  } else {
+    const read = readMemberPackage(listing.kind, downloaded.bytes);
+    if (!read.ok) return { ok: false, stage: "package", reason: read.message };
+  }
+
+  return {
+    ok: true,
+    member: {
+      id: include.id,
+      optional: include.optional,
+      listing,
+      bytes: downloaded.bytes,
+      size: listing.bytes,
+      sha256: listing.sha256,
+      ...(consent === undefined ? {} : { consent }),
+      consentRequired: needsConsent,
+    },
+  };
+}
+
+/** A member listing, fetched from the configured store origin by its id. The
+ *  address is this host's own composition, never the request's. */
+async function fetchListing(
+  id: string,
+  options: CatalogueInstallOptions,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly file: {
+        readonly kind: StoreItemKind;
+        readonly name: string;
+        readonly version: string;
+        readonly packageUrl: string;
+        readonly publisher?: string;
+        readonly executionProfile?: string;
+        readonly sha256?: string;
+        readonly bytes?: number;
+      };
+    }
+  | { readonly ok: false; readonly reason: string }
+> {
+  let url: URL;
+  try {
+    url = new URL(
+      `/catalogue/${id}/item.json`,
+      options.storeOrigin ?? CATALOGUE_ORIGIN,
+    );
+  } catch {
+    return { ok: false, reason: "The store origin is not a URL." };
+  }
+
+  let response: Response;
+  try {
+    response = await (options.fetch ?? fetch)(url);
+  } catch (error) {
+    return { ok: false, reason: messageOf(error) };
+  }
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: `The store answered ${response.status} for "${id}".`,
+    };
+  }
+
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    return { ok: false, reason: `The listing for "${id}" is not JSON.` };
+  }
+
+  const parsed = parseCatalogueItemFile(value);
+  if (!parsed.ok) return { ok: false, reason: parsed.reason };
+  // The reader admits a kind this build ships; the wire type keeps room for a
+  // newer store's name, so the member path narrows it here.
+  const kind = parsed.file.kind;
+  if (!isStoreItemKind(kind)) {
+    return { ok: false, reason: `Unsupported catalogue kind "${kind}".` };
+  }
+  return { ok: true, file: { ...parsed.file, kind } };
+}
+
+/** The package readers for every kind that can be a collection member. Each
+ *  kind's own reader is the one its install path already uses. */
+function readMemberPackage(
+  kind: StoreItemKind,
+  bytes: Uint8Array,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  switch (kind) {
+    case "dashboard-theme": {
+      const parsed = readThemePackage(bytes);
+      if (!parsed.ok) return parsed;
+      const videoRefusal = themeVideoRefusals(
+        parsed.envelope,
+        parsed.assets,
+      )[0];
+      return videoRefusal === undefined
+        ? { ok: true }
+        : { ok: false, message: videoRefusal };
+    }
+    case "widget-pack":
+      return readResult(readWidgetPackage(bytes));
+    case "editor-theme":
+      return readResult(readEditorThemePackage(bytes));
+    case "path-preset-pack":
+      return readPathPresetBytes(bytes);
+    case "plugin":
+      return readResult(readPluginPackage(bytes));
+    case "collection":
+      return {
+        ok: false,
+        message: "A collection cannot include another collection.",
+      };
+  }
+}
+
+function readResult(
+  result:
+    | { readonly ok: true }
+    | { readonly ok: false; readonly message: string },
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  return result.ok ? { ok: true } : { ok: false, message: result.message };
+}
+
+/** The path preset store opens its package as JSON before reading it; the
+ *  pre-flight applies the same decode so a malformed pack is refused before any
+ *  earlier member is written. */
+function readPathPresetBytes(
+  bytes: Uint8Array,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  if (bytes.byteLength > MAX_PATH_PRESET_PACK_BYTES) {
+    return { ok: false, message: "That path preset pack is too large." };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    );
+  } catch {
+    return { ok: false, message: "That path preset pack is not UTF-8 JSON." };
+  }
+  const result = readPathPresetPack(parsed);
+  return result.ok ? { ok: true } : { ok: false, message: result.message };
+}
+
+/** The host-side sentence for a kind this host cannot keep. */
+function missingStoreMessage(
+  kind: StoreItemKind,
+  stores: CatalogueInstallStores,
+): string | undefined {
+  switch (kind) {
+    case "dashboard-theme":
+      return stores.theme === undefined
+        ? "This host records no theme origins."
+        : undefined;
+    case "widget-pack":
+      return stores.widgetPacks === undefined
+        ? "This host keeps no widget packs."
+        : undefined;
+    case "path-preset-pack":
+      return stores.pathPresets === undefined
+        ? "This host keeps no path presets."
+        : undefined;
+    case "editor-theme":
+      return stores.editorThemesDirectory === undefined
+        ? "This host keeps no editor themes."
+        : undefined;
+    case "plugin":
+      return stores.extensions === undefined
+        ? "This host keeps no plugins."
+        : undefined;
+    case "collection":
+      return undefined;
+  }
+}
+
+async function isKilled(
+  extensions: ExtensionService | undefined,
+  key: string,
+): Promise<boolean> {
+  try {
+    return (await extensions?.isKilled?.(key)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The chosen includes, in the collection's order. A request may omit an
+ *  optional include but never a required one, and may not name an id the
+ *  collection does not carry. */
+function selectIncludes(
+  includes: readonly CollectionInclude[],
+  items: readonly string[] | undefined,
+):
+  | { readonly ok: true; readonly includes: readonly CollectionInclude[] }
+  | { readonly ok: false; readonly message: string } {
+  if (items === undefined) return { ok: true, includes };
+
+  const chosen = new Set(items);
+  for (const id of items) {
+    if (!includes.some((include) => include.id === id)) {
+      return {
+        ok: false,
+        message: `The collection does not include "${id}".`,
+      };
+    }
+  }
+  for (const include of includes) {
+    if (!include.optional && !chosen.has(include.id)) {
+      return {
+        ok: false,
+        message: `The collection requires "${include.id}".`,
+      };
+    }
+  }
+  return {
+    ok: true,
+    includes: includes.filter((include) => chosen.has(include.id)),
+  };
+}
+
+/** The version this machine holds of one catalogue item, read from the origin
+ *  register by the id and kind it records. */
+function installedVersionOf(
+  origins: Readonly<Record<string, CatalogueOrigin>>,
+  kind: StoreItemKind,
+  catalogueId: string,
+): string | undefined {
+  const installedId = [
+    ...catalogueInstalledIds(origins, kind, catalogueId),
+  ].sort()[0];
+  return installedId === undefined
+    ? undefined
+    : catalogueOriginOf(origins, kind, installedId)?.version;
+}
+
+async function installedRow(
+  origins: CatalogueOriginsStore | undefined,
+  kind: StoreItemKind,
+  catalogueId: string,
+): Promise<
+  { readonly installedId: string; readonly origin: CatalogueOrigin } | undefined
+> {
+  if (origins === undefined) return undefined;
+  const rows = await origins.read();
+  const installedId = [
+    ...catalogueInstalledIds(rows, kind, catalogueId),
+  ].sort()[0];
+  if (installedId === undefined) return undefined;
+  const origin = catalogueOriginOf(rows, kind, installedId);
+  return origin === undefined ? undefined : { installedId, origin };
+}
+
+/** Collections are additive: one listing can belong to several, and a later
+ *  plain install keeps the memberships the copy already has. */
+function mergeCollections(
+  existing: readonly string[] | undefined,
+  added: string | undefined,
+): readonly string[] {
+  const union = new Set(existing ?? []);
+  if (added !== undefined) union.add(added);
+  return [...union].sort();
+}
+
+/** The memberships a copy of this catalogue item already records, read before
+ *  an install overwrites its row. */
+async function carriedCollections(
+  request: CatalogueInstallRequest,
+  options: CatalogueInstallOptions,
+): Promise<readonly string[] | undefined> {
+  if (options.origins === undefined) return undefined;
+  try {
+    return (
+      await installedRow(options.origins, request.kind, request.catalogueId)
+    )?.origin.collections;
+  } catch {
+    // An unreadable register is not a reason to refuse an install; the write
+    // below records this membership when it can.
+    return undefined;
+  }
+}
+
+/** Records where the written copy came from. A copy already in a collection
+ *  keeps that membership, and this collection joins it. */
+async function recordInstalled(
+  request: CatalogueInstallRequest,
+  installedId: string,
+  collectionId: string | undefined,
+  carried: readonly string[] | undefined,
+  options: CatalogueInstallOptions,
+): Promise<
+  { readonly ok: true } | { readonly ok: false; readonly message: string }
+> {
+  if (options.origins === undefined) return { ok: true };
+
+  const collections = mergeCollections(carried, collectionId);
+  try {
+    await options.origins.write(request.kind, installedId, {
+      kind: request.kind,
+      catalogueId: request.catalogueId,
+      version: request.version,
+      installedAt: new Date().toISOString(),
+      ...(collections.length === 0 ? {} : { collections }),
+    });
+  } catch (error) {
+    return { ok: false, message: messageOf(error) };
+  }
+  return { ok: true };
+}
+
+/** A retry's skip still records that the copy is part of this collection. */
+async function mergeCollection(
+  origins: CatalogueOriginsStore | undefined,
+  held: { readonly installedId: string; readonly origin: CatalogueOrigin },
+  collectionId: string,
+): Promise<void> {
+  if (origins === undefined) return;
+  await origins.write(held.origin.kind, held.installedId, {
+    ...held.origin,
+    collections: mergeCollections(held.origin.collections, collectionId),
+  });
+}
+
+/** The request a member's bytes are installed under. */
+function memberRequest(member: ResolvedMember): CatalogueInstallRequest {
+  return {
+    packageUrl: member.listing.packageUrl,
+    catalogueId: member.id,
+    kind: member.listing.kind,
+    version: member.listing.version,
+    sha256: member.sha256,
+    bytes: member.size,
+    publisher: member.listing.publisher ?? "",
+    ...(member.listing.executionProfile === undefined
+      ? {}
+      : {
+          executionProfile: member.listing.executionProfile as ExecutionProfile,
+        }),
+  };
+}
+
+function stopped(
+  members: readonly CollectionMemberOutcome[],
+  id: string,
+  message: string,
+  stage: Extract<CatalogueInstallResult, { readonly ok: false }>["stage"],
+): CatalogueInstallResult {
+  return {
+    ok: false,
+    stage,
+    message: `Collection member "${id}": ${message}`,
+    members,
+  };
 }
 
 /** The one file name an installed editor theme is read back by. */
@@ -239,6 +994,7 @@ export function parseCatalogueInstallRequest(
   const publisher = body["publisher"];
   const executionProfile = body["executionProfile"];
   const approveUpdate = body["approveUpdate"];
+  const items = readItems(body["items"]);
 
   if (
     typeof packageUrl !== "string" ||
@@ -253,6 +1009,7 @@ export function parseCatalogueInstallRequest(
     typeof bytes !== "number" ||
     !Number.isInteger(bytes) ||
     bytes <= 0 ||
+    items === null ||
     (publisher !== undefined && typeof publisher !== "string") ||
     (executionProfile !== undefined && typeof executionProfile !== "string") ||
     (approveUpdate !== undefined && typeof approveUpdate !== "boolean")
@@ -268,11 +1025,29 @@ export function parseCatalogueInstallRequest(
     sha256,
     bytes,
     publisher: publisher ?? "",
+    ...(items === undefined ? {} : { items }),
     ...(executionProfile === undefined
       ? {}
       : { executionProfile: executionProfile as ExecutionProfile }),
     ...(approveUpdate === undefined ? {} : { approveUpdate }),
   };
+}
+
+/** A collection's chosen ids, bounded and each a catalogue id. `null` is a
+ *  value the request may not carry; `undefined` means every include. */
+function readItems(value: unknown): readonly string[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_COLLECTION_INCLUDES) {
+    return null;
+  }
+  if (
+    !value.every(
+      (item): item is string => typeof item === "string" && isCatalogueId(item),
+    )
+  ) {
+    return null;
+  }
+  return value as readonly string[];
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {

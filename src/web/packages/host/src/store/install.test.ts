@@ -11,17 +11,29 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
-import type { CatalogueOriginsStore } from "../settings/catalogue-origins.js";
+import {
+  type CatalogueOrigin,
+  type CatalogueOriginsStore,
+  catalogueOriginKey,
+} from "../settings/catalogue-origins.js";
 import type { ThemeStore } from "../themes/store.js";
 import {
   type CatalogueInstallRequest,
   type CatalogueInstallStores,
   installCatalogueItem,
+  planCollection,
 } from "./install.js";
 
 const ORIGIN = "https://store.test";
 const WIDGET_PACK_BYTES = zipSync(
   {
+    "manifest.json": strToU8(
+      JSON.stringify({
+        format: "yunari-widget-package",
+        version: 1,
+        widget: "widget.json",
+      }),
+    ),
     "widget.json": strToU8(
       JSON.stringify({
         schemaVersion: "3.0.0",
@@ -354,5 +366,504 @@ describe("installCatalogueItem", () => {
         ),
       ),
     ).toEqual(bytes);
+  });
+});
+
+/** A collection's members are listings, so every test serves `item.json`
+ *  beside the package it describes. */
+const COLLECTION_ID = "11111111-1111-4111-8111-111111111111";
+const WIDGET_A_ID = "33333333-3333-4333-8333-333333333333";
+const WIDGET_B_ID = "44444444-4444-4444-8444-444444444444";
+const PLUGIN_ID = "55555555-5555-4555-8555-555555555555";
+
+const WIDGET_B_BYTES = zipSync(
+  {
+    "manifest.json": strToU8(
+      JSON.stringify({
+        format: "yunari-widget-package",
+        version: 1,
+        widget: "widget.json",
+      }),
+    ),
+    "widget.json": strToU8(
+      JSON.stringify({
+        schemaVersion: "3.0.0",
+        fabricVersion: "7.4.0",
+        id: "extra",
+        metadata: { themeLanguage: "en", name: "Extra Cards" },
+        globals: {},
+        scene: { version: "7.4.0", objects: [] },
+      }),
+    ),
+  },
+  { level: 0 },
+);
+
+function panelManifest(): PluginManifest {
+  return {
+    ...manifest(),
+    capabilities: ["panel:drive", "usb:device"],
+    contributes: {
+      panelFamilies: [
+        {
+          id: "acme-panel",
+          label: "Acme Panel",
+          vendorId: 0x0a12,
+          productId: 1,
+          geometry: { width: 320, height: 320 },
+          support: {
+            maker: "Acme",
+            hardwareRevision: "rev-a",
+            supportedFirmware: ["1.0.0"],
+            updatedAt: "2026-11-06",
+          },
+          commands: ["hello"],
+          transports: ["usb"],
+        },
+      ],
+    },
+  };
+}
+
+function panelPackage(): Uint8Array {
+  return zipSync(
+    {
+      "yunari-plugin.json": strToU8(JSON.stringify(panelManifest())),
+      "main.js": strToU8("export default {};"),
+    },
+    { level: 0 },
+  );
+}
+
+function collectionBytes(
+  includes: readonly { readonly id: string; readonly optional?: boolean }[],
+): Uint8Array {
+  return strToU8(
+    JSON.stringify({
+      format: "yunari-collection-package",
+      version: 1,
+      name: "Ops Pack",
+      description: "A set for one screen.",
+      includes,
+    }),
+  );
+}
+
+function itemUrl(id: string): string {
+  return `${ORIGIN}/catalogue/${id}/item.json`;
+}
+
+function packageUrl(id: string): string {
+  return `${ORIGIN}/catalogue/${id}/1.0.0.zip`;
+}
+
+async function itemJson(input: {
+  readonly id: string;
+  readonly kind: StoreItemKind;
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  readonly sha256?: string;
+  readonly size?: number;
+}): Promise<Uint8Array> {
+  return strToU8(
+    JSON.stringify({
+      kind: input.kind,
+      name: input.name,
+      version: "1.0.0",
+      createdAt: "2026-11-01T00:00:00Z",
+      updatedAt: "2026-11-02T00:00:00Z",
+      downloads: 0,
+      favorites: 0,
+      packageUrl: packageUrl(input.id),
+      thumbnail: "catalogue/thumb.png",
+      members: [],
+      sha256: input.sha256 ?? (await digestOf(input.bytes)),
+      bytes: input.size ?? input.bytes.byteLength,
+      publisher: "acme",
+    }),
+  );
+}
+
+function storeFetch(
+  routes: ReadonlyMap<string, Uint8Array | number>,
+): typeof fetch {
+  return (async (input: RequestInfo | URL) => {
+    const body = routes.get(String(input));
+    if (body === undefined) return new Response("Not found", { status: 404 });
+    if (typeof body === "number")
+      return new Response("Refused", { status: body });
+    return new Response(body as unknown as BodyInit);
+  }) as unknown as typeof fetch;
+}
+
+function memoryOrigins(
+  initial: Readonly<Record<string, CatalogueOrigin>> = {},
+): CatalogueOriginsStore & {
+  readonly rows: () => Record<string, CatalogueOrigin>;
+} {
+  let rows: Record<string, CatalogueOrigin> = { ...initial };
+  return {
+    read: async () => ({ ...rows }),
+    write: async (kind, installedId, origin) => {
+      rows = { ...rows, [catalogueOriginKey(kind, installedId)]: origin };
+    },
+    remove: async (kind, installedId) => {
+      const { [catalogueOriginKey(kind, installedId)]: _gone, ...rest } = rows;
+      rows = rest;
+    },
+    rows: () => ({ ...rows }),
+  };
+}
+
+async function collectionRequest(
+  bytes: Uint8Array,
+  overrides: Partial<CatalogueInstallRequest> = {},
+): Promise<CatalogueInstallRequest> {
+  return {
+    packageUrl: packageUrl(COLLECTION_ID),
+    catalogueId: COLLECTION_ID,
+    kind: "collection",
+    version: "1.0.0",
+    sha256: await digestOf(bytes),
+    bytes: bytes.byteLength,
+    publisher: "acme",
+    ...overrides,
+  };
+}
+
+/** One widget pack the test can count, answering its own id. */
+function countingWidgetStore(
+  id: string,
+  calls: string[],
+  outcome: "ok" | "fail" = "ok",
+): WidgetPackStore {
+  return widgetStore(async () => {
+    calls.push(id);
+    if (outcome === "fail") return { ok: false, message: "disk full" };
+    return {
+      ok: true,
+      pack: { id, name: id, version: undefined, units: [] },
+    };
+  });
+}
+
+describe("collection install and plan", () => {
+  it("refuses the collection and writes nothing when one member is unpublished", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }, { id: WIDGET_B_ID }]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+      [itemUrl(WIDGET_B_ID), 404],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        widgetPacks: countingWidgetStore("starter", calls),
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain(WIDGET_B_ID);
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses the collection and writes nothing when a member's hash does not match", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+          sha256: "00",
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        widgetPacks: countingWidgetStore("starter", calls),
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain(WIDGET_A_ID);
+    expect(calls).toEqual([]);
+  });
+
+  it("installs only the chosen optional members", async () => {
+    const bytes = collectionBytes([
+      { id: WIDGET_A_ID },
+      { id: WIDGET_B_ID, optional: true },
+    ]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+    ]);
+
+    const result = await installCatalogueItem(
+      await collectionRequest(bytes, { items: [WIDGET_A_ID] }),
+      {
+        fetch: storeFetch(routes),
+        stores: stores({
+          widgetPacks: countingWidgetStore("starter", calls),
+        }),
+        storeOrigin: ORIGIN,
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      members: [{ id: WIDGET_A_ID, ok: true }],
+    });
+    expect(calls).toEqual(["starter"]);
+  });
+
+  it("refuses an omitted required member and names it", async () => {
+    const bytes = collectionBytes([
+      { id: WIDGET_A_ID },
+      { id: WIDGET_B_ID, optional: true },
+    ]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+    ]);
+
+    const result = await installCatalogueItem(
+      await collectionRequest(bytes, { items: [WIDGET_B_ID] }),
+      {
+        fetch: storeFetch(routes),
+        stores: stores({
+          widgetPacks: countingWidgetStore("starter", calls),
+        }),
+        storeOrigin: ORIGIN,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain(WIDGET_A_ID);
+    expect(calls).toEqual([]);
+  });
+
+  it("reports installed and failed members when a later write fails", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }, { id: WIDGET_B_ID }]);
+    const calls: string[] = [];
+    let attempt = 0;
+    const widgetPacks = widgetStore(async () => {
+      attempt += 1;
+      if (attempt === 2) return { ok: false, message: "disk full" };
+      calls.push("starter");
+      return {
+        ok: true,
+        pack: { id: "starter", name: "A", version: undefined, units: [] },
+      };
+    });
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+      [
+        itemUrl(WIDGET_B_ID),
+        await itemJson({
+          id: WIDGET_B_ID,
+          kind: "widget-pack",
+          name: "B",
+          bytes: WIDGET_B_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_B_ID), WIDGET_B_BYTES],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({ widgetPacks }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      members: [
+        { id: WIDGET_A_ID, ok: true },
+        { id: WIDGET_B_ID, ok: false, reason: "disk full" },
+      ],
+    });
+    expect(calls).toEqual(["starter"]);
+  });
+
+  it("skips an already installed member on retry", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    const calls: string[] = [];
+    const origins = memoryOrigins();
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+    ]);
+    const options = {
+      fetch: storeFetch(routes),
+      stores: stores({ widgetPacks: countingWidgetStore("starter", calls) }),
+      storeOrigin: ORIGIN,
+      origins,
+    };
+
+    const first = await installCatalogueItem(
+      await collectionRequest(bytes),
+      options,
+    );
+    const second = await installCatalogueItem(
+      await collectionRequest(bytes),
+      options,
+    );
+
+    expect(first).toMatchObject({
+      ok: true,
+      members: [{ id: WIDGET_A_ID, ok: true }],
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      members: [{ id: WIDGET_A_ID, ok: true, reason: "Already installed." }],
+    });
+    expect(calls).toEqual(["starter"]);
+  });
+
+  it("merges a collection into the memberships a copy already records", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    const calls: string[] = [];
+    const origins = memoryOrigins({
+      [catalogueOriginKey("widget-pack", "starter")]: {
+        kind: "widget-pack",
+        catalogueId: WIDGET_A_ID,
+        version: "0.9.0",
+        installedAt: "2026-11-01T00:00:00.000Z",
+        collections: ["77777777-7777-4777-8777-777777777777"],
+      },
+    });
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({ widgetPacks: countingWidgetStore("starter", calls) }),
+      storeOrigin: ORIGIN,
+      origins,
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(
+      origins.rows()[catalogueOriginKey("widget-pack", "starter")]?.collections,
+    ).toEqual(["77777777-7777-4777-8777-777777777777", COLLECTION_ID].sort());
+  });
+
+  it("plans each code member's capabilities and devices without writing", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: PLUGIN_ID }]);
+    const calls: string[] = [];
+    const origins = memoryOrigins();
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+    ]);
+
+    const planned = await planCollection(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        extensions: extensionService({
+          install: async () => {
+            calls.push("install");
+            return { ok: false, message: "not called" };
+          },
+        }),
+      }),
+      storeOrigin: ORIGIN,
+      origins,
+    });
+
+    expect(planned).toMatchObject({
+      ok: true,
+      plan: {
+        members: [
+          {
+            id: PLUGIN_ID,
+            kind: "plugin",
+            optional: false,
+            consent: {
+              key: "local/acme-sensors",
+              name: "Acme Sensors",
+              capabilities: ["panel:drive", "usb:device"],
+              devices: ["usb:0a12:0001"],
+            },
+          },
+        ],
+        missing: [],
+        totalBytes: pluginBytes.byteLength,
+      },
+    });
+    expect(calls).toEqual([]);
+    expect(origins.rows()).toEqual({});
   });
 });

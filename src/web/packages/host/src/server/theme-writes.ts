@@ -15,9 +15,12 @@ import {
 } from "../settings/catalogue-origins.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
 import {
+  type CatalogueInstallOptions,
+  type CatalogueInstallStores,
   editorThemePath,
   installCatalogueItem,
   parseCatalogueInstallRequest,
+  planCollection,
 } from "../store/install.js";
 import { importThemePackage } from "../themes/import.js";
 import {
@@ -108,6 +111,41 @@ export function createThemeWrites(
     storeOrigin,
     storeSession,
   } = deps;
+
+  // The same per-kind owners for a single item, a collection member and a
+  // plan's availability check, so the three cannot disagree about which store
+  // a kind writes through.
+  const installStores: CatalogueInstallStores = {
+    ...(catalogueOrigins === undefined
+      ? {}
+      : {
+          theme: {
+            store: themeStore,
+            origins: catalogueOrigins,
+            ...(thumbnails === undefined ? {} : { thumbnails }),
+            ...(fetcher === undefined ? {} : { fetch: fetcher }),
+          },
+        }),
+    ...(options.widgetPacks === undefined
+      ? {}
+      : { widgetPacks: options.widgetPacks }),
+    ...(options.pathPresets === undefined
+      ? {}
+      : { pathPresets: options.pathPresets }),
+    ...(options.extensions === undefined
+      ? {}
+      : { extensions: options.extensions }),
+    ...(options.editorThemesDirectory === undefined
+      ? {}
+      : { editorThemesDirectory: options.editorThemesDirectory }),
+  };
+
+  const installOptions: CatalogueInstallOptions = {
+    stores: installStores,
+    ...(fetcher === undefined ? {} : { fetch: fetcher }),
+    ...(storeOrigin === undefined ? {} : { storeOrigin }),
+    ...(catalogueOrigins === undefined ? {} : { origins: catalogueOrigins }),
+  };
 
   return async function handleThemeWrites(
     request: http.IncomingMessage,
@@ -326,6 +364,63 @@ export function createThemeWrites(
       return true;
     }
 
+    // A collection's verified member list, for the install sheet to show size,
+    // availability and each code member's consent before anything is written.
+    // The plan is an answer about the store; the install re-runs the same
+    // pre-flight and never reads this route's answer back.
+    if (url.pathname === "/api/store/collection/plan") {
+      if (request.method !== "POST") {
+        sendText(response, 405, "Only POST is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Collection plans are loopback only.");
+        return true;
+      }
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return true;
+      }
+
+      let raw: string;
+      try {
+        raw = await readBody(request);
+      } catch {
+        sendText(response, 413, "That plan request is too large.");
+        return true;
+      }
+
+      let collection: ReturnType<typeof parseCatalogueInstallRequest>;
+      try {
+        collection = parseCatalogueInstallRequest(JSON.parse(raw));
+      } catch {
+        sendText(response, 400, "That plan request is not JSON.");
+        return true;
+      }
+      if (collection === undefined) {
+        sendText(
+          response,
+          400,
+          "A plan needs packageUrl, catalogueId, kind, version, sha256 and bytes.",
+        );
+        return true;
+      }
+
+      const planned = await planCollection(collection, installOptions);
+      if (!planned.ok) {
+        const status =
+          planned.stage === "download"
+            ? 502
+            : planned.stage === "store"
+              ? 500
+              : 400;
+        sendText(response, status, planned.message);
+        return true;
+      }
+      sendJson(response, 200, { ok: true, plan: planned.plan });
+      return true;
+    }
+
     // The store's install for every kind: the dispatcher owns the download,
     // the digest check and each kind's writer. Loopback and origin checks are
     // the same as every other modification on this host.
@@ -367,34 +462,7 @@ export function createThemeWrites(
         return true;
       }
 
-      const installed = await installCatalogueItem(install, {
-        stores: {
-          ...(catalogueOrigins === undefined
-            ? {}
-            : {
-                theme: {
-                  store: themeStore,
-                  origins: catalogueOrigins,
-                  ...(thumbnails === undefined ? {} : { thumbnails }),
-                  ...(fetcher === undefined ? {} : { fetch: fetcher }),
-                },
-              }),
-          ...(options.widgetPacks === undefined
-            ? {}
-            : { widgetPacks: options.widgetPacks }),
-          ...(options.pathPresets === undefined
-            ? {}
-            : { pathPresets: options.pathPresets }),
-          ...(options.extensions === undefined
-            ? {}
-            : { extensions: options.extensions }),
-          ...(options.editorThemesDirectory === undefined
-            ? {}
-            : { editorThemesDirectory: options.editorThemesDirectory }),
-        },
-        ...(fetcher === undefined ? {} : { fetch: fetcher }),
-        ...(storeOrigin === undefined ? {} : { storeOrigin }),
-      });
+      const installed = await installCatalogueItem(install, installOptions);
       if (!installed.ok && installed.stage === "review") {
         // A held update is an answer the browser draws as a review notice; its
         // approval press re-posts with this item's approveUpdate flag.
@@ -411,6 +479,16 @@ export function createThemeWrites(
             : installed.stage === "store"
               ? 500
               : 400;
+        // A collection that stopped part-way names which members landed, so
+        // the retry and the sheet read the same per-member outcome.
+        if (installed.members !== undefined) {
+          sendJson(response, status, {
+            ok: false,
+            message: installed.message,
+            members: installed.members,
+          });
+          return true;
+        }
         sendText(response, status, installed.message);
         return true;
       }
@@ -418,6 +496,9 @@ export function createThemeWrites(
         ok: true,
         id: installed.id,
         consentRequired: installed.consentRequired,
+        ...(installed.members === undefined
+          ? {}
+          : { members: installed.members }),
       });
       return true;
     }
