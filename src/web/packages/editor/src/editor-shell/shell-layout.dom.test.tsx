@@ -1841,13 +1841,13 @@ it("moves the shell only when the open's replacement is accepted", async () => {
   await vi.waitFor(() =>
     expect(openControl(), "the store drew no cell to open").not.toBeNull(),
   );
-  // The strip is the mode's own: the store's listing count, not the editor's
+  // The strip is the mode's own: the Library's listing count, not the editor's
   // document readouts (#164).
   await vi.waitFor(() =>
     expect(
       root.querySelector("[data-yunari-store-count]")?.textContent,
-      "the store's own count in the strip",
-    ).toBe(uiCopy.statusBar.themes(1)),
+      "the Library's own count in the strip",
+    ).toBe(uiCopy.statusBar.libraryItems(1)),
   );
   expect(
     root.querySelector("[data-yunari-status-objects]"),

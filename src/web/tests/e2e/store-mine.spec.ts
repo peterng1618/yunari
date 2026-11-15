@@ -136,7 +136,7 @@ async function openMine(page: Page) {
     .click();
 
   const region = page.locator("[data-yunari-mode-region='library']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  await expect(region, "the Library renders no region").toBeVisible();
   const mine = region.locator("[data-yunari-store-mine]");
   await expect(
     mine,

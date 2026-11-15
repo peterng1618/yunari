@@ -1668,6 +1668,9 @@ export const uiCopy = {
      *  instead (`uiCopy.store.unreadable`), and never draws this. */
     empty: "Nothing here yet.",
     emptyHint: "Install an item from the store, or publish your own.",
+    /** My submissions until its page is built. It names that absence rather
+     *  than "no submissions", which the dashboard grid's Mine half disproves. */
+    submissionsPending: "My submissions is not available yet.",
     choose: "Open a theme",
     /** The control's own name. Distinct from `choose`, which titles the
      *  dialog; a label repeating the title printed over the control. */
@@ -2138,9 +2141,11 @@ export const uiCopy = {
     objects: (count: number): string =>
       `${count} ${count === 1 ? "object" : "objects"}`,
     selected: (count: number): string => `${count} selected`,
-    /** The Library mode's own reading: what the chosen half and filters show. */
-    themes: (count: number): string =>
-      `${count} ${count === 1 ? "theme" : "themes"}`,
+    /** The Library mode's own reading: what the chosen page and filters show.
+     *  Kind-neutral, because the Library browses every catalogue kind and the
+     *  strip cannot know a page's noun. */
+    libraryItems: (count: number): string =>
+      `${count} ${count === 1 ? "item" : "items"}`,
   },
   /** The title-bar counts: one per pane's own list, so a pane whose list has
    *  not loaded prints nothing rather than a `0` (the same rule `statusBar`'s

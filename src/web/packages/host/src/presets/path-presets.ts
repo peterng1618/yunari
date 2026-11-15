@@ -18,6 +18,25 @@ export const MAX_PATH_PRESET_PACK_BYTES = 10 * 1024 * 1024;
 const STATE_FILE = "path-presets.json";
 const VERSION = 1;
 
+/**
+ * A pack's presets live in the one flat list under this id prefix, so a row's
+ * id is what names the pack it came from. It has one owner: the install, the
+ * removal and the route that reports installed state all ask here.
+ */
+const PACK_PREFIX = "pack:";
+
+export function pathPresetPackPrefix(packId: string): string {
+  return `${PACK_PREFIX}${packId}:`;
+}
+
+/** The pack an installed preset row came from, or nothing for a user row. */
+export function pathPresetPackIdOf(id: string): string | undefined {
+  if (!id.startsWith(PACK_PREFIX)) return undefined;
+  const rest = id.slice(PACK_PREFIX.length);
+  const end = rest.indexOf(":");
+  return end <= 0 ? undefined : rest.slice(0, end);
+}
+
 export interface PathPresetStore {
   read(): Promise<PathPresetState>;
   addUser(input: { label: string; data: string }): Promise<PathPreset>;
@@ -285,7 +304,7 @@ export function createPathPresetStore(
       const read = readPathPresetPackBytes(bytes);
       if (!read.ok) throw new Error(read.message);
       const pack = read.pack;
-      const prefix = `pack:${pack.id}:`;
+      const prefix = pathPresetPackPrefix(pack.id);
 
       return file.mutate((current) => {
         const rows = pack.presets.map(
@@ -345,7 +364,7 @@ export function createPathPresetStore(
     },
 
     async removePack(packId) {
-      const prefix = `pack:${packId}:`;
+      const prefix = pathPresetPackPrefix(packId);
       await file.mutate((current) => ({
         next: {
           ...current,

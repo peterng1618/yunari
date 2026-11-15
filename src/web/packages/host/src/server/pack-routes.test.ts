@@ -400,15 +400,37 @@ describe("the path preset routes", () => {
       ],
     });
 
+    const origin = {
+      kind: "path-preset-pack",
+      catalogueId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      version: "1.0.0",
+      installedAt: "2026-11-16T00:00:00.000Z",
+    } as const;
+    await origins?.write("path-preset-pack", "pack-one", origin);
+
     const listed = await fetch(`${base}/api/path-presets`);
     expect(listed.status).toBe(200);
     const state = (await listed.json()) as {
-      readonly presets: readonly { readonly id: string }[];
+      readonly presets: readonly {
+        readonly id: string;
+        readonly origin?: unknown;
+      }[];
     };
-    expect(state.presets.map((preset) => preset.id)).toContain(userPreset.id);
-    expect(state.presets.map((preset) => preset.id)).toContain(
-      "pack:pack-one:star",
+    const userRow = state.presets.find((preset) => preset.id === userPreset.id);
+    expect(
+      userRow,
+      "the user preset is missing from the listing",
+    ).toBeDefined();
+    expect(userRow, "a user preset carries no pack origin").not.toHaveProperty(
+      "origin",
     );
+    const packRow = state.presets.find(
+      (preset) => preset.id === "pack:pack-one:star",
+    );
+    expect(
+      packRow?.origin,
+      "the pack's preset does not carry its pack's origin",
+    ).toEqual(origin);
 
     const removed = await fetch(`${base}/api/path-presets/packs/pack-one`, {
       method: "DELETE",

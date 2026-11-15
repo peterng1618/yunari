@@ -45,7 +45,7 @@ const HEADER_STRIP_PX = 42;
  *
  * The store region starts its online read when it mounts
  * (`online-listing.ts`), and that is true of the Local half too, so every case
- * that opens the themes mode would otherwise ask `yunari-store.workers.dev`
+ * that opens the Library mode would otherwise ask `yunari-store.workers.dev`
  * for a catalogue that does not exist until phase E. The answer would be
  * whatever the network says that day, not what the case is measuring.
  *
@@ -1222,12 +1222,12 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   ).toBeHidden();
   await expect(
     page.locator("[data-yunari-mode-region]"),
-    "the themes mode renders no region",
-  ).toHaveAttribute("data-yunari-mode-region", "themes");
+    "the Library renders no region",
+  ).toHaveAttribute("data-yunari-mode-region", "library");
   await expect(group, "the switch left the header").toBeVisible();
   await expect(
     header.locator("[data-yunari-theme-toolbar]"),
-    "themes mode still draws the editor's toolbar",
+    "Library mode still draws the editor's toolbar",
   ).toHaveCount(0);
 
   await segment(uiCopy.modes.settings).click();

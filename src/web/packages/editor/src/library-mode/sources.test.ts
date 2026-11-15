@@ -266,10 +266,17 @@ describe("the library's page source", () => {
       origin: origin("widget-pack"),
     };
     const preset: PathPresetRow = {
-      id: "user:wave",
+      id: "pack:pack-one:wave",
       label: "Wave",
       data: "M0 0 L1 1",
       paint: "stroke",
+      origin: origin("path-preset-pack"),
+    };
+    const userPreset: PathPresetRow = {
+      id: "user:mine",
+      label: "Mine",
+      data: "M0 0 L2 2",
+      paint: "fill",
     };
     const sensorPlugin = plugin({
       contributions: {
@@ -292,7 +299,7 @@ describe("the library's page source", () => {
     ).list();
     const shapes = await librarySourceFor(
       "shapes",
-      clients({ pathPresets: async () => [preset] }),
+      clients({ pathPresets: async () => [preset, userPreset] }),
     ).list();
     const sensors = await librarySourceFor(
       "sensor-providers",
@@ -333,15 +340,16 @@ describe("the library's page source", () => {
     });
     expect(widgets[0]?.origin).toEqual(origin("widget-pack"));
 
-    // R10: a preset row is its own single member and carries no origin, because
-    // the host keeps one flat preset list that names no pack.
+    // A pack's preset row carries its pack's origin from the host; a user
+    // preset names no pack and carries none.
     expect(shapes[0]).toMatchObject({
-      id: "user:wave",
+      id: "pack:pack-one:wave",
       kind: "shape",
       name: "Wave",
-      members: [{ id: "user:wave", kind: "shape", name: "Wave" }],
+      members: [{ id: "pack:pack-one:wave", kind: "shape", name: "Wave" }],
     });
-    expect(shapes[0]?.origin).toBeUndefined();
+    expect(shapes[0]?.origin).toEqual(origin("path-preset-pack"));
+    expect(shapes[1]?.origin).toBeUndefined();
 
     expect(sensors[0]).toMatchObject({
       id: "acme/monitors",

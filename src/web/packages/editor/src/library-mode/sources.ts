@@ -166,9 +166,12 @@ export type WidgetPackRow = WidgetPackSummary & {
   readonly origin?: CatalogueOrigin;
 };
 
-/** One row of `GET /api/path-presets`. The host keeps one flat preset list and
- *  a preset names no pack, so there is no pack reference to carry. */
-export type PathPresetRow = PathPreset;
+/** One row of `GET /api/path-presets`, with the origin the route spreads on a
+ *  pack's rows. The preset id names its pack, so the route can resolve the
+ *  register's installed unit for that pack. */
+export type PathPresetRow = PathPreset & {
+  readonly origin?: CatalogueOrigin;
+};
 
 /** One row of `GET /api/extensions`, with the origin the route spreads on. */
 export type ExtensionRow = InstalledExtension & {
@@ -228,15 +231,8 @@ function widgetPackItemOf(row: WidgetPackRow): StoreItem {
   };
 }
 
-/**
- * One stored shape preset as its own single-member row.
- *
- * **A preset row carries no origin.** `PathPreset` names no pack and the host
- * keeps one flat list, while the register's installed unit for a
- * `path-preset-pack` is the pack. Inventing a pack id here would be a second,
- * wrong owner of that fact, so the Shapes page cannot read installed state from
- * these rows; the limit is recorded for the surface that needs it.
- */
+/** One stored shape preset as its own single-member row. A pack's preset row
+ *  carries that pack's origin from the host; a user preset carries none. */
 function pathPresetItemOf(row: PathPresetRow): StoreItem {
   return {
     id: row.id,
@@ -248,7 +244,7 @@ function pathPresetItemOf(row: PathPresetRow): StoreItem {
     updatedAt: undefined,
     thumbnailUrl: undefined,
     ground: undefined,
-    origin: undefined,
+    origin: row.origin,
     catalogue: undefined,
     facets: defaultFacetsFor("shape"),
   };

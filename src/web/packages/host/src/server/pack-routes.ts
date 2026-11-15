@@ -4,6 +4,7 @@ import { isPackId, type WidgetPackStore } from "../packs/widget-packs.js";
 import {
   MAX_PATH_PRESET_PACK_BYTES,
   type PathPresetStore,
+  pathPresetPackIdOf,
 } from "../presets/path-presets.js";
 import {
   type CatalogueOriginsStore,
@@ -275,7 +276,23 @@ async function handlePathPresetRoutes(deps: PackRouteDeps): Promise<boolean> {
 
   if (url.pathname === PATH_PRESETS) {
     if (request.method === "GET") {
-      sendJson(response, 200, await pathPresets.read());
+      const state = await pathPresets.read();
+      const origins =
+        deps.origins === undefined ? {} : await deps.origins.read();
+      // A pack's preset names its pack in its id, and the register's installed
+      // unit for `path-preset-pack` is the pack id. A user preset names no
+      // pack, so it carries no origin rather than a fabricated one.
+      sendJson(response, 200, {
+        ...state,
+        presets: state.presets.map((preset) => {
+          const packId = pathPresetPackIdOf(preset.id);
+          const origin =
+            packId === undefined
+              ? undefined
+              : catalogueOriginOf(origins, "path-preset-pack", packId);
+          return origin === undefined ? preset : { ...preset, origin };
+        }),
+      });
       return true;
     }
     if (request.method === "POST") {

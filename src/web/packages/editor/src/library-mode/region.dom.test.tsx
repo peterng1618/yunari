@@ -164,6 +164,7 @@ function Harness(props: {
   readonly page: LibraryPage;
   readonly state: LibraryState;
   readonly onPage: ((page: LibraryPage) => void) | undefined;
+  readonly onStatus: ((count: number | undefined) => void) | undefined;
 }): React.JSX.Element {
   const [page, setPage] = useState(props.page);
   const [state, setState] = useState(props.state);
@@ -176,6 +177,7 @@ function Harness(props: {
       }}
       state={state}
       onState={setState}
+      onStatus={props.onStatus}
     />
   );
 }
@@ -184,8 +186,11 @@ async function mountHarness(
   page: LibraryPage,
   state: LibraryState = "all",
   onPage?: (page: LibraryPage) => void,
+  onStatus?: (count: number | undefined) => void,
 ): Promise<HTMLDivElement> {
-  return mount(<Harness page={page} state={state} onPage={onPage} />);
+  return mount(
+    <Harness page={page} state={state} onPage={onPage} onStatus={onStatus} />,
+  );
 }
 
 it("draws the navigation column grouped Browse and Publish", async () => {
@@ -241,6 +246,65 @@ it("draws the navigation column grouped Browse and Publish", async () => {
 });
 
 it("filters the visible rows by the state", async () => {
+  /** One installed copy of a catalogue pack: its id names no catalogue row of
+   *  its own, and the origin names the entry it came from. */
+  const installedOrigin = {
+    kind: "widget-pack",
+    catalogueId: "installed-pack",
+    version: "1.0.0",
+    installedAt: "2026-10-01T00:00:00.000Z",
+  };
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [
+        CATALOGUE,
+        () =>
+          indexOf([
+            entry("widget-pack", "catalogue-pack", "Catalogue pack", [
+              { id: "w1", kind: "widget", name: "Widget" },
+            ]),
+            entry("widget-pack", "installed-pack", "Installed pack", [
+              { id: "w2", kind: "widget", name: "Widget" },
+            ]),
+          ]),
+      ],
+      [
+        "/api/widget-packs",
+        () =>
+          json({
+            packs: [
+              {
+                id: "installed-pack",
+                name: "Installed copy",
+                version: "1.0.0",
+                units: [{ id: "u1", label: "Unit" }],
+                origin: installedOrigin,
+              },
+              {
+                id: "local-pack",
+                name: "Local pack",
+                version: "1.0.0",
+                units: [{ id: "u2", label: "Unit" }],
+              },
+            ],
+          }),
+      ],
+    ]),
+  );
+
+  const all = await mountHarness("widgets", "all");
+  await waitForCells(all, ["Catalogue pack", "Installed pack", "Local pack"]);
+
+  // On this PC: the installed catalogue copy and the pack no catalogue lists.
+  const installed = await mountHarness("widgets", "on-this-pc");
+  await waitForCells(installed, ["Installed pack", "Local pack"]);
+
+  const available = await mountHarness("widgets", "not-installed");
+  await waitForCells(available, ["Catalogue pack"]);
+});
+
+it("draws one row for an installed copy, not a library row beside it", async () => {
   vi.stubGlobal(
     "fetch",
     answering([
@@ -259,15 +323,13 @@ it("filters the visible rows by the state", async () => {
           json({
             packs: [
               {
-                id: "local-pack",
-                name: "Local pack",
+                id: "catalogue-pack",
+                name: "Installed copy",
                 version: "1.0.0",
                 units: [{ id: "u1", label: "Unit" }],
-                // A library row is installed by construction; this one also
-                // carries an origin, which the "Not installed" state drops.
                 origin: {
                   kind: "widget-pack",
-                  catalogueId: "local-pack",
+                  catalogueId: "catalogue-pack",
                   version: "1.0.0",
                   installedAt: "2026-10-01T00:00:00.000Z",
                 },
@@ -278,14 +340,8 @@ it("filters the visible rows by the state", async () => {
     ]),
   );
 
-  const all = await mountHarness("widgets", "all");
-  await waitForCells(all, ["Catalogue pack", "Local pack"]);
-
-  const installed = await mountHarness("widgets", "on-this-pc");
-  await waitForCells(installed, ["Local pack"]);
-
-  const available = await mountHarness("widgets", "not-installed");
-  await waitForCells(available, ["Catalogue pack"]);
+  const container = await mountHarness("widgets", "all");
+  await waitForCells(container, ["Catalogue pack"]);
 });
 
 it("filters the Sensor providers page between Sensors and Data sources", async () => {
@@ -332,9 +388,11 @@ it("filters the Sensor providers page between Sensors and Data sources", async (
     "the sub-filter has no keyboard tab stop",
   ).toHaveLength(1);
   expect(
-    container.querySelector("[data-yunari-library-sensors]")?.textContent,
+    container
+      .querySelector("[data-yunari-library-sensors]")
+      ?.getAttribute("aria-label"),
     "the sub-filter group has no programmatic name",
-  ).toContain(uiCopy.library.sensors.label);
+  ).toBe(uiCopy.library.sensors.label);
 
   await act(async () => subFilter[1]?.click());
   await waitForCells(container, ["Data plugin"]);
@@ -365,4 +423,43 @@ it("states a failed read with retry instead of drawing an empty listing", async 
   expect(container.querySelectorAll("[data-yunari-store-cell]")).toHaveLength(
     0,
   );
+});
+
+it("publishes no count when one half failed", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [CATALOGUE, () => indexOf([])],
+      ["/api/widget-packs", () => new Response("", { status: 500 })],
+    ]),
+  );
+  const onStatus = vi.fn();
+  const container = await mountHarness("widgets", "all", undefined, onStatus);
+
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector("[data-yunari-store-failure]"),
+      "the failed half drew no failure",
+    ).not.toBeNull(),
+  );
+  // A failed read is not an empty result: neither "0" nor the surviving
+  // half's length may stand for it.
+  expect(
+    onStatus.mock.calls.map((call) => call[0]),
+    "a count was published from a failed read",
+  ).not.toContain(0);
+  expect(onStatus.mock.calls.map((call) => call[0])).toEqual(
+    onStatus.mock.calls.map(() => undefined),
+  );
+});
+
+it("does not claim My submissions is empty while its page is unbuilt", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("", { status: 404 })),
+  );
+  const container = await mountHarness("submissions");
+
+  expect(container.textContent).toContain(uiCopy.library.submissionsPending);
+  expect(container.textContent).not.toContain(uiCopy.store.mine.empty);
 });

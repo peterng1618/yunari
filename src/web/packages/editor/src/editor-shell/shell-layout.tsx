@@ -955,7 +955,7 @@ export function createShellLayout(
         )}
         {/* The strip: readouts only, the counts on the left and the save
             state and live mark on the right. Each mode draws its own facts:
-            the editor's counts and its document state, the store's listing
+            the editor's counts and its document state, the Library's listing
             count, the host's two strings. A mode that has not published its
             reading draws nothing rather than another mode's numbers. */}
         <footer id="status" className="editor-shell-status">
@@ -975,7 +975,7 @@ export function createShellLayout(
           ) : mode === "library" ? (
             storeStatus === undefined ? null : (
               <span role="status" data-yunari-store-count="">
-                {uiCopy.statusBar.themes(storeStatus)}
+                {uiCopy.statusBar.libraryItems(storeStatus)}
               </span>
             )
           ) : (

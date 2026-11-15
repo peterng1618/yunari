@@ -86,7 +86,7 @@ export function buildTrayMenu(snapshot: TraySnapshot): readonly TrayMenuItem[] {
       },
       { title: "Pair display", enabled: true, action: "pair" },
       { title: "Theme Editor", enabled: true, action: "editor" },
-      { title: "Theme Store", enabled: true, action: "themes" },
+      { title: "Library", enabled: true, action: "themes" },
       { title: "Host Settings", enabled: true, action: "settings" },
       ...(snapshot.mcp === true
         ? [

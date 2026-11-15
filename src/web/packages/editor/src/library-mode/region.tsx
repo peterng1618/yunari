@@ -1,11 +1,8 @@
 import { Tabs } from "@base-ui/react/tabs";
-import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
 import type { CatalogueOrigin } from "@yunari/renderer-core";
 import type * as React from "react";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ControlSegmented } from "../components/ui/control-segmented.js";
-import { hitTargetClasses } from "../components/ui/control-well.js";
+import { BareSegmented } from "../components/ui/bare-segmented.js";
 import {
   createGridDensityPreference,
   DEFAULT_GRID_DENSITY,
@@ -71,28 +68,17 @@ export function LibraryStateFilter(props: {
   readonly onState: (state: LibraryState) => void;
 }): React.JSX.Element {
   return (
-    <ToggleGroup
+    <BareSegmented
       id={STATE_FILTER_ID}
-      data-yunari-library-state=""
-      aria-label={uiCopy.library.state.label}
-      value={[props.state]}
-      onValueChange={(next) => {
-        const chosen = next[0];
-        if (chosen !== undefined) props.onState(chosen as LibraryState);
-      }}
-      className="flex flex-none gap-[var(--space-4)] rounded-md border border-edge bg-panel-2 p-[var(--space-4)]"
-    >
-      {STATE_ORDER.map((state) => (
-        <Toggle
-          key={state}
-          id={`${STATE_FILTER_ID}-${state}`}
-          value={state}
-          className={`${hitTargetClasses} min-w-0 flex-none whitespace-nowrap rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
-        >
-          {STATE_NAMES[state]}
-        </Toggle>
-      ))}
-    </ToggleGroup>
+      data={{ "data-yunari-library-state": "" }}
+      label={uiCopy.library.state.label}
+      value={props.state}
+      options={STATE_ORDER.map((state) => ({
+        id: state,
+        name: STATE_NAMES[state],
+      }))}
+      onChange={props.onState}
+    />
   );
 }
 
@@ -116,12 +102,11 @@ interface Row {
 /**
  * The two halves joined, then filtered by the state.
  *
- * **The catalogue's origins come from the library half**, which is the only
- * place a copy this PC holds is recorded. A catalogue row whose id an installed
- * copy names takes that origin, so `installStateOf` and the filter read one
- * fact; the library row it came from is dropped in favour of the catalogue row,
- * which is the richer surface. A library row the catalogue does not list — an
- * authored theme, or a copy whose catalogue entry is gone — stays its own row.
+ * **A library row that names a catalogue item is that item's installed copy**,
+ * so the library half never draws it beside the catalogue row; the catalogue
+ * row takes the origin the library row carried. A library row with no origin —
+ * an authored theme, or a copy whose catalogue entry is gone — stays its own
+ * row.
  *
  * The rule is one function because the filter and the grid must not disagree
  * about which rows the state admits.
@@ -141,10 +126,7 @@ function rowsFor(
     const origin = origins.get(item.id);
     return origin === undefined ? item : { ...item, origin };
   });
-  const listed = new Set(store.map((item) => item.id));
-  const libraryOnly = library.filter(
-    (item) => item.origin === undefined || !listed.has(item.origin.catalogueId),
-  );
+  const libraryOnly = library.filter((item) => item.origin === undefined);
   const rows: readonly Row[] = [
     ...store.map((item): Row => ({ item, half: "store" })),
     ...libraryOnly.map((item): Row => ({ item, half: "library" })),
@@ -302,7 +284,13 @@ export function LibraryRegion(props: {
                   : { onThemePublished: props.onThemePublished })}
               />
             ) : props.page === "submissions" ? (
-              <Empty lead={uiCopy.store.mine.empty} hint={undefined} />
+              // Task 12 builds the author's listing. Until then the page says
+              // only that it is not here yet: "no submissions" would be a
+              // claim the dashboard grid's Mine half disproves.
+              <Empty
+                lead={uiCopy.library.submissionsPending}
+                hint={undefined}
+              />
             ) : (
               <PageListing
                 page={props.page}
@@ -388,10 +376,17 @@ function PageListing(props: {
       : rows;
   const answered = catalogue !== undefined || library !== undefined;
 
-  // The strip is the shell's; this region owns the count. A page that has not
-  // answered yet publishes nothing, so no zero stands in for an unread half.
+  // The strip is the shell's; this region owns the count. **A count is
+  // published only when both halves answered**: a failed read is not an empty
+  // result, so neither "0" nor the surviving half's length stands for it.
+  // Nothing is published while a half is pending either.
   const onStatus = props.onStatus;
-  const count = answered ? visible.length : undefined;
+  const complete =
+    catalogue !== undefined &&
+    library !== undefined &&
+    !catalogueFailed &&
+    !libraryFailed;
+  const count = complete ? visible.length : undefined;
   useEffect(() => {
     onStatus?.(count);
     return () => onStatus?.(undefined);
@@ -414,12 +409,10 @@ function PageListing(props: {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {props.page === "sensor-providers" ? (
-        <div
-          data-yunari-library-sensors=""
-          className="flex flex-none items-center px-[var(--space-16)] pt-[var(--space-12)]"
-        >
-          <ControlSegmented
+        <div className="flex flex-none items-center px-[var(--space-16)] pt-[var(--space-12)]">
+          <BareSegmented
             id="yunari-library-sensors"
+            data={{ "data-yunari-library-sensors": "" }}
             label={uiCopy.library.sensors.label}
             value={sensorKind}
             options={SENSOR_KINDS.map((kind) => ({

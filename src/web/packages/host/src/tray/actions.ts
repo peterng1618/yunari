@@ -49,12 +49,12 @@ export function openRequest(
     case "themes":
       return {
         target: `${context.localPlain}/editor?mode=library`,
-        label: "Theme Store",
+        label: "Library",
         options: {},
       };
     case "settings":
       return {
-        target: `${context.localPlain}/editor?mode=host`,
+        target: `${context.localPlain}/editor?mode=settings`,
         label: "Host Settings",
         options: {},
       };

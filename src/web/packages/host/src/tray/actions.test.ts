@@ -15,6 +15,21 @@ it("opens the folder through the directory branch, not the URL handler", () => {
   expect(openRequest("pair", CONTEXT).options).toEqual({});
 });
 
+it("opens each row on the surface its mode names", () => {
+  expect(openRequest("editor", CONTEXT).target).toBe(
+    `${CONTEXT.localPlain}/editor?mode=editor`,
+  );
+  expect(openRequest("themes", CONTEXT).target).toBe(
+    `${CONTEXT.localPlain}/editor?mode=library`,
+  );
+  expect(openRequest("settings", CONTEXT).target).toBe(
+    `${CONTEXT.localPlain}/editor?mode=settings`,
+  );
+  expect(openRequest("pair", CONTEXT).target).toBe(
+    `${CONTEXT.localPlain}/editor?publish=1`,
+  );
+});
+
 it("reports the opener it chose for every row", () => {
   const browser = vi.fn(() => true);
   const target = vi.fn(() => true);
@@ -26,7 +41,7 @@ it("reports the opener it chose for every row", () => {
   });
   expect(openTrayAction("themes", CONTEXT, open)).toEqual({
     ok: true,
-    message: "Opening Theme Store.",
+    message: "Opening Library.",
   });
   expect(openTrayAction("settings", CONTEXT, open)).toEqual({
     ok: true,

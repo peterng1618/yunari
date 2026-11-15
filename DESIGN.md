@@ -303,8 +303,11 @@ chooses where to be; the page beside it owns its listing. One **installed-state*
 filter (`All`, `On this PC`, `Not installed`) narrows the catalogue pages, so an
 item's presence on this PC is read in one place rather than repeated as a badge.
 Sensor providers adds one sub-filter, `Sensors · Data sources`, because a plugin
-may contribute either member kind. A read that fails states the failure with its
-own retry control; it is never drawn as an empty listing.
+may contribute either member kind. Both that sub-filter and the installed-state
+filter are the same bare `Segmented` control: a well of exclusive labels with no
+label column, named by its `aria-label` and moved by the arrow keys. A read that
+fails states the failure with its own retry control; it is never drawn as an
+empty listing.
 
 **Settings is a mode, not a dialog.** Its destinations run down a fixed
 navigation column grouped as This PC — the machine and its screens — and Editor —
