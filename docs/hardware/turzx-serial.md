@@ -10,14 +10,16 @@
   so a display record's rotation is composed into the picture by the host
 - **Driver:** `src/web/packages/host/src/panels/turzx-panel.ts`,
   `turzx-protocol.ts`, `turzx-video.ts`, `serial-transport.ts`
-- **Last hardware verification:** 2026-11-14 (status-loop overlay on `COM5`:
-  910 updates, 33.6 MB of bodies, no stall, owner confirmed the picture; before
-  that 2026-11-13, 2026-11-10, and the first successful run 2026-10-30)
-- **Last known good revision:** `bfa06290d` (2026-11-14) — the status loop below,
-  watched on the attached 5" and confirmed by eye. Compare a future playback
-  regression against this revision; `fd7a3637f` (2026-11-13) is the last
-  known-good before it, and `988cda820713` (2026-11-06) the last before any
-  overlay throttling.
+- **Last hardware verification:** 2026-11-15 (playback on `COM5` with the serial
+  driver back on the host's loop; the panel had wedged earlier that day and was
+  revived first; owner confirmed the picture; before that 2026-11-14 with 910
+  status-loop updates, 33.6 MB of bodies and no stall, 2026-11-13, 2026-11-10,
+  and the first successful run 2026-10-30)
+- **Last known good revision:** `19221490a` (2026-11-15) — the host-loop serial
+  transport, watched on the attached 5" and confirmed by eye. Compare a future
+  playback regression against this revision; `bfa06290d` (2026-11-14) is the
+  last known-good before it, then `fd7a3637f` (2026-11-13) and `988cda820713`
+  (2026-11-06) the last before any overlay throttling.
 
 **Update this document with every new fact.** Record a firmware string, a command
 the driver starts using, a refused sequence and its cause, a timing constraint —
