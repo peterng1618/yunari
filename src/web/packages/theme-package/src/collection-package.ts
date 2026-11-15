@@ -97,11 +97,11 @@ export function readCollectionPackage(
     return fail("A collection package needs a list of includes.");
   }
   if (declared.length === 0) {
-    return fail("A collection package must include at least one listing.");
+    return fail("A collection package needs 1-64 includes.");
   }
   if (declared.length > MAX_COLLECTION_INCLUDES) {
     return fail(
-      `A collection package may include at most ${MAX_COLLECTION_INCLUDES} listings.`,
+      `A collection package may carry at most ${MAX_COLLECTION_INCLUDES} includes.`,
     );
   }
 
