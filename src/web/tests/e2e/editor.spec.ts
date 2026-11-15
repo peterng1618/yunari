@@ -104,6 +104,57 @@ async function insertCustomShape(page: Page, name: string): Promise<void> {
     .click();
 }
 
+/**
+ * Waits until the editor's upper canvas has stopped changing.
+ *
+ * A resize — or a remount — clears that canvas, and a pointer gesture holds the
+ * 30fps refresh for its duration, so one arriving mid-drag erases the marquee
+ * with nothing left to redraw it. The layout settles after "Editor ready",
+ * which is how the marquee case measured 0 while Fabric still held its group
+ * selector. A consistent element, box and backing size for half a second is the
+ * signal that startup has finished moving it.
+ */
+async function waitForStillCanvas(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const canvas = document.querySelector<HTMLCanvasElement>(
+        "#yunari-fabric-editor canvas.upper-canvas",
+      );
+      if (canvas === null) return false;
+
+      const box = canvas.getBoundingClientRect();
+      const key = [
+        box.left,
+        box.top,
+        box.width,
+        box.height,
+        canvas.width,
+        canvas.height,
+      ].join(":");
+      const probe = window as unknown as {
+        yunariStillCanvas?: {
+          canvas: HTMLCanvasElement;
+          key: string;
+          since: number;
+        };
+      };
+      const now = performance.now();
+      const last = probe.yunariStillCanvas;
+
+      // A remount is a new element of the same size, so the element identity is
+      // part of the reading as well as the box.
+      if (last?.canvas !== canvas || last.key !== key) {
+        probe.yunariStillCanvas = { canvas, key, since: now };
+        return false;
+      }
+
+      return now - last.since >= 500;
+    },
+    undefined,
+    { polling: "raf", timeout: 15_000 },
+  );
+}
+
 /** Answers the destination question an imported picture asks.
  *
  *  Importing declares the file first and asks where it goes — on the canvas, as
@@ -935,6 +986,9 @@ test.describe("Fabric editor route", () => {
     // found: one picked while the scene was still landing can hold an object by
     // the time the press arrives, and the gesture moves it instead of drawing.
     await expect(page.locator("[data-yunari-layer]").first()).toBeVisible();
+    // A canvas that is still being resized or replaced would clear the marquee
+    // the gesture draws, with the refresh held and nothing to redraw it.
+    await waitForStillCanvas(page);
 
     // Fabric draws the marquee onto the context rather than into the scene, so
     // the only way to see it is to read back the pixels a repaint erases. The
