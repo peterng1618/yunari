@@ -260,6 +260,15 @@ class OpenSerialPort implements SerialTransport {
         // than queue behind the one the USB stack is still holding, and lets
         // the caller's own stop reach `close`.
         this.closed = true;
+        // Nothing above can force an OS handle shut, so the deadline closes
+        // it: a stalled endpoint otherwise keeps the COM port inside this
+        // process, and every retry then meets its own stale handle as another
+        // program's lock.
+        try {
+          this.port.close(() => undefined);
+        } catch {
+          // The deadline's rejection is already the answer.
+        }
         // The size and the half that stalled are the diagnosis: a stalled
         // 1.5 MB frame write is the picture, a stalled 12-byte command is the
         // device's reply path, and Windows not completing the send at all is

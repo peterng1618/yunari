@@ -415,6 +415,29 @@ describe("the serial transport's deadlines", () => {
     }
   });
 
+  it("releases the OS handle when a write deadline fires", async () => {
+    // A stalled endpoint keeps the COM handle inside the process, so every
+    // later retry meets its own stale handle as "another program holds it".
+    // Nothing above can force the handle shut, so the deadline closes it here.
+    vi.useFakeTimers();
+
+    try {
+      const port = new FakePort();
+      port.writeHangs = true;
+      const transport = transportOver(port);
+
+      const writing = transport.write(Uint8Array.of(1)).catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await writing;
+
+      expect(port.isOpen, "the stalled port was left open to the process").toBe(
+        false,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("names the half of a send that stalled, and how much was outstanding", async () => {
     vi.useFakeTimers();
 
