@@ -3,6 +3,7 @@
 - **Date:** 2026-11-16
 - **Status:** accepted
 - **Paths:** `src/web/packages/renderer-core/src/theme/catalogue-index.ts`
+  `src/web/packages/renderer-core/src/theme/collection-plan.ts`
   `src/web/packages/renderer-core/src/index.ts`
   `src/web/packages/store-worker/src/catalogue/kinds.ts`
   `src/web/packages/store-worker/src/catalogue/entry.ts`
@@ -11,6 +12,7 @@
   `src/web/packages/host/src/settings/theme-origins.ts`
   `src/web/packages/host/src/server/theme-writes.ts`
   `src/web/packages/host/src/server/themes-routes.ts`
+  `src/web/packages/host/src/server/extension-routes.ts`
   `src/web/packages/host/src/catalogue/build-index.ts`
   `src/web/packages/editor/src/store-mode/region.tsx`
   `src/web/packages/editor/src/store-mode/local-source.ts`
@@ -72,9 +74,10 @@ Found: the backend is already largely kind-neutral.
   no plan route and no multi-item pre-flight.
 - `host/src/settings/theme-origins.ts` `createThemeOriginsStore` keeps
   `ThemeOrigin { catalogueId, version, installedAt }` keyed by library theme id.
-  `server/themes-routes.ts` and `server/theme-writes.ts` are its readers and
-  writers. Packs, presets, editor themes and plugins have no installed-origin
-  record.
+  `server/themes-routes.ts`, `server/extension-routes.ts` and
+  `server/theme-writes.ts` are its readers and writers; `extension-routes.ts`
+  serves `/api/extensions` rows without an `origin`. Packs, presets, editor
+  themes and plugins have no installed-origin record.
 - `editor/src/store-mode/` is theme-only: `StoreModeRegion` renders only when
   `mode === "themes"`, `StoreTab` is `"local" | "online"`, `local-source.ts`,
   `online-source.ts` and `mine-source.ts` pin `DASHBOARD_THEME_KIND`, and
@@ -82,9 +85,9 @@ Found: the backend is already largely kind-neutral.
   `use-install.ts` carry theme-shaped cells, filters and copy. The shell's
   `ShellMode` in `editor-shell/shell-layout.tsx` names the third mode `themes`.
 
-Unsolved: member derivation, a collection listing and package, collection
-pre-flight/install, a kind-keyed origin register, and non-theme Library
-surfaces.
+Unsolved: member derivation, a collection listing and package, the collection
+plan wire types, collection pre-flight/install, a kind-keyed origin register,
+and non-theme Library surfaces.
 
 ## Rung 2 — installed dependencies
 
@@ -190,6 +193,9 @@ Extend the existing catalogue rather than build a second one:
   `includes` only on a `collection` entry. `parseCatalogueIndex` and
   `parseCatalogueItemFile` keep an unknown member kind, refuse a malformed
   member, and refuse `includes` on a non-collection.
+- `renderer-core/src/theme/collection-plan.ts` owns the plan's wire types
+  (`CollectionPlan`, `CollectionPlanMember`); it is types only and derives
+  nothing, so the host and the install sheet read one shape.
 - `store-worker/src/catalogue/kinds.ts` gains the `collection` package
   (`yunari-collection`, version 1) as bounded JSON, and finalize derives members
   from each kind's own reader. Unknown, unpublished, duplicate, self and nested
@@ -204,7 +210,8 @@ Extend the existing catalogue rather than build a second one:
 - `host/src/settings/theme-origins.ts` becomes a kind-keyed register
   (`<kind>:<id>`, with `kind`, `catalogueId`, `version`, `installedAt`,
   `collections?`), reading legacy bare-id theme rows as `dashboard-theme`
-  additively. The listing routes expose that one fact.
+  additively. The listing routes expose that one fact, including the `origin`
+  field on `/api/extensions` rows in `server/extension-routes.ts`.
 - `editor/src/store-mode/` and `editor-shell/shell-layout.tsx` generalize the
   theme-only region into the Library mode; the existing gallery, facets, sort,
   density and install controls are kept, and the theme-only duplicates are
