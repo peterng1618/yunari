@@ -41,6 +41,7 @@ function itemFor(id: string, overrides: Record<string, unknown> = {}): unknown {
   return {
     kind: "dashboard-theme",
     name: `Theme ${id}`,
+    members: [{ id: `theme-${id}`, kind: "dashboard-theme", name: `Theme ${id}` }],
     version: "1.0.0",
     createdAt: "2026-10-01T00:00:00Z",
     updatedAt: "2026-10-02T00:00:00Z",
