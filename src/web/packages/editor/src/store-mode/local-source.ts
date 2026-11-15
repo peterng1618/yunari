@@ -6,6 +6,7 @@ import {
   type FacetRecord,
   type MemberRecord,
   type Orientation,
+  listingMemberRecords,
   type ThemeRemix,
 } from "@yunari/renderer-core";
 import type {
@@ -144,7 +145,9 @@ export function libraryThemeItemOf(entry: ThemeLibraryEntry): StoreItem {
     id: entry.id,
     kind: DASHBOARD_THEME_KIND,
     name: entry.name,
-    members: [{ id: entry.id, kind: DASHBOARD_THEME_KIND, name: entry.name }],
+    members: listingMemberRecords(DASHBOARD_THEME_KIND, {
+      theme: { id: entry.id, name: entry.name },
+    }),
     author: entry.author,
     version: entry.version,
     ...(entry.remixOf === undefined ? {} : { remixOf: entry.remixOf }),

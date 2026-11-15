@@ -146,7 +146,8 @@ Found: `item.kind` is unconstrained `TEXT`, `item_version` already has
 `sha256`, `execution_profile`, `review_state` and the version primary key.
 A collection version fits those columns unchanged: its manifest is
 `metadata_json`, its package facts are `package_key`/`bytes`/`sha256`, and its
-members are derived at finalize and emitted from the same rows. No new table,
+members are derived from that metadata when the catalogue entry is built and
+emitted from the same rows. No new table,
 column or index is needed; the spec records that nothing has been published, so
 no published row needs migrating.
 

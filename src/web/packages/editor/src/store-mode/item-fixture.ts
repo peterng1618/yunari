@@ -2,6 +2,7 @@ import {
   DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   facetRecordOf,
+  listingMemberRecords,
   SUPPORTED_SCHEMA_VERSION,
 } from "@yunari/renderer-core";
 import type { ThemeLibraryEntry } from "../theme-library-client.js";
@@ -103,7 +104,9 @@ export function fixtureItem(
     id: entry.id,
     kind: DASHBOARD_THEME_KIND,
     name: entry.name,
-    members: [{ id: entry.id, kind: DASHBOARD_THEME_KIND, name: entry.name }],
+    members: listingMemberRecords(DASHBOARD_THEME_KIND, {
+      theme: { id: entry.id, name: entry.name },
+    }),
     author: entry.author,
     version: entry.version,
     updatedAt: entry.updatedAt,
