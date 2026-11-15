@@ -126,7 +126,7 @@ surface as unavailable and block collection install.
 ## Store worker
 
 - `catalogue/kinds.ts` gains the `collection` package:
-  `{ format: "yunari-collection", version: 1, name, description, includes: [{ id, optional? }] }`.
+  `{ format: "yunari-collection-package", version: 1, name, description, includes: [{ id, optional? }] }`.
   `optional` defaults to `false`. The package is validated as JSON with bounded
   size and verified by SHA-256 and byte count like every other kind. It is never
   executed.
