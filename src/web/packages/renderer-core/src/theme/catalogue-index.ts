@@ -24,6 +24,7 @@ export const STORE_ITEM_KINDS = [
   "widget-pack",
   "path-preset-pack",
   "plugin",
+  "collection",
 ] as const;
 
 export type StoreItemKind = (typeof STORE_ITEM_KINDS)[number];
@@ -37,6 +38,34 @@ export function isStoreItemKind(value: unknown): value is StoreItemKind {
 
 /** The first kind, and the one every v1 client already read. */
 export const DASHBOARD_THEME_KIND: StoreItemKind = STORE_ITEM_KINDS[0];
+
+/**
+ * The kinds a member of a listing can be. A member kind is browse data, not a
+ * listing kind: the store derives it from the bytes it validated, and an entry
+ * naming one this build does not ship is kept as a string rather than refused,
+ * so a newer package still lists its members to an older client.
+ */
+export const MEMBER_KINDS = [
+  "dashboard-theme",
+  "editor-theme",
+  "widget",
+  "shape",
+  "sensor-provider",
+  "asset-source",
+  "panel-driver",
+  "data-source",
+] as const;
+
+export type MemberKind = (typeof MEMBER_KINDS)[number] | (string & {});
+
+/** One browseable entry a listing's package contains. The store derives it; the
+ *  client only displays it, so an unknown `kind` is not a reason to drop the
+ *  record. */
+export interface MemberRecord {
+  readonly id: string;
+  readonly kind: string;
+  readonly name: string;
+}
 
 /** A kind this build ships, or one a newer listing named. The literal members
  *  survive for autocomplete; the string arm is what a wire read produces. */
@@ -71,6 +100,13 @@ export interface CatalogueEntry {
   readonly packageUrl: string;
   /** A path inside the repo, joined with the CDN base by the reader. */
   readonly thumbnail: string;
+  /** The browseable entries the item's package contains, in the order the store
+   *  derived them. Every entry carries the key; one with nothing browseable has
+   *  `[]`. */
+  readonly members: readonly MemberRecord[];
+  /** The catalogue ids a collection installs. Allowed only on a `collection`
+   *  entry; a non-collection entry carrying it is malformed. */
+  readonly includes?: readonly string[];
   /** Derived by the producer from the envelope. Checked as a record and never
    *  re-derived: deriving it again would be a second owner of one fact. */
   readonly facets: FacetRecord;
@@ -186,6 +222,10 @@ export function parseCatalogueItemFile(
   if (packageUrl === undefined) return refusedText("packageUrl");
   const thumbnail = stringField(value, "thumbnail");
   if (thumbnail === undefined) return refusedText("thumbnail");
+  const members = membersOf(value);
+  if (members === undefined) return refusedMembers();
+  const includes = includesOf(value, kind);
+  if (includes === null) return refusedIncludes();
   const publisher = optionalText(value, "publisher");
   if (publisher === null) return refusedText("publisher");
   const executionProfile = optionalText(value, "executionProfile");
@@ -210,6 +250,8 @@ export function parseCatalogueItemFile(
       favorites,
       packageUrl,
       thumbnail,
+      members,
+      ...(includes === undefined ? {} : { includes }),
       ...(publisher === undefined ? {} : { publisher }),
       ...(executionProfile === undefined ? {} : { executionProfile }),
       ...(sha256 === undefined ? {} : { sha256 }),
@@ -241,6 +283,44 @@ function optionalBytes(
   return bytes === undefined || bytes === 0 ? null : bytes;
 }
 
+/** The entry's members, or `undefined` when the key is absent or any record is
+ *  not three non-empty strings. A member's `kind` is checked only for being a
+ *  string: a newer package names member kinds this build does not ship, and the
+ *  record is kept so its id and name still list. */
+function membersOf(
+  record: Record<string, unknown>,
+): readonly MemberRecord[] | undefined {
+  const raw = field(record, "members");
+  if (!Array.isArray(raw)) return undefined;
+
+  const members: MemberRecord[] = [];
+  for (const item of raw) {
+    if (!isObject(item)) return undefined;
+    const id = stringField(item, "id");
+    const kind = stringField(item, "kind");
+    const name = stringField(item, "name");
+    if (id === undefined || kind === undefined || name === undefined) {
+      return undefined;
+    }
+    members.push({ id, kind, name });
+  }
+  return members;
+}
+
+/** The ids a collection installs: `undefined` when the key is absent, `null`
+ *  when it appears on any other kind or holds anything but catalogue ids. */
+function includesOf(
+  record: Record<string, unknown>,
+  kind: string,
+): readonly string[] | undefined | null {
+  const raw = field(record, "includes");
+  if (raw === undefined) return undefined;
+  if (kind !== "collection" || !Array.isArray(raw)) return null;
+  return raw.every((id) => typeof id === "string" && isCatalogueId(id))
+    ? raw
+    : null;
+}
+
 /** Lowercase hex, exactly SHA-256's width. */
 function isSha256(text: string): boolean {
   return /^[0-9a-f]{64}$/.test(text);
@@ -257,6 +337,22 @@ function refusedBytes(): CatalogueItemFileResult {
   return {
     ok: false,
     reason: 'item.json\'s "bytes" must be a positive whole number.',
+  };
+}
+
+function refusedMembers(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason:
+      'item.json\'s "members" must be an array of { id, kind, name } non-empty strings.',
+  };
+}
+
+function refusedIncludes(): CatalogueItemFileResult {
+  return {
+    ok: false,
+    reason:
+      'item.json\'s "includes" is only allowed on a "collection", as an array of catalogue ids.',
   };
 }
 
@@ -386,6 +482,8 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
   const favorites = countField(value, "favorites");
   const packageUrl = stringField(value, "packageUrl");
   const thumbnail = stringField(value, "thumbnail");
+  const members = membersOf(value);
+  const includes = includesOf(value, kind ?? "");
   const facets = facetsOf(value);
   const remixOf = field(value, "remixOf");
   const publisher = optionalText(value, "publisher");
@@ -394,6 +492,7 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
   const bytes = optionalBytes(value);
 
   if (remixOf !== undefined && !isThemeRemix(remixOf)) return undefined;
+  if (members === undefined || includes === null) return undefined;
   if (publisher === null || executionProfile === null) return undefined;
   if (sha256 === null || (sha256 !== undefined && !isSha256(sha256)))
     return undefined;
@@ -426,7 +525,9 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
     favorites,
     packageUrl,
     thumbnail,
+    members,
     facets,
+    ...(includes === undefined ? {} : { includes }),
     ...(publisher === undefined ? {} : { publisher }),
     ...(executionProfile === undefined ? {} : { executionProfile }),
     ...(sha256 === undefined ? {} : { sha256 }),

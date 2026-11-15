@@ -10,6 +10,9 @@ import {
     hold and this client cannot read. */
 const KNOWN = ["dashboard-theme"];
 
+/** A catalogue id: the UUID every `includes` value must be. */
+const INCLUDED_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
+
 /** The record the Action derives: every field a reader touches, which is the
     shallow check the parser makes and nothing more. */
 function facets(
@@ -45,6 +48,7 @@ function entry(
     packageUrl: "https://example.test/acme-ops.json",
     thumbnail: "themes/acme-ops.png",
     facets: facets(),
+    members: [],
     ...overrides,
   };
 }
@@ -81,6 +85,7 @@ function unreadable(id: string): Record<string, unknown> {
 /** The fields `asEntry` holds for presence: each omitted-field case must fail
     when its own check is removed. */
 const REQUIRED_ENTRY_FIELDS = [
+  "members",
   "version",
   "createdAt",
   "updatedAt",
@@ -347,6 +352,70 @@ describe("parseCatalogueIndex", () => {
     ]);
   });
 
+  it("keeps a member kind this build does not ship", () => {
+    const members = [{ id: "a", kind: "future-thing", name: "A" }];
+    const parsed = parseCatalogueIndex(document([entry({ members })]), KNOWN);
+
+    expect(parsed.refused).toStrictEqual([]);
+    expect(parsed.entries[0]?.members).toStrictEqual(members);
+  });
+
+  it("refuses includes on a non-collection entry", () => {
+    const parsed = parseCatalogueIndex(
+      document([entry({ includes: [INCLUDED_ID] })]),
+      KNOWN,
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "dashboard-theme", reason: "malformed", count: 1 },
+    ]);
+  });
+
+  it("accepts a collection with includes and no members", () => {
+    const includes = [INCLUDED_ID];
+    const collection = entry({ kind: "collection", members: [], includes });
+    const parsed = parseCatalogueIndex(document([collection]), [
+      ...KNOWN,
+      "collection",
+    ]);
+
+    expect(parsed.refused).toStrictEqual([]);
+    expect(parsed.entries[0]).toMatchObject({
+      kind: "collection",
+      members: [],
+      includes,
+    });
+    expect(parseCatalogueItemFile(collection)).toMatchObject({
+      ok: true,
+      file: { kind: "collection", members: [], includes },
+    });
+  });
+
+  it("refuses a collection whose includes value is not a catalogue id", () => {
+    const parsed = parseCatalogueIndex(
+      document([entry({ kind: "collection", includes: ["aurora"] })]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "collection", reason: "malformed", count: 1 },
+    ]);
+  });
+
+  it("refuses a malformed member", () => {
+    const parsed = parseCatalogueIndex(
+      document([entry({ members: [{ id: "a", kind: "widget" }] })]),
+      KNOWN,
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "dashboard-theme", reason: "malformed", count: 1 },
+    ]);
+  });
+
   it("carries the entry's fields through unchanged", () => {
     const derived = facets({ width: 1920 });
     const parsed = parseCatalogueIndex(
@@ -366,6 +435,7 @@ describe("parseCatalogueIndex", () => {
       packageUrl: "https://example.test/acme-ops.json",
       thumbnail: "themes/acme-ops.png",
       facets: derived,
+      members: [],
     });
   });
 });
@@ -400,6 +470,7 @@ describe("parseCatalogueItemFile", () => {
         favorites: 3,
         packageUrl: "https://example.test/acme-ops.json",
         thumbnail: "themes/acme-ops.png",
+        members: [],
       },
     });
   });
@@ -461,7 +532,7 @@ describe("parseCatalogueItemFile", () => {
       {
         ok: false,
         reason:
-          'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.',
+          'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin, collection.',
       },
     );
   });

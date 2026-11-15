@@ -347,6 +347,8 @@ export type {
   CatalogueItemFileResult,
   CatalogueRefusal,
   CatalogueStatus,
+  MemberKind,
+  MemberRecord,
   MineEntry,
 } from "./theme/catalogue-index.js";
 export {
@@ -356,6 +358,7 @@ export {
   isCatalogueId,
   isCatalogueStatus,
   isStoreItemKind,
+  MEMBER_KINDS,
   parseCatalogueIndex,
   parseCatalogueItemFile,
   STORE_ITEM_KINDS,
