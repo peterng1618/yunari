@@ -80,7 +80,12 @@ describe("isPackId", () => {
 describe("the widget pack store", () => {
   it("installs, lists, reads and removes a widget pack", async () => {
     const store = createWidgetPackStore(directory);
-    const installed = await store.install(widgetPackageBytes());
+    // One generation, not two: a zip stamps its wall-clock DOS time, so two
+    // packages built from the same document differ at the timestamp bytes
+    // whenever the second lands in another second — which a loaded full run
+    // does, and a lone file does not.
+    const bytes = widgetPackageBytes();
+    const installed = await store.install(bytes);
     expect(installed.ok).toBe(true);
     if (!installed.ok) return;
 
@@ -91,7 +96,7 @@ describe("the widget pack store", () => {
       units: [{ id: "card", label: "Card" }],
     });
     expect((await store.list()).map((pack) => pack.id)).toEqual(["pack-one"]);
-    expect(await store.read("pack-one")).toEqual(widgetPackageBytes());
+    expect(await store.read("pack-one")).toEqual(bytes);
 
     await store.remove("pack-one");
     expect(await store.list()).toEqual([]);
