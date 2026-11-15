@@ -68,6 +68,7 @@ import {
   assignedThemeFor,
   createActiveThemeStore,
 } from "./settings/active-theme.js";
+import { createCatalogueOriginsStore } from "./settings/catalogue-origins.js";
 import { createCredentialStore } from "./settings/credentials.js";
 import { createDeviceSettingsStore } from "./settings/devices.js";
 import { createDisplaySettingsStore } from "./settings/display.js";
@@ -80,7 +81,6 @@ import { KeyProtectorUnavailable } from "./settings/secret-store.js";
 import { createSignalRgbBridgeSettings } from "./settings/signalrgb-bridge.js";
 import { type CustomSource, createSourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
-import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import { createWeatherSettingsStore } from "./settings/weather.js";
 import {
@@ -663,9 +663,9 @@ export async function run(argv: readonly string[]): Promise<number> {
     }),
     themeSettings: createThemeSettingsStore(settingsDir),
     // Beside the answers and from the same directory: where a copy came from is
-    // this machine's own record about a theme, like what a consumer answered
-    // for it — not part of the author's folder.
-    themeOrigins: createThemeOriginsStore(settingsDir),
+    // this machine's own record about a catalogue item, like what a consumer
+    // answered for it — not part of the author's folder.
+    catalogueOrigins: createCatalogueOriginsStore(settingsDir),
     storeSession,
     displays,
     pairingCodes,

@@ -5,6 +5,10 @@ import {
   MAX_PATH_PRESET_PACK_BYTES,
   type PathPresetStore,
 } from "../presets/path-presets.js";
+import {
+  type CatalogueOriginsStore,
+  catalogueOriginOf,
+} from "../settings/catalogue-origins.js";
 import { UnreadableJsonFileError } from "../settings/json-file.js";
 import {
   isPlatformError,
@@ -29,6 +33,9 @@ export interface PackRouteDeps {
   /** The author's path presets, served from the same dispatch as the widget
    *  packs. Omitted when this host serves none. */
   readonly pathPresets?: PathPresetStore | undefined;
+  /** Where each installed pack came from. Omitted when the host records none;
+   *  the listing then carries no origin rather than a fabricated one. */
+  readonly origins?: CatalogueOriginsStore | undefined;
   /** The same one-slot gate theme uploads use, so a pack body and a theme body
    *  are never buffered together; a second caller is answered 429. Omitted runs
    *  the read directly. */
@@ -75,7 +82,15 @@ async function handleWidgetPackRoutes(deps: PackRouteDeps): Promise<boolean> {
       sendText(response, 405, "Only GET is supported.");
       return true;
     }
-    sendJson(response, 200, { packs: await store.list() });
+    const packs = await store.list();
+    const origins = deps.origins === undefined ? {} : await deps.origins.read();
+
+    sendJson(response, 200, {
+      packs: packs.map((pack) => {
+        const origin = catalogueOriginOf(origins, "widget-pack", pack.id);
+        return { ...pack, ...(origin === undefined ? {} : { origin }) };
+      }),
+    });
     return true;
   }
 

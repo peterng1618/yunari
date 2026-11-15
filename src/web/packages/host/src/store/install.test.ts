@@ -11,7 +11,7 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
-import type { ThemeOriginsStore } from "../settings/theme-origins.js";
+import type { CatalogueOriginsStore } from "../settings/catalogue-origins.js";
 import type { ThemeStore } from "../themes/store.js";
 import {
   type CatalogueInstallRequest,
@@ -59,7 +59,7 @@ function stores(
   return {
     theme: {
       store: {} as ThemeStore,
-      origins: {} as ThemeOriginsStore,
+      origins: {} as CatalogueOriginsStore,
     },
     widgetPacks: widgetStore(async () => ({
       ok: true,

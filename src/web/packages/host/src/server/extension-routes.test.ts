@@ -9,6 +9,10 @@ import { createConsentStore } from "../extensions/consent-store";
 import { createPluginInstaller } from "../extensions/install";
 import { createExtensionService } from "../extensions/service";
 import {
+  type CatalogueOriginsStore,
+  createCatalogueOriginsStore,
+} from "../settings/catalogue-origins.js";
+import {
   createExtensionRoutes,
   MAX_EXTENSION_INSTALL_BYTES,
 } from "./extension-routes";
@@ -156,11 +160,13 @@ function orderStore(): {
 describe("extension routes", () => {
   let dir: string;
   let handle: ReturnType<typeof createExtensionRoutes>;
+  let origins: CatalogueOriginsStore;
   let saved: Record<string, unknown>;
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), "yunari-routes-"));
     saved = {};
+    origins = createCatalogueOriginsStore(path.join(dir, "settings"));
     handle = createExtensionRoutes({
       extensions: createExtensionService({
         installer: createPluginInstaller(path.join(dir, "extensions")),
@@ -168,6 +174,7 @@ describe("extension routes", () => {
         now: () => "2026-11-06T00:00:00Z",
         providerOrder: orderStore(),
       }),
+      origins,
       settings: {
         read: async () => saved,
         write: async (_key, values) => {
@@ -308,6 +315,35 @@ describe("extension routes", () => {
     expect(
       await call(handle, "GET", "/api/extensions").then((a) => a.json()),
     ).toEqual({ extensions: [] });
+  });
+
+  it("joins a catalogue origin onto the plugin it names", async () => {
+    await call(handle, "POST", "/api/extensions/install", {
+      body: pluginBytes(),
+      headers: { "content-type": "application/zip" },
+    });
+
+    // A plugin this host did not take from the catalogue carries no origin at
+    // all, rather than a key holding undefined.
+    const unrecorded = (
+      await call(handle, "GET", "/api/extensions")
+    ).json() as {
+      extensions: Record<string, unknown>[];
+    };
+    expect(unrecorded.extensions[0]).not.toHaveProperty("origin");
+
+    const origin = {
+      kind: "plugin",
+      catalogueId: "8f14e45f-ceea-4d67-b1a2-000000000002",
+      version: "1.0.0",
+      installedAt: "2026-11-16T00:00:00.000Z",
+    } as const;
+    await origins.write("plugin", "local/acme-sensors", origin);
+
+    const listed = (await call(handle, "GET", "/api/extensions")).json() as {
+      extensions: Record<string, unknown>[];
+    };
+    expect(listed.extensions[0]?.origin).toEqual(origin);
   });
 
   it("answers a held update with 409 and installs it on ?approve=1", async () => {

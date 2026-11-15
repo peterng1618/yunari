@@ -18,6 +18,10 @@ import {
   MAX_PATH_PRESET_PACK_BYTES,
   type PathPresetStore,
 } from "../presets/path-presets.js";
+import {
+  type CatalogueOriginsStore,
+  createCatalogueOriginsStore,
+} from "../settings/catalogue-origins.js";
 import { createLargeBodyGate } from "./http.js";
 import { MAX_WIDGET_PACK_BYTES } from "./limits.js";
 import { handlePackRoutes } from "./pack-routes.js";
@@ -50,6 +54,7 @@ let running: http.Server | undefined;
 let directory: string;
 let store: WidgetPackStore | undefined;
 let pathPresets: PathPresetStore | undefined;
+let origins: CatalogueOriginsStore | undefined;
 
 function pathPresetPackBytes(): Uint8Array {
   return new TextEncoder().encode(
@@ -81,6 +86,7 @@ async function start(
     path.join(directory, "presets"),
     BUILTIN_PATH_PRESETS,
   );
+  origins = createCatalogueOriginsStore(path.join(directory, "settings"));
   const largeBody = createLargeBodyGate();
   const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -90,6 +96,7 @@ async function start(
       url,
       store,
       pathPresets,
+      origins,
       largeBody,
     }).then((handled) => {
       if (handled) return;
@@ -113,6 +120,7 @@ afterEach(async () => {
   running = undefined;
   store = undefined;
   pathPresets = undefined;
+  origins = undefined;
   if (server !== undefined) {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
@@ -170,6 +178,34 @@ describe("the widget pack routes", () => {
       packs: [],
     });
     expect((await fetch(`${base}/api/widget-packs/pack-one`)).status).toBe(404);
+  });
+
+  it("joins a catalogue origin onto the pack it names", async () => {
+    const base = await start();
+    await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: widgetPackageBytes().buffer as ArrayBuffer,
+    });
+
+    // A pack this host did not take from the catalogue carries no origin at
+    // all, rather than a key holding undefined.
+    const unrecorded = (await (
+      await fetch(`${base}/api/widget-packs`)
+    ).json()) as { packs: Record<string, unknown>[] };
+    expect(unrecorded.packs[0]).not.toHaveProperty("origin");
+
+    const origin = {
+      kind: "widget-pack",
+      catalogueId: "8f14e45f-ceea-4d67-b1a2-000000000001",
+      version: "1.0.0",
+      installedAt: "2026-11-16T00:00:00.000Z",
+    } as const;
+    await origins?.write("widget-pack", "pack-one", origin);
+
+    const listed = (await (await fetch(`${base}/api/widget-packs`)).json()) as {
+      packs: Record<string, unknown>[];
+    };
+    expect(listed.packs[0]?.origin).toEqual(origin);
   });
 
   it("refuses an invalid package with the reader's message", async () => {

@@ -129,7 +129,7 @@ async function routeWith(install: ExtensionService["install"]): Promise<{
         extensions: extensionsService(install),
       } as unknown as HostServerOptions,
       themeStore: {} as ThemeStore,
-      themeOrigins: undefined,
+      catalogueOrigins: undefined,
       thumbnails: undefined,
       themeMedia: undefined,
       fetcher: (async () =>

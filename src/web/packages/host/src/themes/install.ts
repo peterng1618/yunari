@@ -1,6 +1,6 @@
 import { DASHBOARD_THEME_KIND } from "@yunari/renderer-core";
 import { readThemePackage, themeVideoRefusals } from "@yunari/theme-package";
-import type { ThemeOriginsStore } from "../settings/theme-origins.js";
+import type { CatalogueOriginsStore } from "../settings/catalogue-origins.js";
 import { downloadPackage } from "./download.js";
 import { importThemePackage, type ThemeImportResult } from "./import.js";
 import {
@@ -17,15 +17,19 @@ import type { ThumbnailStore } from "./thumbnails.js";
  *
  * The owners stay separate — `downloadPackage` holds the trust boundary for a
  * remote address, `importThemePackage` owns the id rule and the write, and
- * `ThemeOriginsStore` owns the provenance file. This module only orders them,
+ * `CatalogueOriginsStore` owns the provenance file. This module only orders them,
  * and its rule is that the origin is written **after** the theme landed: a
- * refused download or a refused theme write leaves `theme-origins.json`
+ * refused download or a refused theme write leaves `catalogue-origins.json`
  * untouched, and a refused origin write undoes a fresh import rather than
  * leaving a copy the catalogue cannot see.
  *
  * An item this machine already installed is an **update**: the bytes land on
  * that copy, in place, rather than beside it.
  */
+
+/** The prefix every dashboard-theme row's key carries. The key format is the
+ *  register's, and this module only needs the half that names its own kind. */
+const DASHBOARD_PREFIX = `${DASHBOARD_THEME_KIND}:`;
 
 export interface InstallRequest {
   readonly packageUrl: string;
@@ -37,7 +41,7 @@ export interface InstallRequest {
 
 export interface InstallOptions {
   readonly store: ThemeStore;
-  readonly origins: ThemeOriginsStore;
+  readonly origins: CatalogueOriginsStore;
   /** The picture's owner; omitted costs the package's picture and nothing else. */
   readonly thumbnails?: ThumbnailStore;
   /** Injected so a test drives the download without a network. */
@@ -185,7 +189,8 @@ export async function installThemeBytes(
   // fails, so the next press replaces nothing and mints no `name-2`; an update
   // keeps the copy that was already the person's, and only its origin misses.
   try {
-    await options.origins.write(imported.id, {
+    await options.origins.write(DASHBOARD_THEME_KIND, imported.id, {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: request.catalogueId,
       version: request.version,
       installedAt: new Date().toISOString(),
@@ -235,8 +240,11 @@ async function catalogueCopyId(
 ): Promise<string | undefined> {
   const origins = await options.origins.read();
   const ids = Object.entries(origins)
-    .filter(([, origin]) => origin.catalogueId === catalogueId)
-    .map(([id]) => id)
+    .filter(
+      ([key, origin]) =>
+        key.startsWith(DASHBOARD_PREFIX) && origin.catalogueId === catalogueId,
+    )
+    .map(([key]) => key.slice(DASHBOARD_PREFIX.length))
     .sort();
   if (ids.length === 0) return undefined;
 
@@ -324,15 +332,23 @@ async function replaceCatalogueCopy(
 async function forgetOtherCopies(
   catalogueId: string,
   id: string,
-  origins: ThemeOriginsStore,
+  origins: CatalogueOriginsStore,
 ): Promise<void> {
   const all = await origins.read();
   await Promise.all(
     Object.entries(all)
       .filter(
-        ([key, origin]) => key !== id && origin.catalogueId === catalogueId,
+        ([key, origin]) =>
+          key !== `${DASHBOARD_PREFIX}${id}` &&
+          key.startsWith(DASHBOARD_PREFIX) &&
+          origin.catalogueId === catalogueId,
       )
-      .map(([key]) => origins.removeTheme(key)),
+      .map(([key]) =>
+        origins.remove(
+          DASHBOARD_THEME_KIND,
+          key.slice(DASHBOARD_PREFIX.length),
+        ),
+      ),
   );
 }
 

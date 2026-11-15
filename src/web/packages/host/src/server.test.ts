@@ -61,6 +61,7 @@ import {
 import { newToken } from "./session/pairing.js";
 import { createPairingCodeStore } from "./session/pairing-code.js";
 import { createActiveThemeStore } from "./settings/active-theme.js";
+import { createCatalogueOriginsStore } from "./settings/catalogue-origins.js";
 import { createCredentialStore } from "./settings/credentials.js";
 import {
   KNOWN_CREDENTIALS,
@@ -86,7 +87,6 @@ import { createSecretStore } from "./settings/secret-store.js";
 import { createSignalRgbBridgeSettings } from "./settings/signalrgb-bridge.js";
 import { createSourceStore, type SourceStore } from "./settings/sources.js";
 import { createStoreSessionStore } from "./settings/store-session.js";
-import { createThemeOriginsStore } from "./settings/theme-origins.js";
 import { createThemeSettingsStore } from "./settings/theme-settings.js";
 import {
   createWeatherSettingsStore,
@@ -1937,7 +1937,7 @@ describe("Host theme routes", () => {
   describe("The listing carries an origin, and a deleted theme takes its own with it", () => {
     let originsDir: string;
     let libraryDir: string;
-    let origins: ReturnType<typeof createThemeOriginsStore>;
+    let origins: ReturnType<typeof createCatalogueOriginsStore>;
     let listing: ReturnType<typeof createHostServer>;
 
     // Two directories, because the two facts live apart: the theme is the
@@ -1945,7 +1945,7 @@ describe("Host theme routes", () => {
     beforeEach(async () => {
       originsDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-origins-"));
       libraryDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-library-"));
-      origins = createThemeOriginsStore(originsDir);
+      origins = createCatalogueOriginsStore(originsDir);
       listing = createHostServer({
         registry: new ProviderRegistry([]),
         bundles: { player: libraryDir, editor: libraryDir },
@@ -1962,7 +1962,7 @@ describe("Host theme routes", () => {
             );
           },
         }),
-        themeOrigins: origins,
+        catalogueOrigins: origins,
       });
     });
 
@@ -1986,10 +1986,11 @@ describe("Host theme routes", () => {
 
     /** The origin a case installs, so the assertions compare one value. */
     const origin = {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.2.0",
       installedAt: "2026-10-21T09:00:00.000Z",
-    };
+    } as const;
 
     async function saveTheme(): Promise<void> {
       await request(
@@ -2012,7 +2013,7 @@ describe("Host theme routes", () => {
 
     it("joins an origin onto the theme it names", async () => {
       await saveTheme();
-      await origins.write("living-room", origin);
+      await origins.write(DASHBOARD_THEME_KIND, "living-room", origin);
 
       expect((await listedEntry("living-room")).origin).toEqual(origin);
     });
@@ -2045,14 +2046,14 @@ describe("Host theme routes", () => {
       // rather than a refusal of the id: this theme *has* an origin, and a
       // lookup that answered only for ids no prototype names would drop it.
       await savePrototypeTheme();
-      await origins.write("__proto__", origin);
+      await origins.write(DASHBOARD_THEME_KIND, "__proto__", origin);
 
       expect((await listedEntry("__proto__")).origin).toEqual(origin);
     });
 
     it("does not fail the listing when an origin names a theme that is gone", async () => {
       await saveTheme();
-      await origins.write("ghost", origin);
+      await origins.write(DASHBOARD_THEME_KIND, "ghost", origin);
 
       const res = await request(listing.server, "GET", "/api/themes");
 
@@ -2071,7 +2072,7 @@ describe("Host theme routes", () => {
 
     it("removes a theme's origin with the theme", async () => {
       await saveTheme();
-      await origins.write("living-room", origin);
+      await origins.write(DASHBOARD_THEME_KIND, "living-room", origin);
 
       expect(
         (await request(listing.server, "DELETE", "/api/themes/living-room"))
@@ -2081,7 +2082,7 @@ describe("Host theme routes", () => {
     });
 
     it("keeps the origin when the removal failed", async () => {
-      await origins.write("living-room", origin);
+      await origins.write(DASHBOARD_THEME_KIND, "living-room", origin);
 
       expect(
         (await request(listing.server, "DELETE", "/api/themes/living-room"))
@@ -2089,7 +2090,9 @@ describe("Host theme routes", () => {
       ).toBe(404);
       // Nothing was removed, so nothing was swept: the origin is a fact about a
       // copy that is still on disk.
-      expect(await origins.read()).toEqual({ "living-room": origin });
+      expect(await origins.read()).toEqual({
+        "dashboard-theme:living-room": origin,
+      });
     });
   });
 
@@ -2247,7 +2250,7 @@ describe("Host theme routes", () => {
         registry: new ProviderRegistry([]),
         bundles: { player: library, editor: library },
         themeStore: createThemeStore(library),
-        themeOrigins: createThemeOriginsStore(settings),
+        catalogueOrigins: createCatalogueOriginsStore(settings),
         // No network: the route's download is driven by this answer.
         fetch: async () => answer(),
       });
@@ -2285,6 +2288,7 @@ describe("Host theme routes", () => {
       expect(listing.themes).toHaveLength(1);
       expect(listing.themes[0]?.id).toBe("family-room");
       expect(listing.themes[0]?.origin).toEqual({
+        kind: DASHBOARD_THEME_KIND,
         catalogueId: "aurora",
         version: "1.2.0",
         installedAt: expect.any(String),
@@ -2413,8 +2417,8 @@ describe("Host theme routes", () => {
         registry: new ProviderRegistry([]),
         bundles: { player: library, editor: library },
         themeStore: createThemeStore(library),
-        themeOrigins: {
-          ...createThemeOriginsStore(settings),
+        catalogueOrigins: {
+          ...createCatalogueOriginsStore(settings),
           write: async () => {
             throw new Error("the settings directory is read-only");
           },
@@ -10642,9 +10646,9 @@ describe("An admin write keeps the platform's words off the wire", () => {
         ...createThemeStore(os.tmpdir()),
         remove: () => Promise.resolve(true),
       },
-      themeOrigins: {
-        ...createThemeOriginsStore(os.tmpdir()),
-        removeTheme: refusedWrite(),
+      catalogueOrigins: {
+        ...createCatalogueOriginsStore(os.tmpdir()),
+        remove: refusedWrite(),
       },
     });
 

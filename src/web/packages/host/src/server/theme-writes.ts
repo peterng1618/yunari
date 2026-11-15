@@ -1,10 +1,19 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import type http from "node:http";
-import { isCatalogueId } from "@yunari/renderer-core";
+import path from "node:path";
+import { DASHBOARD_THEME_KIND, isCatalogueId } from "@yunari/renderer-core";
+import {
+  EDITOR_THEME_KIND,
+  readEditorThemePackage,
+} from "@yunari/theme-package";
 import { handleSubmitRoute } from "../catalogue/submit.js";
 import type { PublishedStore } from "../serve/published.js";
+import {
+  type CatalogueOrigin,
+  type CatalogueOriginsStore,
+  catalogueOriginOf,
+} from "../settings/catalogue-origins.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
-import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import {
   editorThemePath,
   installCatalogueItem,
@@ -62,7 +71,7 @@ type ThemeRecord = Awaited<ReturnType<ThemeStore["read"]>>;
 export interface ThemeWriteDeps {
   readonly options: HostServerOptions;
   readonly themeStore: ThemeStore;
-  readonly themeOrigins: ThemeOriginsStore | undefined;
+  readonly catalogueOrigins: CatalogueOriginsStore | undefined;
   readonly thumbnails: ThumbnailStore | undefined;
   readonly themeMedia: ThemeMedia | undefined;
   readonly fetcher: typeof fetch | undefined;
@@ -89,7 +98,7 @@ export function createThemeWrites(
   const {
     options,
     themeStore,
-    themeOrigins,
+    catalogueOrigins,
     thumbnails,
     themeMedia,
     fetcher,
@@ -262,7 +271,7 @@ export function createThemeWrites(
       // No origin owner, no install: the record is half of what this route
       // promises, and a theme that lands without one reads as a theme that did
       // not come from the catalogue.
-      if (themeOrigins === undefined) {
+      if (catalogueOrigins === undefined) {
         sendText(response, 503, "This host records no theme origins.");
         return true;
       }
@@ -296,7 +305,7 @@ export function createThemeWrites(
 
       const installed = await installThemeItem(install, {
         store: themeStore,
-        origins: themeOrigins,
+        origins: catalogueOrigins,
         ...(thumbnails === undefined ? {} : { thumbnails }),
         ...(fetcher === undefined ? {} : { fetch: fetcher }),
       });
@@ -360,12 +369,12 @@ export function createThemeWrites(
 
       const installed = await installCatalogueItem(install, {
         stores: {
-          ...(themeOrigins === undefined
+          ...(catalogueOrigins === undefined
             ? {}
             : {
                 theme: {
                   store: themeStore,
-                  origins: themeOrigins,
+                  origins: catalogueOrigins,
                   ...(thumbnails === undefined ? {} : { thumbnails }),
                   ...(fetcher === undefined ? {} : { fetch: fetcher }),
                 },
@@ -410,6 +419,34 @@ export function createThemeWrites(
         id: installed.id,
         consentRequired: installed.consentRequired,
       });
+      return true;
+    }
+
+    // The editor themes this host holds, for the Library's installed state. A
+    // row names the theme and, where the store recorded one, where it came
+    // from; the bytes are the `:id` route's answer, not this one's.
+    if (url.pathname === "/api/editor-themes") {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Editor themes are available on this PC only.");
+        return true;
+      }
+      if (options.editorThemesDirectory === undefined) {
+        sendText(response, 404, "This host keeps no editor themes.");
+        return true;
+      }
+
+      sendJson(
+        response,
+        200,
+        await installedEditorThemes(
+          options.editorThemesDirectory,
+          catalogueOrigins,
+        ),
+      );
       return true;
     }
 
@@ -734,7 +771,7 @@ export function createThemeWrites(
       // stale origin is logged and the removal stands.
       if (removed) {
         try {
-          await themeOrigins?.removeTheme(rawId);
+          await catalogueOrigins?.remove(DASHBOARD_THEME_KIND, rawId);
         } catch (error) {
           console.error(error);
         }
@@ -774,4 +811,67 @@ export function createThemeWrites(
     sendText(response, 405, "Only GET, PUT and DELETE are supported.");
     return true;
   };
+}
+
+/** The file name an installed editor theme ends with, and so the only file the
+ *  listing counts. */
+const EDITOR_THEME_SUFFIX = ".yunari-theme";
+
+/**
+ * The `.yunari-theme` files this host holds, each with the name its package
+ * declares and the origin recorded for it.
+ *
+ * A file the package reader refuses is not an installed theme, so it is left
+ * out rather than listed under a name the host cannot vouch for. The listing is
+ * flat: the install writes one file per catalogue item into this directory.
+ */
+async function installedEditorThemes(
+  directory: string,
+  origins: CatalogueOriginsStore | undefined,
+): Promise<
+  readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly origin?: CatalogueOrigin;
+  }[]
+> {
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch {
+    // No directory means nothing was installed: an empty library, not a fault.
+    return [];
+  }
+
+  const recorded = origins === undefined ? {} : await origins.read();
+
+  const rows = await Promise.all(
+    names
+      .filter((name) => name.endsWith(EDITOR_THEME_SUFFIX))
+      .map(async (name) => {
+        const id = name.slice(0, -EDITOR_THEME_SUFFIX.length);
+        if (!isCatalogueId(id)) return undefined;
+
+        let bytes: Uint8Array;
+        try {
+          bytes = await readFile(path.join(directory, name));
+        } catch {
+          return undefined;
+        }
+
+        const parsed = readEditorThemePackage(new Uint8Array(bytes));
+        if (!parsed.ok) return undefined;
+
+        const origin = catalogueOriginOf(recorded, EDITOR_THEME_KIND, id);
+        return {
+          id,
+          name: parsed.document.name,
+          ...(origin === undefined ? {} : { origin }),
+        };
+      }),
+  );
+
+  return rows
+    .filter((row) => row !== undefined)
+    .sort((left, right) => left.id.localeCompare(right.id));
 }

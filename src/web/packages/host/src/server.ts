@@ -196,7 +196,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeMedia = options.themeMedia;
   const fetcher = options.fetch;
   const themeSettings = options.themeSettings;
-  const themeOrigins = options.themeOrigins;
+  const catalogueOrigins = options.catalogueOrigins;
   const published = options.published ?? createPublishedStore();
   const widgetPacks = options.widgetPacks;
   const pathPresets = options.pathPresets;
@@ -366,6 +366,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const extensionRoutes = createExtensionRoutes({
     extensions,
     settings: pluginSettings,
+    origins: catalogueOrigins,
   });
   const settingsRoutes = createSettingsRoutes({
     options,
@@ -403,7 +404,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
     themeStore,
     activeTheme,
     themeSettings,
-    themeOrigins,
+    catalogueOrigins,
     thumbnails,
     themeMedia,
     panelFamilies,
@@ -411,7 +412,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
   const themeWrites = createThemeWrites({
     options,
     themeStore,
-    themeOrigins,
+    catalogueOrigins,
     thumbnails,
     themeMedia,
     fetcher,
@@ -506,6 +507,7 @@ export function createHostServer(options: HostServerOptions): HostServer {
         url,
         store: widgetPacks,
         pathPresets,
+        origins: catalogueOrigins,
         largeBody,
       })
     )

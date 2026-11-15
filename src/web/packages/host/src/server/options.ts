@@ -19,6 +19,7 @@ import type { Launcher } from "../serve/display-launcher.js";
 import type { PublishedStore } from "../serve/published.js";
 import type { PairingCodeStore } from "../session/pairing-code.js";
 import type { ActiveThemeStore } from "../settings/active-theme.js";
+import type { CatalogueOriginsStore } from "../settings/catalogue-origins.js";
 import type { CredentialStore } from "../settings/credentials.js";
 import type { KnownCredential } from "../settings/credentials-registry.js";
 import type { DeviceSettingsStore } from "../settings/devices.js";
@@ -33,7 +34,6 @@ import type { Monitor } from "../settings/monitors.js";
 import type { SignalRgbBridgeSettingsStore } from "../settings/signalrgb-bridge.js";
 import type { SourceStore } from "../settings/sources.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
-import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import type { WeatherSettingsStore } from "../settings/weather.js";
 import type { SignalRgbBridge } from "../signalrgb/bridge.js";
@@ -118,9 +118,10 @@ export interface HostServerOptions {
   readonly devices?: DeviceSettingsStore;
   /** Per-theme answers. Omitted when the host stores none. */
   readonly themeSettings?: ThemeSettingsStore;
-  /** Where each library theme came from. Omitted when the host records none,
-   *  which is what a caller that only serves its own themes wants. */
-  readonly themeOrigins?: ThemeOriginsStore;
+  /** Where each installed catalogue item came from, for every kind. Omitted
+   *  when the host records none, which is what a caller that only serves its
+   *  own themes wants. */
+  readonly catalogueOrigins?: CatalogueOriginsStore;
   /** Theme thumbnails. Omitted when the host stores none. */
   readonly thumbnails?: ThumbnailStore;
   /** The theme video's derived panel media: a still frame and device-sized

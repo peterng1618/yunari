@@ -1,5 +1,6 @@
 import type http from "node:http";
 import {
+  DASHBOARD_THEME_KIND,
   type DisplayRenderMode,
   type DisplayShape,
   themeAssetContentType,
@@ -7,12 +8,15 @@ import {
 import type { PanelFamilyRegistry } from "../panels/panel-families.js";
 import type { ActiveThemeStore } from "../settings/active-theme.js";
 import {
+  type CatalogueOriginsStore,
+  catalogueOriginOf,
+} from "../settings/catalogue-origins.js";
+import {
   DEFAULT_DISPLAY,
   type DisplayKind,
   type DisplayStore,
 } from "../settings/displays.js";
 import { requiredDeviceGroups } from "../settings/required-devices.js";
-import type { ThemeOriginsStore } from "../settings/theme-origins.js";
 import type { ThemeSettingsStore } from "../settings/theme-settings.js";
 import { isValidThemeId, type ThemeStore } from "../themes/store.js";
 import { SHIPPED_TEMPLATES } from "../themes/templates.js";
@@ -64,7 +68,7 @@ export interface ThemeRouteDeps {
   readonly themeStore: ThemeStore;
   readonly activeTheme: ActiveThemeStore | undefined;
   readonly themeSettings: ThemeSettingsStore | undefined;
-  readonly themeOrigins: ThemeOriginsStore | undefined;
+  readonly catalogueOrigins: CatalogueOriginsStore | undefined;
   readonly thumbnails: ThumbnailStore | undefined;
   readonly themeMedia: ThemeMedia | undefined;
   readonly panelFamilies: PanelFamilyRegistry;
@@ -86,7 +90,7 @@ export function createThemeRoutes(
     themeStore,
     activeTheme,
     themeSettings,
-    themeOrigins,
+    catalogueOrigins,
     thumbnails,
     themeMedia,
     panelFamilies,
@@ -201,16 +205,15 @@ export function createThemeRoutes(
       // rather than pruning afterwards.
       const themes = await themeStore.list();
       const origins =
-        themeOrigins === undefined ? {} : await themeOrigins.read();
+        catalogueOrigins === undefined ? {} : await catalogueOrigins.read();
 
       sendJson(response, 200, {
         themes: themes.map((entry) => {
-          // `Object.hasOwn`, not a bare read: `__proto__` is a legal theme id,
-          // and `origins["__proto__"]` answers `Object.prototype` for a theme
-          // that has no origin at all.
-          const origin = Object.hasOwn(origins, entry.id)
-            ? origins[entry.id]
-            : undefined;
+          const origin = catalogueOriginOf(
+            origins,
+            DASHBOARD_THEME_KIND,
+            entry.id,
+          );
           // Absence is the truth, the same way `author` is absent for a theme
           // that declares none — not a key holding undefined.
           return { ...entry, ...(origin === undefined ? {} : { origin }) };

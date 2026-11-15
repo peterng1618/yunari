@@ -10,9 +10,9 @@ import {
 import { writeThemePackage } from "@yunari/theme-package";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createThemeOriginsStore,
-  type ThemeOriginsStore,
-} from "../settings/theme-origins.js";
+  type CatalogueOriginsStore,
+  createCatalogueOriginsStore,
+} from "../settings/catalogue-origins.js";
 import {
   INSTALL_REFUSALS,
   type InstallRequest,
@@ -114,7 +114,7 @@ describe("installCatalogueItem", () => {
   let libraryDir: string;
   let originsDir: string;
   let store: ThemeStore;
-  let origins: ThemeOriginsStore;
+  let origins: CatalogueOriginsStore;
 
   beforeEach(async () => {
     libraryDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunari-install-"));
@@ -129,7 +129,7 @@ describe("installCatalogueItem", () => {
         await fs.rm(folder, { recursive: true, force: true });
       },
     });
-    origins = createThemeOriginsStore(originsDir);
+    origins = createCatalogueOriginsStore(originsDir);
   });
 
   afterEach(async () => {
@@ -151,8 +151,8 @@ describe("installCatalogueItem", () => {
     const all = await origins.read();
     // Keyed by the library id, not the catalogue id — the two are deliberately
     // different here, so a write that swapped them fails.
-    expect(Object.keys(all)).toEqual(["living-room"]);
-    const origin = all["living-room"];
+    expect(Object.keys(all)).toEqual(["dashboard-theme:living-room"]);
+    const origin = all["dashboard-theme:living-room"];
     expect(origin?.catalogueId).toBe("aurora");
     expect(origin?.version).toBe("1.2.0");
     const installedAt = Date.parse(origin?.installedAt ?? "");
@@ -181,7 +181,8 @@ describe("installCatalogueItem", () => {
     await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
       expectFree: true,
     });
-    await origins.write("aurora-copy", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-copy", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
@@ -203,7 +204,9 @@ describe("installCatalogueItem", () => {
     expect((await store.read("aurora-copy"))?.envelope.metadata?.name).toBe(
       "Old Aurora",
     );
-    expect((await origins.read())["aurora-copy"]?.version).toBe("1.0.0");
+    expect((await origins.read())["dashboard-theme:aurora-copy"]?.version).toBe(
+      "1.0.0",
+    );
   });
 
   it("refuses a kind this build does not run", async () => {
@@ -223,7 +226,7 @@ describe("installCatalogueItem", () => {
   });
 
   it("removes a fresh import when its origin could not be written", async () => {
-    const refusing: ThemeOriginsStore = {
+    const refusing: CatalogueOriginsStore = {
       ...origins,
       write: async () => {
         throw new Error("the settings directory is read-only");
@@ -247,7 +250,7 @@ describe("installCatalogueItem", () => {
   });
 
   it("says the copy is left behind when the rollback itself fails", async () => {
-    const refusing: ThemeOriginsStore = {
+    const refusing: CatalogueOriginsStore = {
       ...origins,
       write: async () => {
         throw new Error("the settings directory is read-only");
@@ -280,12 +283,13 @@ describe("installCatalogueItem", () => {
     await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
       expectFree: true,
     });
-    await origins.write("aurora-copy", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-copy", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
     });
-    const refusing: ThemeOriginsStore = {
+    const refusing: CatalogueOriginsStore = {
       ...origins,
       write: async () => {
         throw new Error("the settings directory is read-only");
@@ -306,7 +310,9 @@ describe("installCatalogueItem", () => {
     expect((await store.list()).map((entry) => entry.id)).toEqual([
       "aurora-copy",
     ]);
-    expect((await origins.read())["aurora-copy"]?.version).toBe("1.0.0");
+    expect((await origins.read())["dashboard-theme:aurora-copy"]?.version).toBe(
+      "1.0.0",
+    );
   });
 
   it("stamps the library id into the document", async () => {
@@ -324,7 +330,9 @@ describe("installCatalogueItem", () => {
     expect((await store.read("living-room-2"))?.envelope.id).toBe(
       "living-room-2",
     );
-    expect(Object.keys(await origins.read())).toEqual(["living-room-2"]);
+    expect(Object.keys(await origins.read())).toEqual([
+      "dashboard-theme:living-room-2",
+    ]);
   });
 
   it("forwards an address no catalogue can produce as the caller's refusal", async () => {
@@ -361,7 +369,8 @@ describe("installCatalogueItem", () => {
     await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
       expectFree: true,
     });
-    await origins.write("aurora-copy", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-copy", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
@@ -386,7 +395,8 @@ describe("installCatalogueItem", () => {
     await store.write("aurora-copy", themeOf("aurora-copy", "Old Aurora"), {
       expectFree: true,
     });
-    await origins.write("aurora-copy", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-copy", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
@@ -430,7 +440,7 @@ describe("installCatalogueItem", () => {
         fetch: serving(packageOf("living-room", "Living Room")),
       },
     );
-    const before = (await origins.read())["living-room"];
+    const before = (await origins.read())["dashboard-theme:living-room"];
 
     // Distinct instants, so a second write of the first one is caught.
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -444,8 +454,8 @@ describe("installCatalogueItem", () => {
     );
 
     const all = await origins.read();
-    expect(Object.keys(all)).toEqual(["living-room"]);
-    const after = all["living-room"];
+    expect(Object.keys(all)).toEqual(["dashboard-theme:living-room"]);
+    const after = all["dashboard-theme:living-room"];
     expect(after?.version).toBe("1.3.0");
     expect(Date.parse(after?.installedAt ?? "")).toBeGreaterThan(
       Date.parse(before?.installedAt ?? ""),
@@ -471,7 +481,8 @@ describe("installCatalogueItem", () => {
   });
 
   it("does not replace a theme a stale origin names but the library no longer holds", async () => {
-    await origins.write("aurora-old", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-old", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
@@ -490,14 +501,17 @@ describe("installCatalogueItem", () => {
       "living-room",
     ]);
     // The dead key goes with it, so one item never has two origin entries.
-    expect(Object.keys(await origins.read())).toEqual(["living-room"]);
+    expect(Object.keys(await origins.read())).toEqual([
+      "dashboard-theme:living-room",
+    ]);
   });
 
   it("repairs an origin naming a theme the library cannot read", async () => {
     const folder = path.join(libraryDir, "aurora-copy");
     await fs.mkdir(folder, { recursive: true });
     await fs.writeFile(path.join(folder, "theme.json"), "{ not json");
-    await origins.write("aurora-copy", {
+    await origins.write(DASHBOARD_THEME_KIND, "aurora-copy", {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "aurora",
       version: "1.0.0",
       installedAt: new Date(0).toISOString(),
@@ -516,7 +530,9 @@ describe("installCatalogueItem", () => {
       "aurora-copy",
     ]);
     expect((await store.read("aurora-copy"))?.envelope.id).toBe("aurora-copy");
-    expect(Object.keys(await origins.read())).toEqual(["aurora-copy"]);
+    expect(Object.keys(await origins.read())).toEqual([
+      "dashboard-theme:aurora-copy",
+    ]);
   });
 
   it("lands two items that resolve the same library id on distinct ids", async () => {
@@ -569,8 +585,8 @@ describe("installCatalogueItem", () => {
       "living-room-2",
     ]);
     expect(Object.keys(await origins.read()).sort()).toEqual([
-      "living-room",
-      "living-room-2",
+      "dashboard-theme:living-room",
+      "dashboard-theme:living-room-2",
     ]);
   });
 
@@ -601,7 +617,9 @@ describe("installCatalogueItem", () => {
     expect((await store.list()).map((entry) => entry.id)).toEqual([
       "living-room",
     ]);
-    expect((await origins.read())["living-room"]?.version).toBe("1.3.0");
+    expect((await origins.read())["dashboard-theme:living-room"]?.version).toBe(
+      "1.3.0",
+    );
     expect((await store.read("living-room"))?.envelope.metadata?.name).toBe(
       "Living Room 2",
     );

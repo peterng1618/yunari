@@ -7,7 +7,7 @@ import { MAX_ARCHIVE_BYTES } from "@yunari/theme-package";
  * the configured store's own origin (the shipped catalogue when none is
  * configured), no redirect, and the reader's own cap enforced while the body
  * streams. The bytes then go to the owners that already exist
- * (`installCatalogueItem`, `ThemeStore`, `ThemeOriginsStore`); this module
+ * (`installCatalogueItem`, `ThemeStore`, `CatalogueOriginsStore`); this module
  * writes nothing.
  */
 

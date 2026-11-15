@@ -2,6 +2,10 @@ import type http from "node:http";
 import type { ProviderOrder } from "../extensions/provider-order.js";
 import type { ExtensionService } from "../extensions/service.js";
 import type { PluginSettingsStore } from "../extensions/settings.js";
+import {
+  type CatalogueOriginsStore,
+  catalogueOriginOf,
+} from "../settings/catalogue-origins.js";
 import { readBody, readBytes, sendJson, sendText } from "./http.js";
 import { isForeignOrigin, isLoopbackRemote } from "./identity.js";
 
@@ -19,6 +23,9 @@ export interface ExtensionRouteDeps {
   /** Declarative plugin settings. Omitted when this host stores none; the
    *  settings routes then say so rather than accepting values nowhere keeps. */
   readonly settings?: PluginSettingsStore | undefined;
+  /** Where each installed plugin came from. Omitted when the host records
+   *  none; the listing then carries no origin rather than a fabricated one. */
+  readonly origins?: CatalogueOriginsStore | undefined;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -87,7 +94,16 @@ export function createExtensionRoutes(
         sendText(response, 405, "Only GET is supported.");
         return true;
       }
-      sendJson(response, 200, { extensions: await extensions.list() });
+      const installed = await extensions.list();
+      const origins =
+        deps.origins === undefined ? {} : await deps.origins.read();
+
+      sendJson(response, 200, {
+        extensions: installed.map((extension) => {
+          const origin = catalogueOriginOf(origins, "plugin", extension.key);
+          return { ...extension, ...(origin === undefined ? {} : { origin }) };
+        }),
+      });
       return true;
     }
 

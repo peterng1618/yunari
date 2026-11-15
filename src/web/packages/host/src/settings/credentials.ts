@@ -74,7 +74,7 @@ function asCredential(value: unknown): StoredCredential | undefined {
 /**
  * The document's contents, with every key held to `CREDENTIAL_ID` and every
  * entry validated. Built through `Object.fromEntries` for the same reason
- * `theme-origins.ts` is: `__proto__` is a legal id, and assignment would reach
+ * `catalogue-origins.ts` is: `__proto__` is a legal id, and assignment would reach
  * the map's prototype instead of storing the entry.
  */
 function normalizeCredentials(
