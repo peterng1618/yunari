@@ -1539,7 +1539,9 @@ body,
 .editor-shell-menu-popup,
 [data-base-ui-portal],
 .settings-mode-nav,
-.settings-mode-content {
+.settings-mode-content,
+.library-mode-nav,
+.library-mode-content {
   scrollbar-width: thin;
   scrollbar-color: var(--yunari-scrollbar-thumb) var(--yunari-scrollbar-track);
 }
@@ -1550,7 +1552,9 @@ body,
 .editor-shell *,
 [data-base-ui-portal] *,
 .settings-mode-nav *,
-.settings-mode-content * {
+.settings-mode-content *,
+.library-mode-nav *,
+.library-mode-content * {
   scrollbar-width: thin;
 }
 /* `cursor: pointer` is the shell's standing convention for a control, and it is
@@ -2217,19 +2221,22 @@ body,
    **The column ground is not painted.** The surface tokens are the panel's own
    and every other role is lighter than the panel, the wrong direction for a
    column; the active row's lift and accent bar are what distinguish it. */
-.settings-mode {
+.settings-mode,
+.library-mode {
   display: flex;
   align-items: stretch;
   flex: 1;
   min-height: 0;
 }
-.settings-mode-nav {
+.settings-mode-nav,
+.library-mode-nav {
   flex: 0 0 auto;
   width: var(--settings-nav-width);
   padding: var(--space-12) var(--space-8) var(--space-12) 0;
   overflow-y: auto;
 }
-.settings-mode-nav-list {
+.settings-mode-nav-list,
+.library-mode-nav-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -2239,7 +2246,8 @@ body,
 }
 /* A group heading is the same eyebrow the pages draw over their sections: the
    word is a label for rows, not a destination. */
-.settings-mode-nav-group {
+.settings-mode-nav-group,
+.library-mode-nav-group {
   padding: var(--space-12) var(--space-8) var(--space-4);
   color: var(--shell-muted);
   font-size: var(--text-2xs);
@@ -2248,10 +2256,12 @@ body,
   letter-spacing: 0.11em;
   text-transform: uppercase;
 }
-.settings-mode-nav-list > .settings-mode-nav-group:first-child {
+.settings-mode-nav-list > .settings-mode-nav-group:first-child,
+.library-mode-nav-list > .library-mode-nav-group:first-child {
   padding-top: var(--space-4);
 }
-.settings-mode-nav-item {
+.settings-mode-nav-item,
+.library-mode-nav-item {
   appearance: none;
   display: flex;
   align-items: center;
@@ -2267,25 +2277,30 @@ body,
   text-align: left;
   cursor: pointer;
 }
-.settings-mode-nav-item:hover {
+.settings-mode-nav-item:hover,
+.library-mode-nav-item:hover {
   color: var(--shell-text);
 }
-.settings-mode-nav-item[data-active] {
+.settings-mode-nav-item[data-active],
+.library-mode-nav-item[data-active] {
   background: color-mix(in srgb, var(--shell-text) 8%, transparent);
   box-shadow: inset 2px 0 0 var(--shell-accent);
   color: var(--shell-text);
 }
-.settings-mode-nav-item[data-active] svg {
+.settings-mode-nav-item[data-active] svg,
+.library-mode-nav-item[data-active] svg {
   color: var(--shell-accent);
 }
-.settings-mode-nav-item:focus-visible {
+.settings-mode-nav-item:focus-visible,
+.library-mode-nav-item:focus-visible {
   outline: 2px solid var(--shell-accent);
   outline-offset: -2px;
 }
 /* The page beside the column: one element owns the hairline, the gutter and the
    scroll, so the column keeps its exact width (see above). The page measure is
    the page's own; the content track may be wider on a large screen. */
-.settings-mode-content {
+.settings-mode-content,
+.library-mode-content {
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -2293,7 +2308,8 @@ body,
   border-left: 1px solid var(--shell-edge);
   overflow-y: auto;
 }
-.settings-mode-page {
+.settings-mode-page,
+.library-mode-page {
   max-width: var(--settings-page-measure);
 }
 

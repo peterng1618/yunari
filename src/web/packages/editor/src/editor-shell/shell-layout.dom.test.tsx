@@ -52,7 +52,7 @@ Element.prototype.getAnimations ??= (): never[] => [];
 // the same patch.
 beforeAll(() => {
   // These cases read the editor, which is no longer the URL-less default: a
-  // session opens on Themes. Name the surface they mount.
+  // session opens on the Library. Name the surface they mount.
   window.history.replaceState({}, "", "/?mode=editor");
   const matches = Element.prototype.matches;
   Element.prototype.matches = Object.assign(function (
@@ -1643,7 +1643,7 @@ it("offers the three modes and marks the active one", async () => {
   expect(
     modeSegments(root).map((segment) => segment.textContent),
     "the header does not offer the three modes, in order",
-  ).toEqual([uiCopy.modes.themes, uiCopy.modes.editor, uiCopy.modes.settings]);
+  ).toEqual([uiCopy.modes.library, uiCopy.modes.editor, uiCopy.modes.settings]);
   expect(chosen(root)).toEqual(["false", "true", "false"]);
   // the control-id rule: every control carries an id, the group's and each segment's.
   expect(
@@ -1651,7 +1651,7 @@ it("offers the three modes and marks the active one", async () => {
     "the switch carries no id",
   ).toBe("yunari-shell-modes");
   expect(modeSegments(root).map((segment) => segment.id)).toEqual([
-    "yunari-shell-modes-themes",
+    "yunari-shell-modes-library",
     "yunari-shell-modes-editor",
     "yunari-shell-modes-settings",
   ]);
@@ -1675,8 +1675,8 @@ it("offers the three modes and marks the active one", async () => {
     root
       .querySelector("[data-yunari-mode-region]")
       ?.getAttribute("data-yunari-mode-region"),
-    "the themes mode renders no region",
-  ).toBe("themes");
+    "the library mode renders no region",
+  ).toBe("library");
 
   await act(async () => modeSegments(root)[1]?.click());
 
@@ -1686,6 +1686,81 @@ it("offers the three modes and marks the active one", async () => {
   );
 
   layout.destroy();
+});
+
+/**
+ * **A later surface opens the Library on a named page, mode and page together**
+ * (R1): the Add pane's widget link is the first caller, and it must land the
+ * shell on the page it named rather than on whatever page was last showing.
+ */
+it("opens a named Library page and the mode together", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ themes: [], templates: [] }), {
+          status: 200,
+        }),
+    ),
+  );
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+
+  await act(async () => layout.openLibrary("widgets"));
+
+  expect(chosen(root)).toEqual(["true", "false", "false"]);
+  expect(
+    root.querySelector('[data-yunari-library-panel="widgets"]'),
+    "the Library did not open on the page it was asked for",
+  ).not.toBeNull();
+
+  layout.destroy();
+  vi.unstubAllGlobals();
+});
+
+it("draws the header's third mode as Library", () => {
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+
+  const segments = modeSegments(root);
+  expect(segments).toHaveLength(3);
+  expect(segments[0]?.textContent).toBe(uiCopy.modes.library);
+  expect(segments[0]?.id).toBe("yunari-shell-modes-library");
+
+  layout.destroy();
+});
+
+/**
+ * **A Library switch hides the editor's body; it never unmounts it.** The canvas
+ * host lives inside the body, so taking it off the tree would destroy the open
+ * document on the way to the library — the invariant every mode switch keeps.
+ */
+it("keeps the editor body unmounted-hidden across a Library switch", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ themes: [], templates: [] }), {
+          status: 200,
+        }),
+    ),
+  );
+  const root = document.createElement("div");
+  const layout = createShellLayout(root);
+  const body = root.querySelector<HTMLElement>(".editor-shell-body");
+
+  await act(async () => modeSegments(root)[0]?.click());
+
+  expect(body, "the editor body was removed from the tree").not.toBeNull();
+  expect(root.contains(body), "the editor body was unmounted").toBe(true);
+  expect(body?.hidden, "the editor body is still showing").toBe(true);
+
+  await act(async () => modeSegments(root)[1]?.click());
+  expect(root.contains(body)).toBe(true);
+  expect(body?.hidden).toBe(false);
+
+  layout.destroy();
+  vi.unstubAllGlobals();
 });
 
 /**
@@ -1702,15 +1777,15 @@ it("reports only the mode changes the switch actually made", async () => {
   });
 
   await act(async () => modeSegments(root)[0]?.click());
-  expect(seen).toEqual(["themes"]);
+  expect(seen).toEqual(["library"]);
 
   await act(async () => modeSegments(root)[0]?.click());
   expect(seen, "the segment already showing reported a change").toEqual([
-    "themes",
+    "library",
   ]);
 
   await act(async () => modeSegments(root)[1]?.click());
-  expect(seen).toEqual(["themes", "editor"]);
+  expect(seen).toEqual(["library", "editor"]);
 
   layout.destroy();
 });
@@ -1956,11 +2031,12 @@ it("switches away from a dirty editor without asking, and keeps the document", a
 });
 
 /**
- * **The two halves are a mode-level choice, so they live in the header**
- * (#304): the shell draws them beside the mode switch and hands the chosen half
- * to the region, which is what the region's own fallback is for a direct mount.
+ * **The installed-state filter is a mode-level choice, so it lives in the
+ * header**, where the two halves used to sit: the shell draws it beside the mode
+ * switch and hands the chosen state to the region. A second copy under the
+ * header would be the bar the rail rule forbids.
  */
-it("puts the store's halves in the header and not in the region", async () => {
+it("puts the Library state filter in the header and not in the region", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(
@@ -1973,17 +2049,24 @@ it("puts the store's halves in the header and not in the region", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  await act(async () => modeSegments(root)[0]?.click());
+  await act(async () => layout.openLibrary("widgets"));
   await act(async () => {});
 
   const header = root.querySelector(".editor-shell-header");
+  const filter = header?.querySelector("[data-yunari-library-state]");
+  expect(filter, "the header does not hold the state filter").not.toBeNull();
+  const segments = [...(filter?.querySelectorAll("button") ?? [])];
+  expect(segments.map((segment) => segment.textContent)).toEqual([
+    uiCopy.library.state.all,
+    uiCopy.library.state.onThisPc,
+    uiCopy.library.state.notInstalled,
+  ]);
+  expect(filter?.getAttribute("aria-label")).toBe(uiCopy.library.state.label);
   expect(
-    header?.querySelector("[data-yunari-store-halves]"),
-    "the header does not hold the store's halves",
-  ).not.toBeNull();
-  expect(
-    root.querySelector("[data-yunari-store-region] [data-yunari-store-halves]"),
-    "the region draws a second half control under the header",
+    root.querySelector(
+      "[data-yunari-library-region] [data-yunari-library-state]",
+    ),
+    "the region draws a second state filter under the header",
   ).toBeNull();
 
   layout.destroy();
@@ -1991,16 +2074,15 @@ it("puts the store's halves in the header and not in the region", async () => {
 });
 
 /**
- * **The third mode has a surface, and the store's is not showing beside it.**
+ * **The third mode has a surface, and the Settings one is not showing beside
+ * it.**
  *
- * A.1 left the seam and A.2 filled it for Themes; this is the Host region
- * mounting in the same section — one `[data-yunari-mode-region]` element
- * whichever of the two draws, which is the seam's own rule rather than two
- * regions stacked. Both clients are the shell's own, so the stub is what the
- * host answers: the display map, the library, the Host's devices and its display
- * settings.
+ * One `[data-yunari-mode-region]` element whichever region draws, which is the
+ * seam's own rule rather than two regions stacked. Both clients are the shell's
+ * own, so the stub is what the host answers: the display map, the library, the
+ * Host's devices and its display settings.
  */
-it("shows the Settings mode's own region, and the store's only in Themes", async () => {
+it("shows the Settings mode's own region, and the Library's only in Library", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -2039,12 +2121,12 @@ it("shows the Settings mode's own region, and the store's only in Themes", async
 
   await act(async () => modeSegments(root)[0]?.click());
   expect(
-    root.querySelector("[data-yunari-store-region]"),
-    "the Themes mode drew no store region",
+    root.querySelector("[data-yunari-library-region]"),
+    "the Library mode drew no region",
   ).not.toBeNull();
   expect(
     root.querySelector("[data-yunari-settings-region]"),
-    "the store's region was drawn beside the Settings one",
+    "the library region was drawn beside the Settings one",
   ).toBeNull();
 
   await act(async () => modeSegments(root)[2]?.click());
@@ -2055,8 +2137,8 @@ it("shows the Settings mode's own region, and the store's only in Themes", async
     "the Settings mode drew no region",
   ).not.toBeNull();
   expect(
-    root.querySelector("[data-yunari-store-region]"),
-    "the store's region is still showing in the Settings mode",
+    root.querySelector("[data-yunari-library-region]"),
+    "the library region is still showing in the Settings mode",
   ).toBeNull();
   const sections = root.querySelectorAll("[data-yunari-mode-region]");
   expect(sections, "the seam is more than one element").toHaveLength(1);

@@ -1076,7 +1076,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
     "aria-pressed",
     "true",
   );
-  await expect(segment(uiCopy.modes.themes)).toHaveAttribute(
+  await expect(segment(uiCopy.modes.library)).toHaveAttribute(
     "aria-pressed",
     "false",
   );
@@ -1207,12 +1207,12 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
   // A mode switch hides the editor's body rather than unmounting it, so it
   // keeps the dirty document and asks nothing. The replacement prompt belongs
   // to New/Open, which do replace the document.
-  await segment(uiCopy.modes.themes).click();
+  await segment(uiCopy.modes.library).click();
   await expect(
     page.getByRole("dialog"),
     "leaving a dirty document asked a question it cannot lose the answer to",
   ).toHaveCount(0);
-  await expect(segment(uiCopy.modes.themes)).toHaveAttribute(
+  await expect(segment(uiCopy.modes.library)).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -1294,7 +1294,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
  * and was measured once at 380 while this case was written: the fifth facet
  * moved to the next line and none was lost.
  */
-test("the themes mode draws the store's own header row, and no width drops a facet", async ({
+test("the Library draws the dashboard grid's own header row, and no width drops a facet", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1305,11 +1305,11 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   ).toBeVisible();
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
   await expect(
     page.locator(".editor-shell-body"),
     "the editor's body was not hidden",
@@ -1318,12 +1318,10 @@ test("the themes mode draws the store's own header row, and no width drops a fac
   const header = region.locator("[data-yunari-store-header]");
   await expect(header, "the region draws no header row").toBeVisible();
 
-  // The two halves, named and opening on Local — the `Segmented`, which is a
-  // mode-level choice in the **shell header** beside the mode switch (`#304`),
-  // not in the region's own row.
-  const halves = page.locator(
-    ".editor-shell-header [data-yunari-store-halves] button",
-  );
+  // The two halves, named and opening on Local. Dashboard themes keeps the
+  // theme grid's own halves inside its header row for this task; the installed
+  // state filter is the shell-level choice the catalogue pages draw instead.
+  const halves = header.locator("[data-yunari-store-halves] button");
   await expect(halves).toHaveCount(2);
   await expect(halves.nth(0)).toHaveText(uiCopy.store.halves.local);
   await expect(halves.nth(1)).toHaveText(uiCopy.store.halves.online);
@@ -1518,11 +1516,11 @@ test("the store lists a library, opens an item, and comes back to the same list"
   );
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
 
   const cells = region.locator("[data-yunari-store-cell]");
   const scroller = region.locator("[data-yunari-store-scroller]");
@@ -1959,11 +1957,11 @@ test("the store draws the origin badge, narrows by style and shape, and marks a 
   ).toBeVisible();
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
 
   const cells = region.locator("[data-yunari-store-cell]");
   await expect(
@@ -2485,17 +2483,16 @@ async function showOnlineStore(
   ).toBeVisible();
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
-  // The halves sit in the shell's header beside the mode switch, not inside
-  // the mode's own region (`store-mode/halves.tsx`).
-  const halves = page.locator(
-    ".editor-shell-header [data-yunari-store-halves] button",
-  );
-  await expect(halves, "the header draws no halves").toHaveCount(2);
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
+  // Dashboard themes keeps the theme grid's own halves inside the region for
+  // this task (`store-mode/halves.tsx`); the later state-filter task replaces
+  // them.
+  const halves = region.locator("[data-yunari-store-halves] button");
+  await expect(halves, "the region draws no halves").toHaveCount(2);
   await halves.nth(1).click();
   await expect(
     halves.nth(1),
@@ -2858,11 +2855,11 @@ async function openLibraryItem(page: Page, id: string): Promise<Locator> {
   ).toBeVisible();
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
   await region
     .locator(
       `[data-yunari-store-cell='${id}'] [data-yunari-store-cell-surface]`,
@@ -3401,10 +3398,10 @@ test("the store opens a library theme as the document, from the cell and its foo
 
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
-  const region = page.locator("[data-yunari-mode-region='themes']");
-  await expect(region, "the themes mode renders no region").toBeVisible();
+  const region = page.locator("[data-yunari-mode-region='library']");
+  await expect(region, "the Library renders no region").toBeVisible();
   await expect(
     region.locator("[data-yunari-store-cell]"),
     "the store does not list the stubbed library",
@@ -3697,7 +3694,7 @@ test("the store opens a library theme as the document, from the cell and its foo
     "Open in editor left the shell showing the store",
   ).toBeVisible();
   await expect(
-    page.locator("[data-yunari-mode-region='themes']"),
+    page.locator("[data-yunari-mode-region='library']"),
     "the store's own region is still the surface showing",
   ).toBeHidden();
   await settled(page);
@@ -3718,7 +3715,7 @@ test("the store opens a library theme as the document, from the cell and its foo
   // surface the open above has just left, so the store is asked for again.
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
   await answerDialogIfShown(page, "Discard", 1_000);
   await expect(

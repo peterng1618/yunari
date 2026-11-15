@@ -180,7 +180,7 @@ export const VIDEO_GLYPH: LucideIcon = Play;
 export const PAGE_GLYPH: LucideIcon = FileText;
 /** The two mode glyphs: the library is browsed like a fairground, and the
  *  editor makes a document rather than reading one. */
-export const THEMES_MODE_GLYPH: LucideIcon = FerrisWheel;
+export const LIBRARY_MODE_GLYPH: LucideIcon = FerrisWheel;
 export const EDITOR_MODE_GLYPH: LucideIcon = PencilRuler;
 /** The two sort directions a listing shows on its active sort button. */
 export const ASCENDING_GLYPH: LucideIcon = ArrowUp;

@@ -12,6 +12,12 @@ import {
 } from "../display-lens.js";
 import { IndicatorOverlay } from "../indicator-manager/cursor-indicator.js";
 import { IndicatorStore } from "../indicator-manager/store.js";
+import {
+  LibraryRegion,
+  type LibraryState,
+  LibraryStateFilter,
+} from "../library-mode/region.js";
+import type { LibraryPage } from "../library-mode/sources.js";
 import { CompositionPane } from "../panes/composition/composition-pane.js";
 import type { SettingsPage } from "../settings-mode/nav.js";
 import {
@@ -24,9 +30,6 @@ import {
   type ShortcutOverrides,
   setActiveShortcuts,
 } from "../shortcut-manager/bindings.js";
-import { StoreHalves } from "../store-mode/halves.js";
-import type { StoreTab } from "../store-mode/region.js";
-import { StoreModeRegion } from "../store-mode/region.js";
 import { uiCopy } from "../ui-copy.js";
 import { activeWidgetUnits, subscribeWidgetUnits } from "../widget-packs.js";
 import { BackgroundPlayback } from "./background-playback.js";
@@ -43,10 +46,10 @@ import {
   Glyph,
   INSPECTOR_COLLAPSE_GLYPH,
   INSPECTOR_EXPAND_GLYPH,
+  LIBRARY_MODE_GLYPH,
   type LucideIcon,
   RAIL_GLYPHS,
   SETTINGS_GLYPH,
-  THEMES_MODE_GLYPH,
 } from "./icons.js";
 import { LayerActions } from "./layer-panel.js";
 import {
@@ -88,10 +91,10 @@ import { StatusReadout } from "./status-readout.js";
  * content area instead of the editor's body.
  *
  * It is a mode and not a route: nothing persists it, nothing outside the shell
- * reads it, and the store mode is a surface in this same React tree rather than
- * an iframe over another page.
+ * reads it, and the library mode is a surface in this same React tree rather
+ * than an iframe over another page.
  */
-export type ShellMode = "editor" | "themes" | "settings";
+export type ShellMode = "editor" | "library" | "settings";
 
 /**
  * What the shell's React root is given: the surface showing, and the request for
@@ -99,12 +102,16 @@ export type ShellMode = "editor" | "themes" | "settings";
  *
  * The mode is a prop rather than state inside `Shell` so the region a later task
  * hangs here reads the answer from one owner — `ShellRoot` below holds the mode
- * and the one guard in front of it — instead of each region keeping its own copy
+ * and the library's page and state — instead of each region keeping its own copy
  * of which surface is showing.
  */
 export interface ShellLayoutProps {
   readonly mode: ShellMode;
   readonly onModeChange: (mode: ShellMode) => void;
+  readonly libraryPage: LibraryPage;
+  readonly onLibraryPage: (page: LibraryPage) => void;
+  readonly libraryState: LibraryState;
+  readonly onLibraryState: (state: LibraryState) => void;
 }
 
 /** Each mode's name, as a **total** lookup: a `ShellMode` added to the union
@@ -113,15 +120,15 @@ export interface ShellLayoutProps {
  *  that existed, not that they covered the union. */
 const MODE_NAMES: Record<ShellMode, string> = {
   editor: uiCopy.modes.editor,
-  themes: uiCopy.modes.themes,
+  library: uiCopy.modes.library,
   settings: uiCopy.modes.settings,
 };
 
 /** The order the header draws them in, which is a separate decision from what
- *  each is called. The store leads because it is the surface a session starts
+ *  each is called. The library leads because it is the surface a session starts
  *  from; the editor is where a theme is made, and Settings stays last. */
 const MODE_ORDER = [
-  "themes",
+  "library",
   "editor",
   "settings",
 ] as const satisfies readonly ShellMode[];
@@ -129,7 +136,7 @@ const MODE_ORDER = [
 /** One glyph per mode, in the header's own icon vocabulary. */
 const MODE_GLYPHS: Record<ShellMode, LucideIcon> = {
   editor: EDITOR_MODE_GLYPH,
-  themes: THEMES_MODE_GLYPH,
+  library: LIBRARY_MODE_GLYPH,
   settings: SETTINGS_GLYPH,
 };
 
@@ -154,7 +161,9 @@ const modeSegmentId = (mode: ShellMode): string => `${MODE_SWITCH_ID}-${mode}`;
  * treatment, never an accent fill: the palette allows one accent-filled element per
  * region and the header's is the publish control.
  */
-function ModeSwitch(props: ShellLayoutProps): React.JSX.Element {
+function ModeSwitch(
+  props: Pick<ShellLayoutProps, "mode" | "onModeChange">,
+): React.JSX.Element {
   return (
     <ToggleGroup
       id={MODE_SWITCH_ID}
@@ -234,6 +243,11 @@ export interface ShellLayout {
   /** Opens the reference sheet. The session owns the `?` dispatcher and never
    *  sees React, so `editor-main` routes the gesture here. */
   showShortcuts(): void;
+  /** Opens the Library on one of its pages. A later surface — the Add pane's
+   *  widget link, the preset library, the appearance section — moves the mode
+   *  and the page together through this one door (R1), so it lands on the page
+   *  it named rather than on whichever page was last showing. */
+  openLibrary(page: LibraryPage): void;
   /** Opens the asset finder. The chord and the menu row reach the same store
    *  the modal is bound to; a caller may name the category it opens on, which
    *  is how the font field arrives at Fonts. */
@@ -390,7 +404,14 @@ export function createShellLayout(
     );
   }
 
-  function Shell({ mode, onModeChange }: ShellLayoutProps): React.JSX.Element {
+  function Shell({
+    mode,
+    onModeChange,
+    libraryPage,
+    onLibraryPage,
+    libraryState,
+    onLibraryState,
+  }: ShellLayoutProps): React.JSX.Element {
     // The installed units arrive after boot, so the Add pane's count is read
     // from the live store rather than from a build-time library.
     const widgetUnits = useSyncExternalStore(
@@ -416,9 +437,6 @@ export function createShellLayout(
      *  serialized. The gear keeps the last page; a surface that asks for one
      *  (the finder's needs-key path) sets it before switching. */
     const [settingsPage, setSettingsPage] = useState<SettingsPage>("displays");
-    /** The store's half is a mode-level choice now that its control is in the
-     *  header, so it lives beside the mode rather than inside the region. */
-    const [storeTab, setStoreTab] = useState<StoreTab>("local");
     /** The author's bindings, held here because the effective table lives
      *  outside React. Initialized from storage — the same read
      *  `createShellLayout` made for the live table — and moved from there by
@@ -435,7 +453,7 @@ export function createShellLayout(
     const [hostStatus, setHostStatus] = useState<
       SettingsStatusLine | undefined
     >(undefined);
-    /** The Themes mode's own reading, published by its region for the same
+    /** The Library mode's own reading, published by its region for the same
      *  reason and through the same shape as the host's: the region owns what
      *  the strip says, the shell owns where it goes. */
     const [storeStatus, setStoreStatus] = useState<number | undefined>(
@@ -614,9 +632,16 @@ export function createShellLayout(
               the rail rule forbids a second horizontal bar, and two stacked rows of
               navigation make the first read as chrome rather than a choice. */}
           <ModeSwitch mode={mode} onModeChange={onModeChange} />
-          {mode === "themes" && (
-            <StoreHalves tab={storeTab} onTab={setStoreTab} />
-          )}
+          {/* The Library's installed-state filter, in the header's mode-level
+              row. **Dashboard themes keeps today's store grid**, whose own
+              halves are the theme-only surface a later task replaces, and My
+              submissions is the author's listing rather than a catalogue page:
+              neither draws this filter over a listing it does not narrow. */}
+          {mode === "library" &&
+          libraryPage !== "dashboard-themes" &&
+          libraryPage !== "submissions" ? (
+            <LibraryStateFilter state={libraryState} onState={onLibraryState} />
+          ) : null}
           {/* the header rule: the right-hand region is **per-mode**. The menus and the
               publish chord are the editor's own actions — they act on the open
               document, and neither of the other two modes has one — so a mode
@@ -640,9 +665,9 @@ export function createShellLayout(
         </header>
         {/* The editor's body is **hidden, never unmounted**, while another mode
             shows. The canvas host lives inside it, so taking it off the tree
-            would destroy the open document on the way to the store — which is
-            the invariant a mode switch has to keep, and the reason the switch
-            asks before it leaves a dirty one. */}
+            would destroy the open document on the way to the library — the
+            invariant every mode switch keeps, and the reason no switch has to
+            ask before it happens. */}
         <div
           className="editor-shell-body"
           data-collapsed={collapsed}
@@ -889,21 +914,24 @@ export function createShellLayout(
                 **The editor first, then the document** (A.7d): a body that is
                 `hidden` measures zero, so the mount behind it fits nothing —
                 and a cancelled open leaves the author in the store. */}
-            <StoreModeRegion
-              mode={mode}
-              tab={storeTab}
-              onTab={setStoreTab}
-              onStatus={setStoreStatus}
-              onOpenTheme={(id) => {
-                void store.bridge?.session.openLibraryTheme(id, () =>
-                  onModeChange("editor"),
-                );
-              }}
-              onThemeDeleted={(id) => store.bridge?.session.themeRemoved(id)}
-              onThemePublished={(id) =>
-                store.bridge?.session.themePublished(id)
-              }
-            />
+            {mode === "library" ? (
+              <LibraryRegion
+                page={libraryPage}
+                onPage={onLibraryPage}
+                state={libraryState}
+                onState={onLibraryState}
+                onStatus={setStoreStatus}
+                onOpenTheme={(id) => {
+                  void store.bridge?.session.openLibraryTheme(id, () =>
+                    onModeChange("editor"),
+                  );
+                }}
+                onThemeDeleted={(id) => store.bridge?.session.themeRemoved(id)}
+                onThemePublished={(id) =>
+                  store.bridge?.session.themePublished(id)
+                }
+              />
+            ) : null}
             {/* The Host mode's region, beside the store's rather than chosen
                 between here: each is handed the mode and draws itself in its
                 own, so the section holds one surface whatever mode is showing.
@@ -944,7 +972,7 @@ export function createShellLayout(
                 {hostStatus?.status ?? null}
               </p>
             </>
-          ) : mode === "themes" ? (
+          ) : mode === "library" ? (
             storeStatus === undefined ? null : (
               <span role="status" data-yunari-store-count="">
                 {uiCopy.statusBar.themes(storeStatus)}
@@ -966,42 +994,32 @@ export function createShellLayout(
     );
   }
 
+  /** The door `openLibrary` reaches; `ShellRoot` assigns it every render, so it
+   *  holds the live setters and the same mode-change report the switch uses. */
+  const libraryNavigation = {
+    open: (_page: LibraryPage): void => undefined,
+  };
+
   /**
-   * The mode, and the one guard in front of it.
+   * The mode, the Library's page and its state.
    *
-   * The shell opens on the editor — the document is what an author came for —
-   * and the mode is never persisted: it is chrome, not authored state.
+   * The shell opens on the surface the URL names — the Library when it names
+   * none — and none of the three is persisted: they are chrome, not authored
+   * state.
    *
-   * **The guard fires on the way to Themes, and nowhere else.** The editor and
-   * Settings share the editing workspace: Settings is chrome over the document,
-   * the body stays mounted behind `hidden`, and nothing can be lost by moving
-   * between them. Themes is the surface that puts the document away, so it is
-   * the transition the prompt protects — from either of the other two modes.
-   * That keeps the gear usable mid-edit, as the modal it replaces was.
+   * **A mode switch hides the editor's body, never unmounts it**, so it moves no
+   * document and can lose no unsaved work; no switch asks before it happens. The
+   * replacement prompt belongs to New/Open, which do replace the document.
    *
-   * It is the editor's **existing** replacement prompt with the switch's own
-   * question, not a second guard: the prompt's copy is the only thing that makes
-   * it read as a document replacement, so one instrument answers both, and it is
-   * the one instrument that can offer **Save**. A `cancel` returns before the
-   * mode moves; a `save` waits for the save to finish, so a failed one leaves the
-   * author in the editor rather than past a guard that did not complete.
-   *
-   * **A failed save is read off the document, not off a return value.**
-   * `saveLibrary()` resolves whether or not the save landed — the editor reports
-   * its own failures — so the dirty mark is asked again after it. Still dirty
-   * means the save did not happen, and the author stays where their work is.
-   *
-   * **Save means the library, not the package.** Leaving the editor is the same
-   * act as Ctrl+S, so the answer saves where the product stores a theme; a
-   * package download here would send the author to their Downloads folder for
-   * work that was only meant to be kept.
-   *
-   * The question and the save are a promise the switch cannot hand back: its
-   * handler returns `void`, so the promise is settled where it is created rather
-   * than left floating for the runtime to report.
+   * The page and the state live here (R1) so the header's filter, the region and
+   * `openLibrary(page)` read one owner: a later surface can move the mode and the
+   * page together, and no region keeps a second copy.
    */
   function ShellRoot(): React.JSX.Element {
     const [mode, setMode] = useState<ShellMode>(entry.mode);
+    const [libraryPage, setLibraryPage] =
+      useState<LibraryPage>("dashboard-themes");
+    const [libraryState, setLibraryState] = useState<LibraryState>("all");
     // The URL's publish request, applied once after the header has mounted.
     // `publishSurface` is the store the header control and the chord already
     // drive, so this opens that one surface rather than a second publish path;
@@ -1017,7 +1035,22 @@ export function createShellLayout(
       setMode(next);
       options.onModeChange?.(next);
     };
-    return <Shell mode={mode} onModeChange={requestMode} />;
+    // Reassigned every render, so the door below holds this render's setters and
+    // goes through the same mode-change report the switch does.
+    libraryNavigation.open = (page) => {
+      setLibraryPage(page);
+      requestMode("library");
+    };
+    return (
+      <Shell
+        mode={mode}
+        onModeChange={requestMode}
+        libraryPage={libraryPage}
+        onLibraryPage={setLibraryPage}
+        libraryState={libraryState}
+        onLibraryState={setLibraryState}
+      />
+    );
   }
 
   flushSync(() => {
@@ -1065,6 +1098,11 @@ export function createShellLayout(
       // The gesture arrives from outside React, so the store writes and the
       // subscription re-renders; `flushSync` settles it before this returns.
       flushSync(() => sheet.set(true));
+    },
+    openLibrary(page) {
+      // Same shape as the two doors below: the request arrives outside React,
+      // and `flushSync` settles the mode and page before this returns.
+      flushSync(() => libraryNavigation.open(page));
     },
     showFinder(category) {
       flushSync(() => finder.set(true, category));

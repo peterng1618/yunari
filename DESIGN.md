@@ -283,15 +283,28 @@ footer toolbar, so the header has no Edit menu.
   per-document readout. Both are on the canvas.
 
 **The header carries the shell's mode switch, and there is no bar under it.**
-The shell has three modes — the editor, the theme store and Settings — and the
-switch is the header's own `Segmented` control with the labels `Editor`, `Themes`
-and `Settings`. A strip under the header would be a second horizontal bar, so the
-header owns the choice and its **right-hand region is per-mode**: the toolbar and
-the publish control belong to the editor; a mode with actions of its own carries
-them there; a mode with none shows nothing beside the switch.
+The shell has three modes — the Library, the editor and Settings — and the
+switch is the header's own `Segmented` control with the labels `Library`,
+`Editor` and `Settings`. A strip under the header would be a second horizontal
+bar, so the header owns the choice and its **right-hand region is per-mode**: the
+toolbar and the publish control belong to the editor; a mode with actions of its
+own carries them there; a mode with none shows nothing beside the switch. The
+Library's installed-state filter is a mode-level choice, so it sits in that
+right-hand row too, beside the switch.
 The editor's own body is hidden, not unmounted, while another mode shows — a mode
-switch never loses an unsaved document. Editor and Settings move freely; leaving
-either for Themes asks before discarding a dirty document.
+switch never loses an unsaved document, and **no switch asks before it happens**.
+The replacement prompt belongs to New/Open, which do replace the document.
+
+**Library is a catalogue of every kind, not a theme store.** Its destinations run
+down a fixed navigation column on the same pattern as Settings, grouped as
+Browse — Dashboard themes, App themes, Widgets, Shapes, Sensor providers, Asset
+sources, Panel drivers, Collections — and Publish — My submissions. The column
+chooses where to be; the page beside it owns its listing. One **installed-state**
+filter (`All`, `On this PC`, `Not installed`) narrows the catalogue pages, so an
+item's presence on this PC is read in one place rather than repeated as a badge.
+Sensor providers adds one sub-filter, `Sensors · Data sources`, because a plugin
+may contribute either member kind. A read that fails states the failure with its
+own retry control; it is never drawn as an empty listing.
 
 **Settings is a mode, not a dialog.** Its destinations run down a fixed
 navigation column grouped as This PC — the machine and its screens — and Editor —

@@ -824,7 +824,7 @@ async function enter(field: HTMLInputElement): Promise<void> {
 it("renders no region for a mode that is not Settings", async () => {
   const container = await mount(
     <SettingsRegion
-      mode="themes"
+      mode="library"
       page="displays"
       onPageChange={() => {}}
       storage={undefined}

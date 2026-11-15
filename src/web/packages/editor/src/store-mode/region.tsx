@@ -387,7 +387,7 @@ type Body =
 
 /** One of the two empty sentences, as a centred pair of lines at the spacing scale's
  *  empty-state breathing room. */
-function Empty(props: {
+export function Empty(props: {
   readonly lead: string;
   readonly hint: string | undefined;
 }): React.JSX.Element {
@@ -408,7 +408,7 @@ function Empty(props: {
  *  the one way forward, the same read again. It is deliberately not the
  *  `Empty` component — a failure is not one of the empties, and a data
  *  attribute that named it one would let a reader mistake the two. */
-function Failure(props: {
+export function Failure(props: {
   readonly message: string;
   readonly onRetry: () => void;
 }): React.JSX.Element {
@@ -431,7 +431,7 @@ function Failure(props: {
 }
 
 /**
- * The Themes mode's region — the surface the shell's `[data-yunari-mode-region]`
+ * The Library mode's region — the surface the shell's `[data-yunari-mode-region]`
  * seam was left for.
  *
  * **It renders its own header row and nothing above it.** The shell's header
@@ -474,7 +474,7 @@ export function StoreModeRegion(props: {
   readonly tab?: StoreTab | undefined;
   readonly onTab?: ((tab: StoreTab) => void) | undefined;
 }): React.JSX.Element | null {
-  return props.mode === "themes" ? (
+  return props.mode === "library" ? (
     <StoreRegion
       client={props.client}
       {...(props.onOpenTheme === undefined
@@ -498,7 +498,7 @@ export function StoreModeRegion(props: {
  *  the facet selection are kept for the session because a viewer who chose them
  *  expects them back. The **grid density** is the one that outlives the session,
  *  because it is a view preference rather than a query. */
-function StoreRegion(props: {
+export function StoreRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;

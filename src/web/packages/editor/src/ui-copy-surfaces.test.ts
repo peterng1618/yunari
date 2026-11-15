@@ -485,9 +485,9 @@ async function mountStoreShell(themes: readonly ThemeLibraryEntry[]): Promise<{
     root.querySelectorAll<HTMLButtonElement>(
       ".editor-shell-mode-switch button",
     ),
-  ).find((button) => button.textContent?.trim() === uiCopy.modes.themes);
+  ).find((button) => button.textContent?.trim() === uiCopy.modes.library);
   if (segment === undefined) {
-    throw new Error("the shell draws no Themes segment to switch with");
+    throw new Error("the shell draws no Library segment to switch with");
   }
   await act(async () => segment.click());
   await flushTasks();
@@ -495,9 +495,10 @@ async function mountStoreShell(themes: readonly ThemeLibraryEntry[]): Promise<{
   return {
     region: () => {
       const found = document.querySelector<HTMLElement>(
-        "[data-yunari-mode-region='themes']",
+        "[data-yunari-mode-region='library']",
       );
-      if (found === null) throw new Error("the store mode rendered no region");
+      if (found === null)
+        throw new Error("the library mode rendered no region");
       return found;
     },
     openItem: () => {

@@ -561,13 +561,14 @@ export const uiCopy = {
      *  is being chosen. */
     label: "Shell modes",
     editor: "Editor",
-    themes: "Themes",
+    /** The catalogue surface — every type's library, not only themes. */
+    library: "Library",
     /** The third surface: this PC's settings and the editor's own preferences,
      *  one page each. It was called Host while it held host settings only. */
     settings: "Settings",
   },
   /**
-   * The Host mode's own surface: the machine and its display.
+   * The Settings mode's own surface: the machine and its display.
    *
    * **This surface is the one owner of those words now.** They were the old
    * hand-written host settings page's — its hints, device labels and status
@@ -1188,7 +1189,7 @@ export const uiCopy = {
     cancel: "Cancel",
   },
   /**
-   * The Themes mode's own words — the store surface, whose region's header row
+   * The Library mode's own words — the store surface, whose region's header row
    * is its own rather than the shell's.
    */
   store: {
@@ -1622,9 +1623,51 @@ export const uiCopy = {
       },
     },
   },
-  /** The library chooser. Its two groups say which kind of thing a row is: a
-   *  template the product offers, or a theme the author made and can delete. */
+  /**
+   * The library's own words: the chooser dialog and the Library mode.
+   *
+   * **The page list's owner is `library-mode/nav.ts`**; the names under `pages`
+   * are the labels it reads, so a destination cannot be drawn with no word.
+   * The state filter and the Sensor providers sub-filter are the page-level
+   * choices the shell and the region draw, and each is a group name plus its
+   * options. The chooser's two groups say which kind of thing a row is: a
+   * template the product offers, or a theme the author made and can delete.
+   */
   library: {
+    /** The Library mode's own name. */
+    label: "Library",
+    groups: {
+      browse: "Browse",
+      publish: "Publish",
+    },
+    pages: {
+      dashboardThemes: "Dashboard themes",
+      appThemes: "App themes",
+      widgets: "Widgets",
+      shapes: "Shapes",
+      sensorProviders: "Sensor providers",
+      assetSources: "Asset sources",
+      panelDrivers: "Panel drivers",
+      collections: "Collections",
+      submissions: "My submissions",
+    },
+    state: {
+      label: "Installed state",
+      all: "All",
+      onThisPc: "On this PC",
+      notInstalled: "Not installed",
+    },
+    sensors: {
+      /** The sub-filter's group name. The two options are the member kinds the
+       *  page browses; a plugin may contribute either. */
+      label: "Provider kind",
+      sensors: "Sensors",
+      dataSources: "Data sources",
+    },
+    /** A successful read that holds nothing. A read that failed says so
+     *  instead (`uiCopy.store.unreadable`), and never draws this. */
+    empty: "Nothing here yet.",
+    emptyHint: "Install an item from the store, or publish your own.",
     choose: "Open a theme",
     /** The control's own name. Distinct from `choose`, which titles the
      *  dialog; a label repeating the title printed over the control. */
@@ -2095,7 +2138,7 @@ export const uiCopy = {
     objects: (count: number): string =>
       `${count} ${count === 1 ? "object" : "objects"}`,
     selected: (count: number): string => `${count} selected`,
-    /** The Themes mode's own reading: what the chosen half and filters show. */
+    /** The Library mode's own reading: what the chosen half and filters show. */
     themes: (count: number): string =>
       `${count} ${count === 1 ? "theme" : "themes"}`,
   },

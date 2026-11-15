@@ -48,7 +48,7 @@ export function openRequest(
       };
     case "themes":
       return {
-        target: `${context.localPlain}/editor?mode=themes`,
+        target: `${context.localPlain}/editor?mode=library`,
         label: "Theme Store",
         options: {},
       };

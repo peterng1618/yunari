@@ -124,7 +124,7 @@ async function routeStoreHost(
   return host;
 }
 
-/** The editor's boot, the Themes mode and the author's own half, listed. */
+/** The editor's boot, the Library mode and the author's own half, listed. */
 async function openMine(page: Page) {
   await page.goto(EDITOR);
   await expect(
@@ -132,10 +132,10 @@ async function openMine(page: Page) {
   ).toBeVisible();
   await page
     .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.themes, exact: true })
+    .getByRole("button", { name: uiCopy.modes.library, exact: true })
     .click();
 
-  const region = page.locator("[data-yunari-mode-region='themes']");
+  const region = page.locator("[data-yunari-mode-region='library']");
   await expect(region, "the themes mode renders no region").toBeVisible();
   const mine = region.locator("[data-yunari-store-mine]");
   await expect(

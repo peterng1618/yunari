@@ -143,7 +143,7 @@ export async function openThemeFromStore(
   status?: string | RegExp,
 ): Promise<number> {
   await seedStoreLibrary(page, [theme]);
-  await switchMode(page, uiCopy.modes.themes);
+  await switchMode(page, uiCopy.modes.library);
   await answerDialogIfShown(page, "Discard", 5_000);
   const cell = page.locator(`[data-yunari-store-cell="${theme.envelope.id}"]`);
   await expect(cell, "the store lists no theme to open").toBeVisible();

@@ -47,33 +47,33 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test("opens Themes when the URL names no mode", async ({ page }, testInfo) => {
+test("opens Library when the URL names no mode", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(EDITOR);
   await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
     "data-yunari-mode-region",
-    "themes",
+    "library",
   );
 });
 
 test("opens the store from the URL", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(`${EDITOR}?mode=themes`);
+  await page.goto(`${EDITOR}?mode=library`);
   await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
     "data-yunari-mode-region",
-    "themes",
+    "library",
   );
 });
 
 /**
- * **The Themes page's gallery takes the chrome's scrollbar.** The pair is
+ * **The Library page's gallery takes the chrome's scrollbar.** The pair is
  * stated once on `.editor-shell` and inherited, so this reads the computed
  * value rather than a class: a descendant that is not in the rule's selector
  * list still has to answer with the token's colour.
  */
-test("themes the store's own scroller", async ({ page }, testInfo) => {
+test("library the store grid's own scroller", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(`${EDITOR}?mode=themes`);
+  await page.goto(`${EDITOR}?mode=library`);
   const bar = await page
     .locator("[data-yunari-store-scroller]")
     .evaluate((element) => {
@@ -101,21 +101,21 @@ test("opens the publish surface from the URL", async ({ page }, testInfo) => {
   await expect(page.locator(".editor-shell-publish-dialog")).toBeVisible();
 });
 
-// Themes mode draws no publish control at all, so this proves the surface is
+// Library mode draws no publish control at all, so this proves the surface is
 // absent, not that `publish` was refused; shell-entry.test.ts pins the rule.
 test("draws no publish surface in a non-editor mode", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await page.goto(`${EDITOR}?mode=themes&publish=1`);
+  await page.goto(`${EDITOR}?mode=library&publish=1`);
   await expect(page.locator(".editor-shell-publish-dialog")).toHaveCount(0);
 });
 
-test("opens Themes when the mode is unknown", async ({ page }, testInfo) => {
+test("opens Library when the mode is unknown", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=bogus`);
   await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
     "data-yunari-mode-region",
-    "themes",
+    "library",
   );
 });

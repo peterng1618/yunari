@@ -190,7 +190,7 @@ function halves(header: HTMLElement): readonly HTMLButtonElement[] {
  * choosing one moves the chosen segment rather than replacing the row.
  */
 it("shows the two halves as a Segmented inside the region's own header row", async () => {
-  const container = await mount(<StoreModeRegion mode="themes" />);
+  const container = await mount(<StoreModeRegion mode="library" />);
   const surface = container.firstElementChild;
   const header = headerRow(container);
 
@@ -236,7 +236,7 @@ it("shows the two halves as a Segmented inside the region's own header row", asy
  * is the browser case's, which counts the five inside a really narrow row.
  */
 it("keeps the facet row on one line and wraps rather than dropping a control", async () => {
-  const container = await mount(<StoreModeRegion mode="themes" />);
+  const container = await mount(<StoreModeRegion mode="library" />);
 
   const row = must(
     headerRow(container).querySelector<HTMLElement>("[data-yunari-facet-row]"),
@@ -273,7 +273,7 @@ it("keeps the facet row on one line and wraps rather than dropping a control", a
  * follow the half would leave `Name` on the catalogue.
  */
 it("draws the search well and the sort well, and the sort follows the half", async () => {
-  const container = await mount(<StoreModeRegion mode="themes" />);
+  const container = await mount(<StoreModeRegion mode="library" />);
   const header = headerRow(container);
 
   const search = must(
@@ -508,7 +508,7 @@ it("opens a facet as a group of checkbox rows, and counts what is chosen", async
 });
 
 /**
- * The region is the Themes mode's surface and no other's. The shell renders one
+ * The region is the Library mode's surface and no other's. The shell renders one
  * `[data-yunari-mode-region]` section for every non-editor mode, and A.8 mounts
  * the Host mode's own region in it — so a region that drew itself in a mode it
  * does not own would be the second surface in one section.
@@ -600,7 +600,7 @@ async function mountStore(
 ): Promise<HTMLElement> {
   return mount(
     <StoreModeRegion
-      mode="themes"
+      mode="library"
       client={clientListing(entries, onList)}
       {...(onOpenTheme === undefined ? {} : { onOpenTheme })}
     />,
@@ -610,7 +610,7 @@ async function mountStore(
 /** The region over a client whose read a case drives itself: the failure and
  *  the retry are the listing's own answers, not the entries it holds. */
 async function mountClient(client: ThemeLibraryClient): Promise<HTMLElement> {
-  return mount(<StoreModeRegion mode="themes" client={client} />);
+  return mount(<StoreModeRegion mode="library" client={client} />);
 }
 
 /** The cells the gallery draws, in order. */
@@ -1316,7 +1316,7 @@ function clientOver(
 async function mountOver(host: ActiveThemeHost): Promise<void> {
   await mount(
     <StoreModeRegion
-      mode="themes"
+      mode="library"
       client={clientOver(host, [
         fixtureEntry({
           id: "living-room",
@@ -2971,7 +2971,7 @@ it("says the theme was installed when the re-list fails", async () => {
     assign: () => Promise.reject(new Error("the store does not assign")),
     listDisplays: async () => ({ default: null, displays: [] }),
   };
-  await mount(<StoreModeRegion mode="themes" client={client} />);
+  await mount(<StoreModeRegion mode="library" client={client} />);
   await showOnline();
 
   await act(async () => installControl("office-wall").click());
@@ -4293,7 +4293,7 @@ it("publishes the visible listing's count to the strip", async () => {
   const seen: (number | undefined)[] = [];
   await mount(
     <StoreModeRegion
-      mode="themes"
+      mode="library"
       client={clientListing(listing(3))}
       onStatus={(count) => seen.push(count)}
     />,
@@ -4313,7 +4313,7 @@ it("publishes no count for a listing that did not arrive", async () => {
   };
   await mount(
     <StoreModeRegion
-      mode="themes"
+      mode="library"
       client={client}
       onStatus={(count) => seen.push(count)}
     />,
@@ -4524,7 +4524,7 @@ it("exports a theme's package through the library client", async () => {
       downloads.push(this.download);
     });
   try {
-    await mount(<StoreModeRegion mode="themes" client={client} />);
+    await mount(<StoreModeRegion mode="library" client={client} />);
     await pressCell("porch-strip", "export");
     // The export continues after the press resolves, so the package's write
     // lands on the next microtasks rather than inside the click's own turn.
@@ -4629,7 +4629,7 @@ it("warns before a library export bakes a crop", async () => {
     });
 
   try {
-    await mount(<StoreModeRegion mode="themes" client={client} />);
+    await mount(<StoreModeRegion mode="library" client={client} />);
     await pressCell("porch-strip", "export");
 
     await vi.waitFor(() => {
@@ -4715,7 +4715,7 @@ it("deletes a theme through the library client and drops it from the listing", a
   ];
   await mount(
     <StoreModeRegion
-      mode="themes"
+      mode="library"
       client={{
         ...clientListing(entries),
         remove: async (id: string) => {
