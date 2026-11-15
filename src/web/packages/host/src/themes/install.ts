@@ -30,8 +30,6 @@ import type { ThumbnailStore } from "./thumbnails.js";
  * that copy, in place, rather than beside it.
  */
 
-/** The prefix every dashboard-theme row's key carries. The key format is the
- *  register's, and this module only needs the half that names its own kind. */
 export interface InstallRequest {
   readonly packageUrl: string;
   /** The catalogue's id for the item, never the library id. */
