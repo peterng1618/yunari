@@ -5,9 +5,9 @@ import {
   DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   type FacetRecord,
+  listingMemberRecords,
   type MemberRecord,
   type PluginMemberContributions,
-  pluginMemberRecords,
 } from "@yunari/renderer-core";
 import type { CollectionPackage } from "@yunari/theme-package";
 import type { ItemRow, VersionRow } from "../db/types.js";
@@ -82,14 +82,12 @@ export function entryOf(
   return { ...shared, name, members: membersOf(item, version) };
 }
 
-/** The listing kind a collection's includes are checked against. */
-const COLLECTION_KIND = "collection";
-
 /**
- * The browseable entries the stored metadata already carries: one member for a
- * theme, one per widget unit or path preset, one per member-bearing plugin
- * contribution and none for a collection. A collection has no members because
- * its included listings are `includes`, not parts of its own package.
+ * The browseable entries the stored metadata already carries, through the one
+ * derivation `renderer-core` owns: the same call the editor's local half makes,
+ * so a member's id and name are the catalogue's and the installed copy's
+ * alike. A collection never reaches here — `entryOf` answers it before this
+ * point — and the derivation answers no members for it anyway.
  */
 function membersOf(
   item: ItemRow,
@@ -99,39 +97,27 @@ function membersOf(
   if (item.kind === DASHBOARD_THEME_KIND) {
     const parsed =
       envelope ?? readJson<FabricThemeEnvelope>(version.envelope_json);
-    return [{ id: parsed.id, kind: DASHBOARD_THEME_KIND, name: item.name }];
+    return listingMemberRecords(DASHBOARD_THEME_KIND, {
+      theme: { id: parsed.id, name: item.name },
+    });
   }
-  if (item.kind === COLLECTION_KIND) return [];
 
   const metadata = readJson<Readonly<Record<string, unknown>>>(
     version.metadata_json,
   );
   if (item.kind === "widget-pack")
-    return namedRecordsOf(metadata["units"], "widget");
+    return listingMemberRecords(item.kind, { named: metadata["units"] });
   if (item.kind === "path-preset-pack")
-    return namedRecordsOf(metadata["presets"], "shape");
-  if (item.kind === "editor-theme") {
-    // The document carries no id, so its validated name is the only stable
-    // identity the store holds.
-    const name = textOf(metadata["name"]);
-    return name === undefined ? [] : [{ id: name, kind: "editor-theme", name }];
-  }
+    return listingMemberRecords(item.kind, { named: metadata["presets"] });
+  if (item.kind === "editor-theme")
+    return listingMemberRecords(item.kind, {
+      editorThemeName: metadata["name"],
+    });
   if (item.kind === "plugin")
-    return pluginMemberRecords(pluginContributions(metadata));
+    return listingMemberRecords(item.kind, {
+      contributions: pluginContributions(metadata),
+    });
   return [];
-}
-
-/** A widget unit or path preset: `{ id, label }` in the validated metadata. */
-function namedRecordsOf(value: unknown, kind: string): readonly MemberRecord[] {
-  if (!Array.isArray(value)) return [];
-  const records: MemberRecord[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) continue;
-    const id = textOf(entry["id"]);
-    if (id === undefined) continue;
-    records.push({ id, kind, name: textOf(entry["label"]) ?? id });
-  }
-  return records;
 }
 
 /** The stored manifest's contributions, which were validated when the version
@@ -150,10 +136,6 @@ function pluginContributions(
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function textOf(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
 /** The name a pack or plugin's stored metadata carries, or nothing. */

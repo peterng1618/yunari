@@ -6,6 +6,7 @@
   `src/web/packages/renderer-core/src/theme/collection-plan.ts`
   `src/web/packages/renderer-core/src/theme/catalogue-location.ts`
   `src/web/packages/renderer-core/src/theme/catalogue-origin.ts`
+  `src/web/packages/renderer-core/src/theme/listing-members.ts`
   `src/web/packages/renderer-core/src/theme/plugin-members.ts`
   `src/web/packages/renderer-core/src/theme/facet-record.ts`
   `src/web/packages/renderer-core/src/index.ts`
@@ -246,6 +247,12 @@ Extend the existing catalogue rather than build a second one:
   members from the stored manifest with it, and the editor's local half derives
   the same members from the installed extension listing, so a plugin's members
   are one rule rather than two.
+- `renderer-core/src/theme/listing-members.ts` owns `listingMemberRecords(kind,
+  input)`: the listing-kind to member derivation for a whole listing (a theme,
+  an editor theme, a widget pack's units, a preset pack's presets, a plugin's
+  contributions). The store derives a catalogue entry's members with it at
+  finalize and the editor derives the installed copy's members with it, so a
+  member's id and name cannot differ between the two halves of one listing.
 - `editor/src/store-mode/` and `editor-shell/shell-layout.tsx` generalize the
   theme-only region into the Library mode; the existing gallery, facets, sort,
   density and install controls are kept, and the theme-only duplicates are

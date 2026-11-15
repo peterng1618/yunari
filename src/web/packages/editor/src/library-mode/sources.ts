@@ -2,9 +2,9 @@ import type { InstalledExtension } from "@yunari/extension-api";
 import {
   type CatalogueOrigin,
   defaultFacetsFor,
+  listingMemberRecords,
   type MemberKind,
   type MemberRecord,
-  pluginMemberRecords,
   STORE_ITEM_KINDS,
 } from "@yunari/renderer-core";
 import type { PathPreset, WidgetPackSummary } from "@yunari/theme-package";
@@ -67,7 +67,7 @@ interface PageRule {
   /** The member kinds a listing must carry at least one of. Empty for a page
    *  whose criterion is the listing's own kind (`collection`) or for a page
    *  that lists whole listings (`listing`). */
-  readonly memberKinds: readonly string[];
+  readonly memberKinds: readonly MemberKind[];
 }
 
 /**
@@ -96,6 +96,9 @@ const PAGE_RULES: Readonly<Record<LibraryPage, PageRule>> = {
     memberKinds: ["panel-driver"],
   },
   collections: { memberKind: "collection", memberKinds: [] },
+  // Never read: both factories refuse `submissions` before a rule is used,
+  // because My submissions is the author's own listing (`mineThemeSource`).
+  // The entry exists only because this map is total over `LibraryPage`.
   submissions: { memberKind: "listing", memberKinds: [] },
 };
 
@@ -108,6 +111,10 @@ interface Browseable {
 
 function keeps(rule: PageRule, item: Browseable): boolean {
   if (rule.memberKind === "collection") return item.kind === "collection";
+  // A page that lists whole listings rather than one member kind. No page
+  // reaches this today: the only `listing` rule is `submissions`, which both
+  // factories refuse before filtering. The arm states the rule for a whole-
+  // listing page instead of letting the empty `memberKinds` hide it.
   if (rule.memberKind === "listing") return true;
   return rule.memberKinds.some((kind) =>
     item.members.some((member) => member.kind === kind),
@@ -190,7 +197,9 @@ function editorThemeItemOf(row: EditorThemeRow): StoreItem {
     id: row.id,
     kind: "editor-theme",
     name: row.name,
-    members: [{ id: row.id, kind: "editor-theme", name: row.name }],
+    members: listingMemberRecords("editor-theme", {
+      editorThemeName: row.name,
+    }),
     author: undefined,
     version: undefined,
     updatedAt: undefined,
@@ -207,11 +216,7 @@ function widgetPackItemOf(row: WidgetPackRow): StoreItem {
     id: row.id,
     kind: "widget-pack",
     name: row.name,
-    members: row.units.map((unit) => ({
-      id: unit.id,
-      kind: "widget",
-      name: unit.label,
-    })),
+    members: listingMemberRecords("widget-pack", { named: row.units }),
     author: undefined,
     version: row.version,
     updatedAt: undefined,
@@ -237,7 +242,7 @@ function pathPresetItemOf(row: PathPresetRow): StoreItem {
     id: row.id,
     kind: "shape",
     name: row.label,
-    members: [{ id: row.id, kind: "shape", name: row.label }],
+    members: listingMemberRecords("path-preset-pack", { named: [row] }),
     author: undefined,
     version: undefined,
     updatedAt: undefined,
@@ -254,7 +259,9 @@ function extensionItemOf(row: ExtensionRow): StoreItem {
     id: row.key,
     kind: "plugin",
     name: row.name,
-    members: pluginMemberRecords(row.contributions),
+    members: listingMemberRecords("plugin", {
+      contributions: row.contributions,
+    }),
     author: row.publisher,
     version: row.version,
     updatedAt: undefined,

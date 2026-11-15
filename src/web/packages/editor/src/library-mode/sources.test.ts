@@ -318,7 +318,9 @@ describe("the library's page source", () => {
       kind: "editor-theme",
       name: "Office",
       catalogue: undefined,
-      members: [{ id: CATALOGUE_ID, kind: "editor-theme", name: "Office" }],
+      // The store's rule: an editor theme's document carries no id, so the
+      // member's id is its validated name, not the host's file id.
+      members: [{ id: "Office", kind: "editor-theme", name: "Office" }],
     });
     expect(appThemes[0]?.origin).toEqual(origin("editor-theme"));
 
