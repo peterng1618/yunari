@@ -1,4 +1,6 @@
 import {
+  COLLECTION_PACKAGE_FORMAT,
+  type CollectionInclude,
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
   writeWidgetPackage,
@@ -9,6 +11,7 @@ import { planPackVersion } from "../version/plan.js";
 import {
   defaultFacetsFor,
   readPackSubmission,
+  validateCollectionIncludes,
   validateFinalizedPackage,
 } from "./kinds.js";
 
@@ -87,6 +90,26 @@ const PATH_PACK = new TextEncoder().encode(
     ],
   }),
 );
+
+const SELF_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const MEMBER_ID = "11111111-2222-4ccc-8ddd-555555555555";
+const OTHER_COLLECTION_ID = "99999999-8888-4777-8666-555555555555";
+
+function collectionPackage(includes: readonly unknown[]): Uint8Array {
+  return new TextEncoder().encode(
+    JSON.stringify({
+      format: COLLECTION_PACKAGE_FORMAT,
+      version: 1,
+      name: "Starter Kit",
+      description: "Hand-picked.",
+      includes,
+    }),
+  );
+}
+
+function include(id: string, optional = false): CollectionInclude {
+  return { id, optional };
+}
 
 describe("readPackSubmission", () => {
   it("reads a well-formed pack submission", () => {
@@ -185,5 +208,82 @@ describe("validateFinalizedPackage", () => {
   it("refuses bytes that are not the kind's package", () => {
     expect(validateFinalizedPackage("widget-pack", PATH_PACK).ok).toBe(false);
     expect(validateFinalizedPackage("plugin", widgetPack()).ok).toBe(false);
+  });
+
+  it("finalizes a collection package into its name and includes", () => {
+    const includes = [include(MEMBER_ID), include(OTHER_COLLECTION_ID, true)];
+    expect(
+      validateFinalizedPackage("collection", collectionPackage(includes)),
+    ).toEqual({
+      ok: true,
+      finalized: {
+        metadata: {
+          name: "Starter Kit",
+          description: "Hand-picked.",
+          includes,
+        },
+        executionProfile: null,
+        collection: {
+          name: "Starter Kit",
+          description: "Hand-picked.",
+          includes,
+        },
+      },
+    });
+  });
+
+  it("refuses a duplicate include", () => {
+    const result = validateFinalizedPackage(
+      "collection",
+      collectionPackage([include(MEMBER_ID), include(MEMBER_ID)]),
+    );
+    expect(result).toEqual({
+      ok: false,
+      message: `The collection include "${MEMBER_ID}" appears twice.`,
+    });
+  });
+});
+
+describe("validateCollectionIncludes", () => {
+  it("accepts published ids that are not collections", () => {
+    expect(
+      validateCollectionIncludes(
+        [include(MEMBER_ID)],
+        new Map([[MEMBER_ID, "widget-pack"]]),
+        SELF_ID,
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("refuses a collection including an unpublished id", () => {
+    expect(
+      validateCollectionIncludes([include(MEMBER_ID)], new Map(), SELF_ID),
+    ).toEqual({
+      ok: false,
+      message: `The collection includes "${MEMBER_ID}", which is not a published item.`,
+    });
+  });
+
+  it("refuses a collection including itself", () => {
+    expect(
+      validateCollectionIncludes(
+        [include(SELF_ID)],
+        new Map([[SELF_ID, "collection"]]),
+        SELF_ID,
+      ),
+    ).toEqual({ ok: false, message: "A collection cannot include itself." });
+  });
+
+  it("refuses a nested collection", () => {
+    expect(
+      validateCollectionIncludes(
+        [include(OTHER_COLLECTION_ID)],
+        new Map([[OTHER_COLLECTION_ID, "collection"]]),
+        SELF_ID,
+      ),
+    ).toEqual({
+      ok: false,
+      message: `The collection includes "${OTHER_COLLECTION_ID}", which is itself a collection; collections are one level deep.`,
+    });
   });
 });

@@ -157,6 +157,146 @@ describe("entryOf", () => {
   });
 });
 
+describe("entryOf members", () => {
+  const URL = "https://store.test/catalogue/x/1.0.0.zip";
+  const THUMBNAIL = `catalogue/${ITEM_ID}/thumbnail.png`;
+
+  it("derives one member for a dashboard theme", () => {
+    const entry = madeEntry(
+      itemRow(),
+      versionRow({
+        envelope_json: JSON.stringify({
+          schemaVersion: "3.0.0",
+          id: "theme-one",
+          metadata: {},
+        }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry.members).toEqual([
+      { id: "theme-one", kind: "dashboard-theme", name: "Yunari smoke theme" },
+    ]);
+  });
+
+  it("derives one member for an editor theme", () => {
+    const entry = madeEntry(
+      itemRow({ kind: "editor-theme" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({ name: "Graphite" }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry.members).toEqual([
+      { id: "Graphite", kind: "editor-theme", name: "Graphite" },
+    ]);
+  });
+
+  it("derives a widget member per unit", () => {
+    const entry = madeEntry(
+      itemRow({ kind: "widget-pack" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({
+          name: "Starter Cards",
+          units: [
+            { id: "cpu", label: "CPU" },
+            { id: "memory", label: "Memory" },
+          ],
+        }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry.members).toEqual([
+      { id: "cpu", kind: "widget", name: "CPU" },
+      { id: "memory", kind: "widget", name: "Memory" },
+    ]);
+  });
+
+  it("derives a shape member per preset", () => {
+    const entry = madeEntry(
+      itemRow({ kind: "path-preset-pack" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({
+          name: "Acme Shapes",
+          presets: [{ id: "wave", label: "Wave" }],
+        }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry.members).toEqual([
+      { id: "wave", kind: "shape", name: "Wave" },
+    ]);
+  });
+
+  it("maps plugin contributions to member kinds", () => {
+    const entry = madeEntry(
+      itemRow({ kind: "plugin" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({
+          name: "Plugin One",
+          manifest: {
+            contributes: {
+              sensorProviders: [{ id: "acme", label: "Acme Sensors" }],
+              assetCategories: [{ id: "static", label: "Static pictures" }],
+              assetSources: [{ id: "pictures", label: "Pictures" }],
+              panelFamilies: [{ id: "kraken", label: "Kraken" }],
+              settingsPages: [{ id: "about", label: "About" }],
+              customSources: [{ id: "weather", name: "Weather" }],
+            },
+          },
+        }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry.members).toEqual([
+      { id: "acme", kind: "sensor-provider", name: "Acme Sensors" },
+      { id: "weather", kind: "data-source", name: "Weather" },
+      { id: "pictures", kind: "asset-source", name: "Pictures" },
+      { id: "kraken", kind: "panel-driver", name: "Kraken" },
+    ]);
+  });
+
+  it("serves includes and no members for a collection", () => {
+    const included = [
+      "11111111-2222-4ccc-8ddd-555555555555",
+      "99999999-8888-4777-8666-555555555555",
+    ];
+    const entry = madeEntry(
+      itemRow({ kind: "collection" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({
+          name: "Starter Kit",
+          description: "Hand-picked.",
+          includes: included.map((id) => ({ id, optional: false })),
+        }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry).toMatchObject({
+      kind: "collection",
+      name: "Starter Kit",
+      members: [],
+      includes: included,
+    });
+  });
+});
+
 describe("indexDocument", () => {
   it("stamps the caller's instant verbatim", () => {
     const entries = [

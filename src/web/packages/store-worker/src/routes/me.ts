@@ -22,6 +22,7 @@ import { entryOf } from "../catalogue/entry.js";
 import {
   defaultFacetsFor,
   readPackSubmission,
+  validateCollectionIncludes,
   validateFinalizedPackage,
 } from "../catalogue/kinds.js";
 import { publisherFor } from "../catalogue/publisher.js";
@@ -38,6 +39,7 @@ import {
   markFinalized,
   type PresignRow,
   presignEventOf,
+  publishedIdsOf,
   renameItem,
   setStatus,
   versionOf,
@@ -1186,6 +1188,18 @@ async function finalizePackVersion(
   if (!finalized.ok) {
     await discardUpload(env, stored);
     return badRequest(finalized.message);
+  }
+  if (finalized.finalized.collection !== undefined) {
+    const includes = finalized.finalized.collection.includes;
+    const published = await publishedIdsOf(
+      env.DB,
+      includes.map((entry) => entry.id),
+    );
+    const refusal = validateCollectionIncludes(includes, published, item.id);
+    if (!refusal.ok) {
+      await discardUpload(env, stored);
+      return badRequest(refusal.message);
+    }
   }
   // A hardware plugin is held for the owner whatever the author's state; the
   // manifest review reads is the package's own, validated above.

@@ -256,6 +256,27 @@ export async function itemById(
   );
 }
 
+/**
+ * The published listings among `ids`, as id → listing kind, in one statement.
+ * An id that is absent is unknown to the store or not published; a collection
+ * needs both facts and the kind, so the map carries them together.
+ */
+export async function publishedIdsOf(
+  db: D1Database,
+  ids: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (ids.length === 0) return new Map();
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = await db
+    .prepare(
+      `SELECT id, kind FROM item
+       WHERE status = 'published' AND id IN (${placeholders})`,
+    )
+    .bind(...ids)
+    .all<{ readonly id: string; readonly kind: string }>();
+  return new Map(rows.results.map((row) => [row.id, row.kind]));
+}
+
 /** Any state's newest version; the caller decides whether it may be shown. */
 export async function latestVersion(
   db: D1Database,

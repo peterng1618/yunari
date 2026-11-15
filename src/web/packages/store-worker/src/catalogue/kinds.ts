@@ -9,7 +9,10 @@ import {
   type StoreItemKind,
 } from "@yunari/renderer-core";
 import {
+  type CollectionInclude,
+  type CollectionPackage,
   MAX_ARCHIVE_BYTES,
+  readCollectionPackage,
   readEditorThemePackage,
   readPathPresetPack,
   readWidgetPackage,
@@ -128,6 +131,9 @@ export interface FinalizedPackage {
   /** The validated plugin manifest, so review reads the package's own bytes
    *  rather than a second parse of the metadata column. */
   readonly manifest?: PluginManifest;
+  /** The validated collection manifest, so finalize checks the package's own
+   *  includes rather than a second parse of the metadata column. */
+  readonly collection?: CollectionPackage;
 }
 
 export type FinalizedPackageResult =
@@ -212,6 +218,23 @@ export function validateFinalizedPackage(
     };
   }
 
+  if (kind === "collection") {
+    const read = readCollectionPackage(bytes);
+    if (!read.ok) return read;
+    return {
+      ok: true,
+      finalized: {
+        metadata: {
+          name: read.package.name,
+          description: read.package.description,
+          includes: read.package.includes,
+        },
+        executionProfile: null,
+        collection: read.package,
+      },
+    };
+  }
+
   const read = readPluginPackage(bytes);
   if (!read.ok) return read;
   const { manifest } = read.package;
@@ -227,6 +250,41 @@ export function validateFinalizedPackage(
       manifest,
     },
   };
+}
+
+/**
+ * The cross-listing half of collection validation, and pure so it is checked
+ * without D1.
+ *
+ * The package reader owns the manifest's structure — ids, duplicates and
+ * bounds. This owns what only the catalogue can answer: whether each included
+ * id is published, whether it is the collection itself, and whether it is
+ * another collection. `published` maps a published id to its listing kind; an
+ * id absent from it is unknown or unpublished.
+ */
+export function validateCollectionIncludes(
+  includes: readonly CollectionInclude[],
+  published: ReadonlyMap<string, string>,
+  selfId: string,
+): { readonly ok: true } | { readonly ok: false; readonly message: string } {
+  for (const { id } of includes) {
+    if (id === selfId)
+      return { ok: false, message: "A collection cannot include itself." };
+    const kind = published.get(id);
+    if (kind === undefined) {
+      return {
+        ok: false,
+        message: `The collection includes "${id}", which is not a published item.`,
+      };
+    }
+    if (kind === "collection") {
+      return {
+        ok: false,
+        message: `The collection includes "${id}", which is itself a collection; collections are one level deep.`,
+      };
+    }
+  }
+  return { ok: true };
 }
 
 /** The authority-bearing contribution identities consent and review key on. */
