@@ -4,10 +4,12 @@ import {
   managerOver as createManagerOver,
   deviceOver,
   familyOver,
+  PRODUCT_ID,
   pause,
   SETTLE_MS,
   SOURCE,
   until,
+  VENDOR_ID,
 } from "./panel-manager.fixtures.js";
 import {
   createPanelManager,
@@ -68,7 +70,12 @@ describe("createPanelManager", () => {
     const manager = managerOver({ videoCacheDir: "C:/host/cache/panel-video" });
     await manager.start("strip");
 
-    expect(seen).toEqual({ cacheDir: "C:/host/cache/panel-video" });
+    expect(seen).toEqual({
+      cacheDir: "C:/host/cache/panel-video",
+      // The record's own device travels with the open, so a family with more
+      // than one attached port opens this record's.
+      device: { vendorId: VENDOR_ID, productId: PRODUCT_ID, model: "fake" },
+    });
     await manager.stop("strip");
   });
 

@@ -233,6 +233,50 @@ describe("attachedTurzxPanels", () => {
     expect(closed, "the silent port was not released").toBe(1);
   });
 
+  it("ignores a serial port the panel family does not claim", async () => {
+    // A WCH adapter reports its own ids, and another program holding it made
+    // the host report that refusal as the panel's status while the panel on
+    // COM5 was rendering. Only the family's own ids are candidates.
+    const opened: string[] = [];
+    const hints = await attachedTurzxPanels({
+      ports: async () => [
+        {
+          path: "COM4",
+          vendorId: 0x1a86,
+          productId: 0x7523,
+          serialNumber: "WCH",
+        },
+        {
+          path: "COM5",
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serialNumber: "S1",
+        },
+      ],
+      open: async (path) => {
+        opened.push(path);
+        if (path === "COM4") {
+          throw Object.assign(new Error("Opening COM4: Access denied"), {
+            code: "EACCES",
+          });
+        }
+        return fakeTransport("chs_5inch.dev1_rom1.88").transport;
+      },
+    });
+
+    expect(opened, "an unrelated adapter was probed").toEqual(["COM5"]);
+    expect(hints).toEqual([
+      {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "S1",
+        label: 'TURZX 5" Panel',
+        model: "chs_5inch",
+        firmware: "1.88",
+      },
+    ]);
+  });
+
   it("skips a port with no usable USB ids and a port that vanished", async () => {
     const hints = await attachedTurzxPanels({
       ports: async () => [
@@ -392,6 +436,67 @@ describe("openTurzxPanel", () => {
         "Unplug and replug it, or restart its USB device.",
     );
     expect(closed, "the silent port was not released").toBe(1);
+  });
+
+  it("opens only the port its display record names", async () => {
+    // A retry after a stalled write probed every USB serial port and reported
+    // an unrelated held adapter as the panel's failure. The record's own
+    // serial is the identity a retry may open.
+    const opened: string[] = [];
+    const { transport } = fakeTransport("chs_5inch.dev1_rom1.88");
+    const panel = await openTurzxPanel({
+      device: {
+        vendorId: 0x1d6b,
+        productId: 0x0106,
+        serial: "S1",
+      },
+      ports: async () => [
+        { path: "COM4", vendorId: 0x1a86, productId: 0x7523 },
+        {
+          path: "COM5",
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serialNumber: "S1",
+        },
+      ],
+      open: async (path) => {
+        opened.push(path);
+        return transport;
+      },
+    });
+
+    try {
+      expect(opened).toEqual(["COM5"]);
+    } finally {
+      await panel.close();
+    }
+  });
+
+  it("does not fall back to another port when the record's port is absent", async () => {
+    const opened: string[] = [];
+    await expect(
+      openTurzxPanel({
+        device: {
+          vendorId: 0x1d6b,
+          productId: 0x0106,
+          serial: "S1",
+        },
+        ports: async () => [
+          {
+            path: "COM6",
+            vendorId: 0x1d6b,
+            productId: 0x0106,
+            serialNumber: "S2",
+          },
+        ],
+        open: async (path) => {
+          opened.push(path);
+          return fakeTransport("chs_5inch.dev1_rom1.88").transport;
+        },
+      }),
+    ).rejects.toThrow("is not attached");
+
+    expect(opened, "another gadget's port was opened").toEqual([]);
   });
 
   it("asks for a lossless still because it is decoded, not streamed", async () => {

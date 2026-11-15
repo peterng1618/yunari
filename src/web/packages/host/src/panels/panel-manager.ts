@@ -365,6 +365,9 @@ export function createPanelManager(options: PanelManagerOptions): PanelManager {
       ...(record.renderMode === undefined
         ? {}
         : { renderMode: record.renderMode }),
+      // The record's own device: a family that could reach more than one
+      // attached port must open this record's, never a neighbour's.
+      device: hardware,
     };
 
     const videoFor = options.videoFor;

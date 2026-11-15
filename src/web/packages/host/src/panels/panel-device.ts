@@ -12,6 +12,7 @@ import type {
   DisplayRenderMode,
   PalettePaint,
 } from "@yunari/renderer-core";
+import type { PanelIdentity } from "../settings/displays.js";
 import type { DeviceSink } from "./device-sink.js";
 
 /** A panel's own raster size, in the orientation the wire expects. */
@@ -233,6 +234,13 @@ export interface PanelOpenOptions {
   /** The stream the owner chose for this display. Absent is the family's own
    *  default, which is the one every family accepts. */
   readonly renderMode?: DisplayRenderMode;
+  /**
+   * The device the display record names.
+   *
+   * A family that can reach several attached devices opens only this one: a
+   * retry must not consider a port another record owns.
+   */
+  readonly device?: PanelIdentity;
 }
 
 /**

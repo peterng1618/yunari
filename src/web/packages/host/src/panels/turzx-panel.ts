@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PanelIdentity } from "../settings/displays.js";
+import { samePanel } from "../settings/displays.js";
 import type {
   PanelControlCommand,
   PanelControls,
@@ -45,6 +47,15 @@ import { type TranscodeResult, transcodeForPanel } from "./turzx-video.js";
  */
 
 const LABEL = 'TURZX 5" Panel';
+/**
+ * The ids the family's firmware reports.
+ *
+ * They are the generic Linux gadget pair, so they do not *identify* a panel —
+ * HELLO does — but they are what a port must report to be a candidate at all.
+ * Probing every port with any ids at all reported an unrelated adapter's
+ * refusal as this panel's status.
+ */
+const PANEL_IDS = { vendorId: 0x1d6b, productId: 0x0106 } as const;
 /** Long enough for a 23-byte HELLO reply at 115200, short enough to probe many. */
 const PROBE_TIMEOUT_MS = 500;
 /** A file command's answer may follow a whole upload, not just its header. */
@@ -149,13 +160,40 @@ export interface TurzxOptions {
   readonly transcode?: Transcode;
   /** The host's disposable cache directory for encoded clips. */
   readonly cacheDir?: string;
+  /**
+   * The device the display record names, when there is a record.
+   *
+   * A start or retry opens only this port: every port the family could claim is
+   * another device's, and an unrelated adapter's open failure is not this
+   * panel's status.
+   */
+  readonly device?: PanelIdentity;
 }
 
-/** A port whose listing carries the ids the family row claims. */
-function hasIds(
-  port: SerialPortInfo,
-): port is SerialPortInfo & { vendorId: number; productId: number } {
-  return port.vendorId !== undefined && port.productId !== undefined;
+/** A listed port carrying the ids this family's firmware reports. */
+type PanelPort = SerialPortInfo & { vendorId: number; productId: number };
+
+function claimedPorts(ports: readonly SerialPortInfo[]): PanelPort[] {
+  return ports.filter(
+    (port): port is PanelPort =>
+      port.vendorId === PANEL_IDS.vendorId &&
+      port.productId === PANEL_IDS.productId,
+  );
+}
+
+/**
+ * Whether a listed port is the device a display record names. The host's one
+ * identity rule decides it: serial when both sides report one, else the ids.
+ */
+function isRecordedDevice(port: PanelPort, device: PanelIdentity): boolean {
+  return samePanel(
+    {
+      vendorId: port.vendorId,
+      productId: port.productId,
+      ...(port.serialNumber === undefined ? {} : { serial: port.serialNumber }),
+    },
+    device,
+  );
 }
 
 /** Writes HELLO and reads its answer; anything but a panel's reply is `undefined`. */
@@ -184,10 +222,7 @@ function quietlyClose(transport: SerialTransport): Promise<void> {
  * It stays listed, with its OS instance id: the only way back is restarting the
  * USB node, and that action cannot name a device the host has already forgotten.
  */
-function silentHint(
-  port: SerialPortInfo & { vendorId: number; productId: number },
-  detail: string,
-): PanelHint {
+function silentHint(port: PanelPort, detail: string): PanelHint {
   return {
     vendorId: port.vendorId,
     productId: port.productId,
@@ -267,8 +302,7 @@ export async function attachedTurzxPanels(
     });
   }
 
-  for (const port of ports) {
-    if (!hasIds(port)) continue;
+  for (const port of claimedPorts(ports)) {
     if (heldPanels.has(port.path)) continue;
 
     let transport: SerialTransport;
@@ -1091,7 +1125,11 @@ export async function openTurzxPanel(
       }));
   const sleep = options.sleep ?? wait;
 
-  const candidates = ports.filter(hasIds);
+  const device = options.device;
+  const candidates =
+    device === undefined
+      ? claimedPorts(ports)
+      : claimedPorts(ports).filter((port) => isRecordedDevice(port, device));
 
   if (candidates.length === 0) throw notAttached();
 
@@ -1149,8 +1187,10 @@ export async function openTurzxPanel(
     return new TurzxPanel(transport, decode, port.path, transcode, sleep);
   }
 
-  if (held !== undefined) throw new Error(held);
+  // The panel's own silence is news about the panel; a held port elsewhere in
+  // the family's ids is not this record's device.
   if (unanswered !== undefined) throw notAnswering(unanswered);
+  if (held !== undefined) throw new Error(held);
 
   throw notAttached();
 }
@@ -1179,8 +1219,8 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
   {
     id: "turzx-5",
     label: LABEL,
-    vendorId: 0x1d6b,
-    productId: 0x0106,
+    vendorId: PANEL_IDS.vendorId,
+    productId: PANEL_IDS.productId,
     commands: [
       "brightness",
       "screen",

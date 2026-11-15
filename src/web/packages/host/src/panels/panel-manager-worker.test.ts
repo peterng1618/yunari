@@ -74,7 +74,13 @@ describe("createPanelManager with a built-in panel", () => {
     expect(seen).toEqual({
       vendorId: VENDOR_ID,
       productId: PRODUCT_ID,
-      open: {},
+      open: {
+        device: {
+          vendorId: VENDOR_ID,
+          productId: PRODUCT_ID,
+          model: "fake",
+        },
+      },
     });
     expect(attach).toHaveBeenCalledTimes(1);
     expect(events).toContain("attach:http://127.0.0.1:1/?display=strip");
