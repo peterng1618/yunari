@@ -36,7 +36,7 @@
 ### Task 1: Record the reuse decision
 
 **Files:**
-- Create: `docs/decisions/0132-library-store.md`
+- Create: `docs/decisions/0139-library-store.md`
 
 **Interfaces:**
 - Consumes: the spec, `docs/decisions/README.md` template, `docs/decisions/0113-store-distribution.md`, `docs/decisions/0114-executable-extensions.md`.
@@ -46,14 +46,14 @@
 
 Run: `sed -n 1,80p docs/decisions/README.md && sed -n 1,60p docs/decisions/0113-store-distribution.md`
 
-- [ ] **Step 2: Write `docs/decisions/0132-library-store.md`**
+- [ ] **Step 2: Write `docs/decisions/0139-library-store.md`**
 
 Work the seven rungs from the template. Record: the internal owners (`catalogue-index.ts`, `catalogue/kinds.ts`, `store/install.ts`, `theme-origins.ts`, `store-mode/`); installed dependencies re-read (`theme-package` readers, `extension-api` manifest); native platform (D1 columns already present, no new table); public solutions (Orca's catalogue `contributes[]` and marketplace model); the integration comparison; the smallest probe if any behaviour is in doubt; and the build/reuse decision. Reject one-listing-per-kind, a unified package format and pinned collections, citing the spec's **Decisions**.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/decisions/0132-library-store.md
+git add docs/decisions/0139-library-store.md
 git commit -m "docs(decisions): record the library store reuse decision"
 ```
 
