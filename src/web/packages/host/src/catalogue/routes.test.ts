@@ -51,6 +51,7 @@ const ENTRY: MineEntry = {
   id: ITEM_ID,
   kind: "dashboard-theme",
   name: "Mine",
+  members: [{ id: "theme-1", kind: "dashboard-theme", name: "Mine" }],
   version: "1.0.1",
   createdAt: "2026-10-01T00:00:00.000Z",
   updatedAt: "2026-10-02T00:00:00.000Z",
