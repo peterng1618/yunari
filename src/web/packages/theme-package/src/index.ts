@@ -18,6 +18,7 @@ import {
 } from "./credits";
 
 export * from "./archive-preflight";
+export * from "./collection-package";
 export * from "./credits";
 export * from "./path-preset-pack";
 export * from "./theme-id";
