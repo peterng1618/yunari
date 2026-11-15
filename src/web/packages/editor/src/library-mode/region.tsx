@@ -20,6 +20,7 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
+import { readOrigins } from "./origins.js";
 import {
   catalogueSourceFor,
   type EditorThemeRow,
@@ -339,7 +340,23 @@ function PageListing(props: {
   );
   const [catalogueFailed, setCatalogueFailed] = useState(false);
   const [libraryFailed, setLibraryFailed] = useState(false);
+  /** The origin register behind each collection's installed count. Read once
+   *  per attempt, beside the two listings, because a card never fetches a
+   *  member's package to say how many it holds. */
+  const [origins, setOrigins] = useState<
+    readonly CatalogueOrigin[] | undefined
+  >(undefined);
+  const [originsFailed, setOriginsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  /** The pack cards this page has open. The page owns it because opening one is
+   *  a reading of the listing, not of the cell that draws it. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    setExpanded(new Set());
+  }, [props.page]);
 
   useEffect(() => {
     let live = true;
@@ -347,6 +364,8 @@ function PageListing(props: {
     setLibrary(undefined);
     setCatalogueFailed(false);
     setLibraryFailed(false);
+    setOrigins(undefined);
+    setOriginsFailed(false);
     sources.catalogue.list().then(
       (rows) => {
         if (live) setCatalogue(rows);
@@ -361,6 +380,14 @@ function PageListing(props: {
       },
       () => {
         if (live) setLibraryFailed(true);
+      },
+    );
+    readOrigins().then(
+      (rows) => {
+        if (live) setOrigins(rows);
+      },
+      () => {
+        if (live) setOriginsFailed(true);
       },
     );
     return () => {
@@ -444,10 +471,26 @@ function PageListing(props: {
             onRetry={() => setAttempt((current) => current + 1)}
           />
         ) : null}
+        {originsFailed ? (
+          <Failure
+            message={uiCopy.store.unreadable.origins}
+            onRetry={() => setAttempt((current) => current + 1)}
+          />
+        ) : null}
         {visible.length > 0 ? (
           <Gallery
             items={visible.map((row) => row.item)}
             density={density}
+            origins={origins}
+            expanded={expanded}
+            onExpand={(key) =>
+              setExpanded((current) => {
+                const next = new Set(current);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              })
+            }
             onAction={(action) => {
               // Only "open" has a route in this task; the rest are Task 10's.
               // No per-type page has a document of its own to open yet.

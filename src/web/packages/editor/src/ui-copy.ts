@@ -12,6 +12,7 @@ import {
   type ChartFamily,
   type ColourMode,
   DASHBOARD_THEME_KIND,
+  MEMBER_KINDS,
   type Orientation,
   type SemanticFamily,
 } from "@yunari/renderer-core";
@@ -35,6 +36,23 @@ const chartFamilyLabels = {
   radar: "Radar",
   polarBar: "Polar bar",
 } as const satisfies Record<ChartFamily, string>;
+
+/**
+ * What one member kind is called, keyed by `MEMBER_KINDS`, so a member kind
+ * added to the vocabulary without a word fails to compile here rather than
+ * printing an identifier at a person. A kind this build does not ship has no
+ * word and the card prints its identifier, the rule the listing kinds follow.
+ */
+const memberKindWords: Readonly<Record<string, string>> = {
+  "dashboard-theme": "Theme",
+  "editor-theme": "App theme",
+  widget: "Widget",
+  shape: "Shape",
+  "sensor-provider": "Sensor provider",
+  "asset-source": "Asset source",
+  "panel-driver": "Panel driver",
+  "data-source": "Data source",
+} satisfies Record<(typeof MEMBER_KINDS)[number], string>;
 
 /**
  * The generic word for each kind of layer. `layer-tree.ts`'s row-name fallback
@@ -1511,6 +1529,10 @@ export const uiCopy = {
     unreadable: {
       local: "Your themes could not be read.",
       online: "The store could not be read.",
+      /** The origin register behind a collection's installed count. Without it
+       *  the count would have to be fabricated, so the read's failure is said
+       *  instead. */
+      origins: "This PC's installed copies could not be read.",
     },
     /** The failure's one way forward: read the same listing again. */
     retry: "Try again",
@@ -1584,6 +1606,27 @@ export const uiCopy = {
       kinds: { [DASHBOARD_THEME_KIND]: "Theme" } as Readonly<
         Record<string, string>
       >,
+      /** What a member is called, keyed by `MEMBER_KINDS`. The cell draws the
+       *  word beside the member's name, and an unknown kind prints its own
+       *  identifier. */
+      memberKinds: memberKindWords,
+      /** The pack card's readings. **The count is text, not a tooltip**: a
+       *  package's size is what a person shops for, and a title attribute is
+       *  read by no touch screen and by many screen readers not at all. A
+       *  collection counts the includes the origin register names — the
+       *  listings it actually installs — because it holds no members of its
+       *  own. */
+      pack: {
+        members: (count: number): string =>
+          count === 1 ? "1 item" : `${count} items`,
+        installed: (installed: number, total: number): string =>
+          `${installed} of ${total} installed`,
+        expand: "Show members",
+        collapse: "Hide members",
+        /** The panel's own name, so the member rows announce the package they
+         *  arrived with rather than as an unlabelled group. */
+        panel: (name: string): string => `${name} members`,
+      },
     },
     /** The display choice a cell's **Assign to display** opens. Its name is the
      *  action's own word (`cell.actions.assign`), so the two cannot disagree. */

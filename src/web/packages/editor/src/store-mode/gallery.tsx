@@ -1,3 +1,4 @@
+import type { CatalogueOrigin } from "@yunari/renderer-core";
 import type * as React from "react";
 import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
@@ -17,7 +18,14 @@ import {
   type LucideIcon,
   OPEN_ITEM_GLYPH,
   PUBLISH_ITEM_GLYPH,
+  TWISTY_GLYPHS,
 } from "../editor-shell/icons.js";
+import {
+  cardsOf,
+  installedCatalogueIds,
+  installedIncludesOf,
+  type StoreCard,
+} from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
 import { CELL_ACTION_REASONS } from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
@@ -95,6 +103,12 @@ function ratioOf(item: StoreItem): number {
  *
  * The four actions travel through one `onAction`, because a cell draws four and
  * a callback per action would be four props a caller can half-wire.
+ *
+ * **A listing is drawn as the cards its members make of it** (`cardsOf`): a
+ * one-member listing is that member's card, a package of several is one pack
+ * card whose members open in place, and a collection is its own card. The
+ * expansion is the surface's — the library mode owns which packs are open — so
+ * this grid only reads the set and reports a press.
  */
 export function Gallery(props: {
   readonly items: readonly StoreItem[];
@@ -112,6 +126,17 @@ export function Gallery(props: {
    *  a landed submission re-lists the library. Absent on a surface with no
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
+  /** The pack cards this surface has open. Absent where the surface draws no
+   *  packs (the store halves), which then draws no expand control at all rather
+   *  than a button that answers nothing. */
+  readonly expanded?: ReadonlySet<string> | undefined;
+  /** Reports one pack card's press; the surface flips the key. */
+  readonly onExpand?: ((key: string) => void) | undefined;
+  /** This PC's origin register, read once by the surface. A collection's
+   *  installed count is drawn from these records; a card never fetches a
+   *  member's package to say how many it holds. Absent until the read answers,
+   *  because an unread register must not draw as "0 installed". */
+  readonly origins?: readonly CatalogueOrigin[] | undefined;
 }): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -151,6 +176,21 @@ export function Gallery(props: {
     targetHeight,
     gap: GALLERY_GAP,
   });
+  // The cards of one listing stay together and in order: the pack card first,
+  // then its members. A row still packs listings, because the pack's picture is
+  // the listing's and that is the height the row justifies against.
+  const grouped = new Map<string, readonly StoreCard[]>();
+  for (const card of cardsOf(props.items)) {
+    const listed = grouped.get(card.listing.id);
+    grouped.set(
+      card.listing.id,
+      listed === undefined ? [card] : [...listed, card],
+    );
+  }
+  const installed =
+    props.origins === undefined
+      ? undefined
+      : installedCatalogueIds(props.origins);
 
   return (
     <div
@@ -181,17 +221,30 @@ export function Gallery(props: {
               ...(row.short ? { maxWidth: shortWidth } : {}),
             }}
           >
-            {row.items.map(({ item }) => (
-              <Cell
-                key={item.id}
-                item={item}
-                ratio={ratioOf(item)}
-                onAction={props.onAction}
-                onOpenItem={props.onOpenItem}
-                install={props.install}
-                submit={props.submit}
-              />
-            ))}
+            {row.items.map(({ item }) => {
+              const group = grouped.get(item.id) ?? [];
+              const card =
+                group.find((candidate) => candidate.member === undefined) ??
+                group[0];
+              if (card === undefined) return null;
+              return (
+                <Cell
+                  key={card.key}
+                  card={card}
+                  members={group.filter((member) => member !== card)}
+                  ratio={ratioOf(item)}
+                  expanded={props.expanded?.has(card.key) ?? false}
+                  {...(props.onExpand === undefined
+                    ? {}
+                    : { onExpand: props.onExpand })}
+                  installed={installed}
+                  onAction={props.onAction}
+                  onOpenItem={props.onOpenItem}
+                  install={props.install}
+                  submit={props.submit}
+                />
+              );
+            })}
           </div>
         );
       })}
@@ -215,21 +268,48 @@ export function Gallery(props: {
  * pill — so a plain library theme no longer repeats a date line under its name.
  */
 function Cell(props: {
-  readonly item: StoreItem;
+  /** The card this cell draws: a listing's own card, or one member's card. */
+  readonly card: StoreCard;
+  /** The package's member cards, in order; empty when this cell is not a pack
+   *  card. */
+  readonly members: readonly StoreCard[];
   /** The theme's own width/height, which is the card's track weight and its
    *  picture's shape. */
   readonly ratio: number;
+  readonly expanded: boolean;
+  readonly onExpand?: ((key: string) => void) | undefined;
+  /** The catalogue ids this PC installed, read once from the origin register.
+   *  Absent until the register answers, which leaves a collection's count
+   *  unstated rather than fabricated as zero. */
+  readonly installed: ReadonlySet<string> | undefined;
   readonly onAction: (action: CellAction, id: string) => void;
   readonly onOpenItem: (id: string) => void;
   readonly install: InstallControl;
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
-  const { item, onAction, onOpenItem, install, submit } = props;
+  const { card, members, onAction, onOpenItem, install, submit } = props;
+  const item = card.listing;
+  const member = card.member;
   const catalogue = item.catalogue;
   // The left slot branches on whether the item has catalogue facts; the action
   // slot on the install decision. They read different facts on purpose: a
   // library item has no install state, and an online item always has a left slot.
   const installState = installStateOf(item);
+  /** **A collection counts what it installs, not what it contains**: its
+   *  `members` are empty by construction, so the count is its includes the
+   *  register names. A package's own count is its member count. */
+  const includes =
+    props.installed === undefined
+      ? undefined
+      : installedIncludesOf(item, props.installed);
+  const countText =
+    includes === undefined
+      ? members.length === 0
+        ? undefined
+        : uiCopy.store.cell.pack.members(members.length)
+      : uiCopy.store.cell.pack.installed(includes.installed, includes.total);
+  const expandable = members.length > 0 && props.onExpand !== undefined;
+  const panelId = `yunari-store-members-${card.key}`;
   const refusal =
     install.refusal?.id === item.id ? install.refusal.message : undefined;
   /** **Only a theme the host holds no store record of can be published**, and
@@ -347,6 +427,122 @@ function Cell(props: {
           )}
         </div>
       </div>
+      {/* **A member card names its member.** The line appears only where the
+          member adds a reading the card's title and band do not already carry:
+          a one-member theme repeats its own name, while a pack with one unit
+          keeps the package's name and says which unit it is. */}
+      {member === undefined ||
+      (member.name === item.name && member.kind === item.kind) ? null : (
+        <div
+          data-yunari-store-cell-member=""
+          className="flex min-w-0 items-center gap-[var(--space-6)] px-[var(--space-10)] pb-[var(--space-8)]"
+        >
+          <span
+            data-yunari-store-cell-member-name=""
+            className="min-w-0 truncate text-xs text-muted"
+          >
+            {member.name}
+          </span>
+          <span
+            data-yunari-store-cell-member-kind=""
+            className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
+          >
+            {uiCopy.store.cell.memberKinds[member.kind] ?? member.kind}
+          </span>
+        </div>
+      )}
+      {/* **A package states its size in words, and opens in place.** The count
+          is text rather than a title attribute, because a tooltip is read by no
+          touch screen; the twisty controls the panel below it and reports its
+          own state through `aria-expanded`. */}
+      {countText === undefined && !expandable ? null : (
+        <div
+          data-yunari-store-cell-members-row=""
+          className="flex min-w-0 items-center gap-[var(--space-6)] px-[var(--space-10)] pb-[var(--space-10)]"
+        >
+          {countText === undefined ? null : (
+            <span
+              data-yunari-store-cell-members=""
+              className="min-w-0 truncate text-xs text-muted"
+            >
+              {countText}
+            </span>
+          )}
+          {expandable ? (
+            <button
+              type="button"
+              data-yunari-store-cell-expand=""
+              aria-expanded={props.expanded}
+              aria-controls={panelId}
+              onClick={() => props.onExpand?.(card.key)}
+              className="flex flex-none items-center rounded-md border border-edge bg-panel p-[var(--space-4)] text-muted"
+            >
+              <Glyph
+                icon={
+                  props.expanded
+                    ? TWISTY_GLYPHS.expanded
+                    : TWISTY_GLYPHS.collapsed
+                }
+                size={12}
+              />
+              <span className="sr-only">
+                {props.expanded
+                  ? uiCopy.store.cell.pack.collapse
+                  : uiCopy.store.cell.pack.expand}
+              </span>
+            </button>
+          ) : null}
+        </div>
+      )}
+      {members.length === 0 ? null : (
+        <div
+          id={panelId}
+          role="group"
+          aria-label={uiCopy.store.cell.pack.panel(item.name)}
+          hidden={!props.expanded}
+          data-yunari-store-members=""
+          className="border-t border-edge px-[var(--space-10)] py-[var(--space-8)]"
+        >
+          <ul className="flex flex-col gap-[var(--space-6)]">
+            {members.map((memberCard) => {
+              const namedMember = memberCard.member;
+              return (
+                <li
+                  key={memberCard.key}
+                  data-yunari-store-member-card={memberCard.key}
+                  className="flex min-w-0 items-center gap-[var(--space-6)]"
+                >
+                  {namedMember === undefined ? null : (
+                    <>
+                      <span
+                        data-yunari-store-member-name=""
+                        className="min-w-0 flex-1 truncate text-xs text-text"
+                      >
+                        {namedMember.name}
+                      </span>
+                      <span
+                        data-yunari-store-member-kind=""
+                        className="flex-none rounded-full border border-edge px-[var(--space-6)] py-[var(--space-4)] text-2xs text-muted"
+                      >
+                        {uiCopy.store.cell.memberKinds[namedMember.kind] ??
+                          namedMember.kind}
+                      </span>
+                    </>
+                  )}
+                  {installState === "none" ? null : (
+                    <InstallAction
+                      item={item}
+                      state={installState}
+                      install={install}
+                      controlKey={memberCard.key}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {catalogue === undefined && item.origin === undefined ? null : (
         <div className="px-[var(--space-10)] pb-[var(--space-10)]">
           {/* The band's own hook, because **what the badge sits in is the claim**:
@@ -433,8 +629,12 @@ function InstallAction(props: {
   readonly item: StoreItem;
   readonly state: Exclude<InstallState, "none">;
   readonly install: InstallControl;
+  /** The card the control belongs to. Several member rows install the same
+   *  listing, so the item id alone would draw duplicate DOM ids. */
+  readonly controlKey?: string;
 }): React.JSX.Element {
   const { item, state, install } = props;
+  const controlKey = props.controlKey ?? item.id;
 
   if (state === "installed") {
     return (
@@ -456,7 +656,7 @@ function InstallAction(props: {
   return (
     <button
       type="button"
-      id={`yunari-store-cell-${item.id}-install`}
+      id={`yunari-store-cell-${controlKey}-install`}
       data-yunari-store-cell-install={state}
       disabled={busy}
       aria-busy={busy}

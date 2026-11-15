@@ -76,7 +76,11 @@ async function start(): Promise<string> {
 
 /** One GET from a caller whose address the socket names, which a real loopback
  *  server cannot be asked to lie about. */
-function callFrom(remoteAddress: string): Promise<{
+function callFrom(
+  remoteAddress: string,
+  path = "/api/editor-themes",
+  headers: Readonly<Record<string, string>> = {},
+): Promise<{
   readonly status: number;
   readonly text: string;
 }> {
@@ -88,8 +92,8 @@ function callFrom(remoteAddress: string): Promise<{
     }) as unknown as http.IncomingMessage;
 
     request.method = "GET";
-    request.url = "/api/editor-themes";
-    request.headers = { host: "127.0.0.1:5173" };
+    request.url = path;
+    request.headers = { host: "127.0.0.1:5173", ...headers };
     (request as { socket: { remoteAddress: string } }).socket = {
       remoteAddress,
     };
@@ -193,6 +197,66 @@ describe("the editor theme listing", () => {
 
     expect(answer.status).toBe(403);
     expect(answer.text).toBe("Editor themes are available on this PC only.");
+  });
+});
+
+describe("the store origin register", () => {
+  const theme = {
+    kind: "dashboard-theme",
+    catalogueId: "8f14e45f-ceea-4d67-b1a2-000000000003",
+    version: "1.0.0",
+    installedAt: "2026-10-01T00:00:00.000Z",
+    collections: ["11111111-1111-4111-8111-111111111111"],
+  } as const;
+  const plugin = {
+    kind: "plugin",
+    catalogueId: "55555555-5555-4555-8555-555555555555",
+    version: "2.0.0",
+    installedAt: "2026-10-02T00:00:00.000Z",
+  } as const;
+
+  it("answers every record the register holds", async () => {
+    await origins.write("dashboard-theme", "living-room", theme);
+    await origins.write("plugin", "acme/sensors", plugin);
+
+    const base = await start();
+    const listed = await fetch(`${base}/api/store/origins`);
+
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({
+      origins: expect.arrayContaining([theme, plugin]),
+    });
+  });
+
+  it("answers an empty register rather than refusing", async () => {
+    const base = await start();
+
+    expect(await (await fetch(`${base}/api/store/origins`)).json()).toEqual({
+      origins: [],
+    });
+  });
+
+  it("refuses a non-loopback caller", async () => {
+    const answer = await callFrom("192.168.1.10", "/api/store/origins");
+
+    expect(answer.status).toBe(403);
+    expect(answer.text).toBe("Store origins are loopback only.");
+  });
+
+  it("refuses a page from another origin", async () => {
+    const answer = await callFrom("127.0.0.1", "/api/store/origins", {
+      origin: "https://elsewhere.test",
+    });
+
+    expect(answer.status).toBe(403);
+    expect(answer.text).toBe("That request is from another origin.");
+  });
+
+  it("answers no write", async () => {
+    const base = await start();
+    const answer = await fetch(`${base}/api/store/origins`, { method: "POST" });
+
+    expect(answer.status).toBe(405);
   });
 });
 

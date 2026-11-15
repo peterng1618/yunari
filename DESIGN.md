@@ -239,6 +239,17 @@ the card's controls in over the same space, so the row never grows and the card
 never repeats a line beneath itself. A facts band exists only for facts the name
 row cannot carry: an online item's kind and download count, or an origin pill.
 
+**A package is one card that opens in place.** A listing with several members
+draws the package's picture and name with its member count as readable text —
+never a title attribute — and a twisty button carrying `aria-expanded` that
+opens a panel labeled with the package's own name. The panel lists that
+package's member rows: each names the member and its kind, and installs the
+package through the same control the card draws. A single-member listing draws
+the member's name and kind on the card itself, beside the package it belongs to.
+A collection counts the included listings this PC already holds — *2 of 4
+installed* — from the origin register, so its count is the register's fact
+rather than a fetch per member.
+
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
 picture. The stage is flush to the box's edges, one height for every item, with

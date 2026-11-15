@@ -506,6 +506,35 @@ export function createThemeWrites(
       return true;
     }
 
+    // Every origin this PC recorded, as one answer. A collection's installed
+    // count and the update diff both read it, and neither may fetch a member's
+    // package to learn what is installed. **Metadata only**: a record names the
+    // catalogue item, its version and its collections, and carries no bytes,
+    // package URL or credential. Loopback and origin checks are the same as
+    // every other store route on this host.
+    if (url.pathname === "/api/store/origins") {
+      if (request.method !== "GET") {
+        sendText(response, 405, "Only GET is supported.");
+        return true;
+      }
+      if (!isLoopbackRemote(request.socket.remoteAddress)) {
+        sendText(response, 403, "Store origins are loopback only.");
+        return true;
+      }
+      if (isForeignOrigin(request)) {
+        sendText(response, 403, "That request is from another origin.");
+        return true;
+      }
+      if (catalogueOrigins === undefined) {
+        sendText(response, 503, "This host records no store origins.");
+        return true;
+      }
+
+      const register = await catalogueOrigins.read();
+      sendJson(response, 200, { origins: Object.values(register) });
+      return true;
+    }
+
     // The editor themes this host holds, for the Library's installed state. A
     // row names the theme and, where the store recorded one, where it came
     // from; the bytes are the `:id` route's answer, not this one's.
