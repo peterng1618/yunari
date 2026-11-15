@@ -7,7 +7,7 @@ import { isDesktopSurface } from "./surface.js";
  * The host's tray opens the editor's existing surfaces by opening a URL, so the
  * query has to reach the shell at mount. `shell-entry.test.ts` pins the parse;
  * this pins that the parsed answer is what the shell actually opens on — the
- * mode region, the publish popup, and **Themes when the URL names nothing or
+ * mode region, the publish popup, and **the Library when the URL names nothing or
  * something unknown**.
  */
 
@@ -56,7 +56,7 @@ test("opens Library when the URL names no mode", async ({ page }, testInfo) => {
   );
 });
 
-test("opens the store from the URL", async ({ page }, testInfo) => {
+test("opens the Library from the URL", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=library`);
   await expect(page.locator("[data-yunari-mode-region]")).toHaveAttribute(
@@ -71,7 +71,7 @@ test("opens the store from the URL", async ({ page }, testInfo) => {
  * value rather than a class: a descendant that is not in the rule's selector
  * list still has to answer with the token's colour.
  */
-test("library the store grid's own scroller", async ({ page }, testInfo) => {
+test("the dashboard grid's own scroller", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=library`);
   const bar = await page

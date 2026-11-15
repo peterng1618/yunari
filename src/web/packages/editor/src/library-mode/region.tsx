@@ -103,10 +103,11 @@ interface Row {
  * The two halves joined, then filtered by the state.
  *
  * **A library row that names a catalogue item is that item's installed copy**,
- * so the library half never draws it beside the catalogue row; the catalogue
- * row takes the origin the library row carried. A library row with no origin —
- * an authored theme, or a copy whose catalogue entry is gone — stays its own
- * row.
+ * so the library half drops it when the catalogue listing actually carries that
+ * item; the catalogue row takes the origin the library row carried. A library
+ * row whose catalogue id the listing does not carry — an unpublished entry, a
+ * page that stopped browsing that kind, or a catalogue half that failed — stays
+ * its own row, or the installed copy would vanish with nothing left to remove.
  *
  * The rule is one function because the filter and the grid must not disagree
  * about which rows the state admits.
@@ -126,7 +127,10 @@ function rowsFor(
     const origin = origins.get(item.id);
     return origin === undefined ? item : { ...item, origin };
   });
-  const libraryOnly = library.filter((item) => item.origin === undefined);
+  const listed = new Set(store.map((item) => item.id));
+  const libraryOnly = library.filter(
+    (item) => item.origin === undefined || !listed.has(item.origin.catalogueId),
+  );
   const rows: readonly Row[] = [
     ...store.map((item): Row => ({ item, half: "store" })),
     ...libraryOnly.map((item): Row => ({ item, half: "library" })),

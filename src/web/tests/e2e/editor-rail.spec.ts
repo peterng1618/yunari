@@ -1270,7 +1270,7 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
 });
 
 /**
- * The store mode's own header row, as a rendered row.
+ * The dashboard themes page's own header row, as a rendered row.
  *
  * the rail rule forbids a second bar under the header, so what the store draws is the
  * *region's* first row rather than a strip between the header and the content.

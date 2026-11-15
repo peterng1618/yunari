@@ -344,6 +344,48 @@ it("draws one row for an installed copy, not a library row beside it", async () 
   await waitForCells(container, ["Catalogue pack"]);
 });
 
+it("keeps an installed copy whose catalogue row is not listed", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [
+        CATALOGUE,
+        () =>
+          indexOf([
+            entry("widget-pack", "catalogue-pack", "Catalogue pack", [
+              { id: "w1", kind: "widget", name: "Widget" },
+            ]),
+          ]),
+      ],
+      [
+        "/api/widget-packs",
+        () =>
+          json({
+            packs: [
+              {
+                id: "gone-pack",
+                name: "Orphan copy",
+                version: "1.0.0",
+                units: [{ id: "u1", label: "Unit" }],
+                origin: {
+                  kind: "widget-pack",
+                  catalogueId: "unpublished-pack",
+                  version: "1.0.0",
+                  installedAt: "2026-10-01T00:00:00.000Z",
+                },
+              },
+            ],
+          }),
+      ],
+    ]),
+  );
+
+  // Its catalogue entry is not in this listing, so the installed copy is the
+  // only row left to see and to remove.
+  const container = await mountHarness("widgets", "all");
+  await waitForCells(container, ["Catalogue pack", "Orphan copy"]);
+});
+
 it("filters the Sensor providers page between Sensors and Data sources", async () => {
   vi.stubGlobal(
     "fetch",
