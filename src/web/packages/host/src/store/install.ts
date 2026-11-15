@@ -339,9 +339,10 @@ async function installCollection(
   const selection = selectIncludes(parsed.package.includes, request.items);
   if (!selection.ok) return refuse("package", selection.message);
 
-  // The register is read before any listing. A member installed at the version
-  // the collection names is decided from the row alone, so a retry still
-  // succeeds when the store no longer serves that listing.
+  // The register is read before any listing. A member with a row is installed,
+  // whatever version it records: the collection's own version is unrelated to
+  // the member's, and drift is the update path's question. A retry therefore
+  // still succeeds when the store no longer serves the listing.
   const registered = await registeredOrigins(options);
 
   // Pre-flight only the members that still have to be written: every one is
@@ -351,7 +352,7 @@ async function installCollection(
   for (const include of selection.includes) {
     if (
       registered !== undefined &&
-      registeredAt(registered, include.id, request.version) !== undefined
+      registeredRow(registered, include.id) !== undefined
     ) {
       continue;
     }
@@ -379,7 +380,7 @@ async function installCollection(
     const held =
       registered === undefined
         ? undefined
-        : registeredAt(registered, include.id, request.version);
+        : registeredRow(registered, include.id);
 
     if (stoppedAt !== undefined) {
       outcomes.push(
@@ -905,16 +906,15 @@ async function registeredOrigins(
   }
 }
 
-/** The row installing this catalogue item at this version, decided from the
- *  register alone: a retry needs no listing to learn it is already installed. */
-function registeredAt(
+/** The row naming this catalogue item, decided from the register alone: a
+ *  retry needs no listing to learn the member is already installed. The
+ *  recorded version is not compared with the collection's, because the two are
+ *  unrelated numbers; a newer member version is the update path's question. */
+function registeredRow(
   origins: Readonly<Record<string, CatalogueOrigin>>,
   catalogueId: string,
-  version: string,
 ): CatalogueOriginRow | undefined {
-  return catalogueOriginRows(origins, catalogueId).find(
-    (row) => row.origin.version === version,
-  );
+  return catalogueOriginRows(origins, catalogueId)[0];
 }
 
 /** Collections are additive: one listing can belong to several, and a later

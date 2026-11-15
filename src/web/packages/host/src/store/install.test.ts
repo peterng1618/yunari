@@ -836,6 +836,39 @@ describe("collection install and plan", () => {
     expect(calls).toEqual(["starter"]);
   });
 
+  it("skips a member recorded at another version than the collection's", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    const calls: string[] = [];
+    // The row holds the member listing's version; the collection request
+    // carries its own. The two are unrelated, and presence alone decides.
+    const origins = memoryOrigins({
+      [catalogueOriginKey("widget-pack", "starter")]: {
+        kind: "widget-pack",
+        catalogueId: WIDGET_A_ID,
+        version: "9.9.9",
+        installedAt: "2026-11-01T00:00:00.000Z",
+      },
+    });
+    // The member's listing and package are not served at all: a fetched
+    // member would abort this install.
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({ widgetPacks: countingWidgetStore("starter", calls) }),
+      storeOrigin: ORIGIN,
+      origins,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      members: [{ id: WIDGET_A_ID, ok: true, reason: "Already installed." }],
+    });
+    expect(calls).toEqual([]);
+  });
+
   it("merges a collection into the memberships a copy already records", async () => {
     const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
     const calls: string[] = [];
