@@ -1,4 +1,5 @@
 import {
+  type CatalogueOrigin,
   DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   facetRecordOf,
@@ -7,7 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ThemeLibraryClient,
   ThemeLibraryEntry,
-  ThemeOrigin,
 } from "../theme-library-client.js";
 import {
   localThemeSource,
@@ -57,7 +57,7 @@ function envelope(
 function entry(
   document: FabricThemeEnvelope,
   ground: string | undefined,
-  origin?: ThemeOrigin,
+  origin?: CatalogueOrigin,
 ): ThemeLibraryEntry {
   return {
     id: document.id,
@@ -95,7 +95,7 @@ const GROUND = "#101014";
 function clientOf(
   documents: readonly FabricThemeEnvelope[],
   ground: string | undefined,
-  origin?: ThemeOrigin,
+  origin?: CatalogueOrigin,
 ): ThemeLibraryClient {
   return {
     list: vi.fn(async () =>
@@ -188,12 +188,29 @@ describe("the local half's items", () => {
     expect(bare[0]?.version).toBeUndefined();
   });
 
+  it("fills a library theme as its own single member", async () => {
+    // A stored dashboard theme is one browseable member of its own listing, so
+    // both halves of the store hand the gallery the same member shape: the
+    // gallery never special-cases the library.
+    const items = await localThemeSource(clientOf([envelope()], GROUND)).list();
+
+    expect(items[0]?.members).toEqual([
+      {
+        id: "living-room",
+        kind: DASHBOARD_THEME_KIND,
+        name: "Living room",
+      },
+    ]);
+    expect(items[0]?.includes).toBeUndefined();
+  });
+
   it("carries a listing's origin, and a theme the host has no record for as an absence", async () => {
     // Where a theme came from is consumer state kept beside the library, so a
     // theme the author made here arrives with **no key at all** — the same
     // absence `author` carries for a document that declares none. An origin
     // invented to fill the field would make every theme read as installed.
-    const origin: ThemeOrigin = {
+    const origin: CatalogueOrigin = {
+      kind: DASHBOARD_THEME_KIND,
       catalogueId: "yunari/office-wall",
       version: "1.3.0",
       installedAt: "2026-10-14T00:00:00.000Z",

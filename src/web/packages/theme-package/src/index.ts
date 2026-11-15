@@ -22,7 +22,6 @@ export * from "./collection-package";
 export * from "./credits";
 export * from "./path-preset-pack";
 export * from "./theme-id";
-export * from "./theme-origin";
 export * from "./version-ladder";
 export * from "./video-envelope";
 

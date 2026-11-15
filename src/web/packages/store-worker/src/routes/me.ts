@@ -5,6 +5,7 @@ import type {
 } from "@yunari/renderer-core";
 import {
   DASHBOARD_THEME_KIND,
+  defaultFacetsFor,
   facetRecordOf,
   isStoreItemKind,
   MAX_METADATA_NAME_BYTES,
@@ -20,7 +21,6 @@ import {
 import { type Session, sessionOf } from "../auth/session.js";
 import { entryOf } from "../catalogue/entry.js";
 import {
-  defaultFacetsFor,
   readPackSubmission,
   validateCollectionIncludes,
   validateFinalizedPackage,

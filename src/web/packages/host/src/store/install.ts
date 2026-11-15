@@ -10,6 +10,7 @@ import {
   readPluginPackage,
 } from "@yunari/extension-api";
 import {
+  type CatalogueOrigin,
   type CollectionPlan,
   type CollectionPlanMember,
   catalogueItemUrl,
@@ -35,7 +36,6 @@ import {
   readPathPresetPackBytes,
 } from "../presets/path-presets.js";
 import {
-  type CatalogueOrigin,
   type CatalogueOriginRow,
   type CatalogueOriginsStore,
   catalogueOriginRows,

@@ -371,6 +371,7 @@ export {
   cataloguePackageUrl,
   catalogueThumbnailUrl,
 } from "./theme/catalogue-location.js";
+export type { CatalogueOrigin } from "./theme/catalogue-origin.js";
 export type {
   CollectionPlan,
   CollectionPlanMember,
@@ -485,6 +486,7 @@ export type {
 export {
   backgroundPaintOf,
   colourModeOfLuminance,
+  defaultFacetsFor,
   facetRecordOf,
 } from "./theme/facet-record.js";
 export type { GlassSampling, GlassTreatment } from "./theme/glass.js";
@@ -530,6 +532,8 @@ export {
 } from "./theme/palette-tokens.js";
 export type { PerformanceCost } from "./theme/performance-cost.js";
 export { performanceCostsOf } from "./theme/performance-cost.js";
+export type { PluginMemberContributions } from "./theme/plugin-members.js";
+export { pluginMemberRecords } from "./theme/plugin-members.js";
 export { defaultTypeSize } from "./theme/type-size.js";
 export type { WidgetIssue } from "./theme/widget.js";
 export { createWidgetIdAllocator } from "./theme/widget.js";

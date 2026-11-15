@@ -6,6 +6,8 @@ import {
   type FabricThemeEnvelope,
   type FacetRecord,
   type MemberRecord,
+  type PluginMemberContributions,
+  pluginMemberRecords,
 } from "@yunari/renderer-core";
 import type { CollectionPackage } from "@yunari/theme-package";
 import type { ItemRow, VersionRow } from "../db/types.js";
@@ -83,16 +85,6 @@ export function entryOf(
 /** The listing kind a collection's includes are checked against. */
 const COLLECTION_KIND = "collection";
 
-/** The contribution groups that are members, in the order the entry lists
- *  them. `settingsPages` and `assetCategories` are settings or picker data,
- *  not browseable members. */
-const PLUGIN_MEMBER_GROUPS = [
-  ["sensorProviders", "sensor-provider", "label"],
-  ["customSources", "data-source", "name"],
-  ["assetSources", "asset-source", "label"],
-  ["panelFamilies", "panel-driver", "label"],
-] as const;
-
 /**
  * The browseable entries the stored metadata already carries: one member for a
  * theme, one per widget unit or path preset, one per member-bearing plugin
@@ -124,7 +116,8 @@ function membersOf(
     const name = textOf(metadata["name"]);
     return name === undefined ? [] : [{ id: name, kind: "editor-theme", name }];
   }
-  if (item.kind === "plugin") return pluginMembersOf(metadata);
+  if (item.kind === "plugin")
+    return pluginMemberRecords(pluginContributions(metadata));
   return [];
 }
 
@@ -141,33 +134,18 @@ function namedRecordsOf(value: unknown, kind: string): readonly MemberRecord[] {
   return records;
 }
 
-/** The plugin's member-bearing contributions, from the manifest finalize
- *  stored beside the version. A contribution with no id is not a member. */
-function pluginMembersOf(
+/** The stored manifest's contributions, which were validated when the version
+ *  was finalized: the row is this store's own, so it is read rather than
+ *  re-parsed. A metadata row a newer finalize wrote carries more than these
+ *  four groups, which `pluginMemberRecords` ignores. */
+function pluginContributions(
   metadata: Readonly<Record<string, unknown>>,
-): readonly MemberRecord[] {
+): PluginMemberContributions {
   const manifest = metadata["manifest"];
   const contributes = isRecord(manifest) ? manifest["contributes"] : undefined;
-  if (!isRecord(contributes)) return [];
-  return PLUGIN_MEMBER_GROUPS.flatMap(([group, kind, nameKey]) =>
-    pluginRecordsOf(contributes[group], kind, nameKey),
-  );
-}
-
-function pluginRecordsOf(
-  value: unknown,
-  kind: string,
-  nameKey: "label" | "name",
-): readonly MemberRecord[] {
-  if (!Array.isArray(value)) return [];
-  const records: MemberRecord[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) continue;
-    const id = textOf(entry["id"]);
-    if (id === undefined) continue;
-    records.push({ id, kind, name: textOf(entry[nameKey]) ?? id });
-  }
-  return records;
+  return isRecord(contributes)
+    ? (contributes as PluginMemberContributions)
+    : {};
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -3,11 +3,7 @@ import {
   type PluginManifest,
   readPluginPackage,
 } from "@yunari/extension-api";
-import {
-  type FacetRecord,
-  isStoreItemKind,
-  type StoreItemKind,
-} from "@yunari/renderer-core";
+import { isStoreItemKind, type StoreItemKind } from "@yunari/renderer-core";
 import {
   type CollectionInclude,
   type CollectionPackage,
@@ -107,20 +103,6 @@ export function readPackSubmission(value: unknown): PackSubmissionResult {
 
 function refuse(message: string): PackSubmissionResult {
   return { ok: false, message };
-}
-
-/** A boardless package: one square tile with no ground to read a mode from. */
-export function defaultFacetsFor(kind: StoreItemKind): FacetRecord {
-  return {
-    author: undefined,
-    colourMode: "unclassified",
-    sensors: [],
-    tags: [kind],
-    orientation: "square",
-    aspect: "1:1",
-    width: 1,
-    height: 1,
-  };
 }
 
 export interface FinalizedPackage {

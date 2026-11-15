@@ -1,3 +1,4 @@
+import { defaultFacetsFor } from "@yunari/renderer-core";
 import {
   COLLECTION_PACKAGE_FORMAT,
   type CollectionInclude,
@@ -9,7 +10,6 @@ import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { planPackVersion } from "../version/plan.js";
 import {
-  defaultFacetsFor,
   readPackSubmission,
   validateCollectionIncludes,
   validateFinalizedPackage,

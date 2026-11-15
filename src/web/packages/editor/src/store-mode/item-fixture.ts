@@ -103,6 +103,7 @@ export function fixtureItem(
     id: entry.id,
     kind: DASHBOARD_THEME_KIND,
     name: entry.name,
+    members: [{ id: entry.id, kind: DASHBOARD_THEME_KIND, name: entry.name }],
     author: entry.author,
     version: entry.version,
     updatedAt: entry.updatedAt,

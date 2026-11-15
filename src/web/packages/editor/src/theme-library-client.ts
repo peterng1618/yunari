@@ -1,4 +1,5 @@
 import {
+  type CatalogueOrigin,
   type DisplayRenderMode,
   type DisplayShape,
   type FabricThemeEnvelope,
@@ -8,11 +9,7 @@ import {
   type ThemeRemix,
   type ValidationIssue,
 } from "@yunari/renderer-core";
-import {
-  readThemeCredits,
-  type ThemeCredits,
-  type ThemeOrigin,
-} from "@yunari/theme-package";
+import { readThemeCredits, type ThemeCredits } from "@yunari/theme-package";
 import {
   type BackgroundMediaMemory,
   encodeBackgroundMedia,
@@ -46,7 +43,7 @@ export interface ThemeLibraryEntry {
    *  the host keeps beside the library, so a theme the author made here has no
    *  key at all — exactly as `author` has none for a document that declares
    *  none, and never a key holding `undefined`. */
-  readonly origin?: ThemeOrigin;
+  readonly origin?: CatalogueOrigin;
   /** What the theme *is*, derived by the host from the document it listed —
    *  required, because every entry here is a stored theme and every stored
    *  theme has a document to derive it from. */
@@ -61,17 +58,6 @@ export interface ThemeLibraryEntry {
    *  knows the host's base URL. Absent from a producer that has no host. */
   readonly thumbnailUrl?: string;
 }
-
-/**
- * Where a stored theme came from, as the host records it: the catalogue item it
- * was installed from and the version this copy holds.
- *
- * The shape is `@yunari/theme-package`'s, shared with the host rather than
- * declared here, so a rename cannot typecheck on both sides and render
- * `From the store · undefined · undefined`. The host's record and this reading
- * of it are one owner.
- */
-export type { ThemeOrigin };
 
 export interface ThemeLibraryContent {
   readonly envelope: FabricThemeEnvelope;

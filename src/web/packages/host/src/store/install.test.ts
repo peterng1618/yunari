@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { InstalledPlugin, PluginManifest } from "@yunari/extension-api";
-import type { StoreItemKind } from "@yunari/renderer-core";
+import type { CatalogueOrigin, StoreItemKind } from "@yunari/renderer-core";
 import {
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
@@ -13,7 +13,6 @@ import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import type { PathPresetStore } from "../presets/path-presets.js";
 import {
-  type CatalogueOrigin,
   type CatalogueOriginsStore,
   catalogueOriginKey,
 } from "../settings/catalogue-origins.js";

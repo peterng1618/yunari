@@ -5,6 +5,9 @@
 - **Paths:** `src/web/packages/renderer-core/src/theme/catalogue-index.ts`
   `src/web/packages/renderer-core/src/theme/collection-plan.ts`
   `src/web/packages/renderer-core/src/theme/catalogue-location.ts`
+  `src/web/packages/renderer-core/src/theme/catalogue-origin.ts`
+  `src/web/packages/renderer-core/src/theme/plugin-members.ts`
+  `src/web/packages/renderer-core/src/theme/facet-record.ts`
   `src/web/packages/renderer-core/src/index.ts`
   `src/web/packages/store-worker/src/catalogue/kinds.ts`
   `src/web/packages/store-worker/src/catalogue/entry.ts`
@@ -229,10 +232,26 @@ Extend the existing catalogue rather than build a second one:
   `collections?`), reading legacy bare-id theme rows as `dashboard-theme`
   additively. The listing routes expose that one fact, including the `origin`
   field on `/api/extensions` rows in `server/extension-routes.ts`.
+- `renderer-core/src/theme/catalogue-origin.ts` owns the installed-origin wire
+  shape `CatalogueOrigin { kind, catalogueId, version, installedAt, collections? }`.
+  The host's register, its listing routes and the editor's library client import
+  that one declaration rather than keeping two spellings that a rename can drive
+  apart while both typecheck.
+- `renderer-core/src/theme/facet-record.ts` gains `defaultFacetsFor(kind)`, the
+  record for a listing whose package carries no theme document. The store writes
+  it when it stores a version and the editor's local half reads it for the copy
+  this PC installed; one derivation keeps both listings filing a pack alike.
+- `renderer-core/src/theme/plugin-members.ts` owns the contribution-group to
+  member-kind mapping and `pluginMemberRecords`. The store's `entryOf` derives
+  members from the stored manifest with it, and the editor's local half derives
+  the same members from the installed extension listing, so a plugin's members
+  are one rule rather than two.
 - `editor/src/store-mode/` and `editor-shell/shell-layout.tsx` generalize the
   theme-only region into the Library mode; the existing gallery, facets, sort,
   density and install controls are kept, and the theme-only duplicates are
-  deleted rather than wrapped.
+  deleted rather than wrapped. `editor/src/library-mode/sources.ts` owns one
+  page-to-member-kind rule that filters both the catalogue and the local
+  listing, so the two halves of a page cannot disagree about what it shows.
 
 Rejected: one listing per kind (cannot ship a matching set as one unit),
 one unified package format (rewrites every reader and its safety checks), and

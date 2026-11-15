@@ -9,14 +9,17 @@
  * controls rather than a native `<select>`.
  */
 
-import type { FacetRecord } from "@yunari/renderer-core";
+import {
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
+  type FacetRecord,
+} from "@yunari/renderer-core";
 import { act } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { STARTER_TEMPLATE } from "./new-fabric-theme.js";
 import type {
   ThemeLibraryClient,
   ThemeLibraryEntry,
-  ThemeOrigin,
 } from "./theme-library-client.js";
 import {
   promptThemeConflict,
@@ -73,7 +76,8 @@ function listedTheme(id: string, name: string): ThemeLibraryEntry {
 }
 
 /** A theme the host records a catalogue origin for — an installed one. */
-const ORIGIN: ThemeOrigin = {
+const ORIGIN: CatalogueOrigin = {
+  kind: DASHBOARD_THEME_KIND,
   catalogueId: "5f0c4f30-0f8c-4e4f-9c1f-1f0f0f0f0f0f",
   version: "1.2.0",
   installedAt: "2026-10-01T00:00:00.000Z",
@@ -82,7 +86,7 @@ const ORIGIN: ThemeOrigin = {
 function installedTheme(
   id: string,
   name: string,
-  origin: ThemeOrigin = ORIGIN,
+  origin: CatalogueOrigin = ORIGIN,
 ): ThemeLibraryEntry {
   return { ...listedTheme(id, name), origin };
 }

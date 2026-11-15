@@ -1,7 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import type http from "node:http";
 import path from "node:path";
-import { DASHBOARD_THEME_KIND, isCatalogueId } from "@yunari/renderer-core";
+import {
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
+  isCatalogueId,
+} from "@yunari/renderer-core";
 import {
   EDITOR_THEME_KIND,
   readEditorThemePackage,
@@ -9,7 +13,6 @@ import {
 import { handleSubmitRoute } from "../catalogue/submit.js";
 import type { PublishedStore } from "../serve/published.js";
 import {
-  type CatalogueOrigin,
   type CatalogueOriginsStore,
   catalogueOriginOf,
 } from "../settings/catalogue-origins.js";

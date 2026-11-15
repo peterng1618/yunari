@@ -1,10 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { StoreItemKind } from "@yunari/renderer-core";
+import type { CatalogueOrigin, StoreItemKind } from "@yunari/renderer-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  type CatalogueOrigin,
   catalogueOriginOf,
   createCatalogueOriginsStore,
 } from "./catalogue-origins.js";

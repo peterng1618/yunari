@@ -38,6 +38,9 @@ const ENTRY = {
   favorites: 7,
   packageUrl: cataloguePackageUrl("yunari/office-wall", "1.3.0"),
   thumbnail: "catalogue/yunari/office-wall/thumbnail.png",
+  members: [
+    { id: "living-room", kind: DASHBOARD_THEME_KIND, name: "Office wall" },
+  ],
   facets: FACETS,
 };
 
@@ -77,6 +80,8 @@ describe("the catalogue's source", () => {
     );
     expect(item.origin).toBeUndefined();
     expect(item.facets).toEqual(FACETS);
+    expect(item.members).toEqual(ENTRY.members);
+    expect(item.includes).toBeUndefined();
     expect(item.catalogue).toEqual({
       id: ENTRY.id,
       createdAt: ENTRY.createdAt,

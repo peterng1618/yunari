@@ -18,11 +18,13 @@
  * A.4's review made for the facet predicate, which the plan had put in the
  * gallery's file.
  */
-import { DASHBOARD_THEME_KIND } from "@yunari/renderer-core";
+import {
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
+} from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import type { InstallControl } from "./install-item.js";
 import { DARK_GROUND, type FixtureTheme, fixtureItem } from "./item-fixture.js";
@@ -191,7 +193,8 @@ const NO_SUBMIT: SubmitControl = {
 
 /** Where a theme came from, as the host records it: the catalogue item and the
  *  version this copy was installed from. */
-const ORIGIN: ThemeOrigin = {
+const ORIGIN: CatalogueOrigin = {
+  kind: DASHBOARD_THEME_KIND,
   catalogueId: "yunari/office-wall",
   version: "1.3.0",
   installedAt: "2026-10-14T00:00:00.000Z",

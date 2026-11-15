@@ -1,12 +1,13 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   CATALOGUE_ORIGIN,
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   facetRecordOf,
 } from "@yunari/renderer-core";
 import { writeThemePackage } from "@yunari/theme-package";
 import { DARK_GROUND } from "../../packages/editor/src/store-mode/item-fixture.js";
-import type { ThemeOrigin } from "../../packages/editor/src/theme-library-client.js";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
 import { answerDialogIfShown, captureVisualReview } from "./editor-canvas.js";
 import { openEveryGroup, openPane, paneBody } from "./editor-rail.js";
@@ -1866,7 +1867,8 @@ function boundaryEnvelope(input: {
 
 /** Where one copy came from, in the host's own record shape
  *  (`settings/catalogue-origins.ts`). */
-const BOUNDARY_ORIGIN: ThemeOrigin = {
+const BOUNDARY_ORIGIN: CatalogueOrigin = {
+  kind: DASHBOARD_THEME_KIND,
   catalogueId: "cat-office-wall",
   version: "1.2.0",
   installedAt: "2026-10-10T09:00:00.000Z",
@@ -1929,7 +1931,7 @@ const BOUNDARY_LIBRARY = (
     },
   ] as const satisfies readonly {
     readonly envelope: FabricThemeEnvelope;
-    readonly origin: ThemeOrigin | undefined;
+    readonly origin: CatalogueOrigin | undefined;
   }[]
 ).map(({ envelope, origin }) => ({
   id: envelope.id,

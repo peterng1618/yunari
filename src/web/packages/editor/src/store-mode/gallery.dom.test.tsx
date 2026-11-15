@@ -15,12 +15,14 @@
  * Layout section carries the rule. The browser case that measures the packing is
  * `tests/e2e/editor-rail.spec.ts`.
  */
-import type { FabricThemeEnvelope } from "@yunari/renderer-core";
+import type {
+  CatalogueOrigin,
+  FabricThemeEnvelope,
+} from "@yunari/renderer-core";
 import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import type { ThemeOrigin } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { Gallery } from "./gallery.js";
 import type { InstallControl } from "./install-item.js";
@@ -142,6 +144,9 @@ function item(overrides: Partial<StoreItem> = {}): StoreItem {
     ground: "midnightblue",
     origin: undefined,
     catalogue: undefined,
+    members: [
+      { id: "living-room", kind: DASHBOARD_THEME_KIND, name: "Living room" },
+    ],
     facets: facetRecordOf(DOCUMENT),
     ...overrides,
   };
@@ -149,7 +154,8 @@ function item(overrides: Partial<StoreItem> = {}): StoreItem {
 
 /** Where a theme came from, as the host records it: the catalogue item and the
  *  version this copy was installed from. */
-const ORIGIN: ThemeOrigin = {
+const ORIGIN: CatalogueOrigin = {
+  kind: DASHBOARD_THEME_KIND,
   catalogueId: "yunari/office-wall",
   version: "1.3.0",
   installedAt: "2026-10-14T00:00:00.000Z",

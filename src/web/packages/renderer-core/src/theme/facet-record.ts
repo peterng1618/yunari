@@ -138,6 +138,29 @@ export function facetRecordOf(
   };
 }
 
+/**
+ * The record for a listing whose package carries no theme document: a widget or
+ * preset pack, an editor theme, a plugin, a collection. There is no artboard to
+ * read, so it files the listing as one square tile with no ground, tagged with
+ * its own kind, which is the value a filter would otherwise not have.
+ *
+ * One derivation for both readers: the store writes it when it stores a
+ * version, and the editor reads it for the copy this PC installed, so the two
+ * listings of one kind never disagree about how it is filed.
+ */
+export function defaultFacetsFor(kind: string): FacetRecord {
+  return {
+    author: undefined,
+    colourMode: "unclassified",
+    sensors: [],
+    tags: [kind],
+    orientation: "square",
+    aspect: "1:1",
+    width: 1,
+    height: 1,
+  };
+}
+
 /** The document's own tags, deduplicated in the order they were written: a
     repeat is well-formed (the format's rule is shape and count), so the collapse
     belongs to the facet that would otherwise offer one value twice. */

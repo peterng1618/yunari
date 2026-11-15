@@ -1,14 +1,16 @@
 import {
+  type CatalogueOrigin,
   type CatalogueRefusal,
   type CatalogueStatus,
   DASHBOARD_THEME_KIND,
   type FacetRecord,
+  type MemberRecord,
   type Orientation,
   type ThemeRemix,
 } from "@yunari/renderer-core";
 import type {
   ThemeLibraryClient,
-  ThemeOrigin,
+  ThemeLibraryEntry,
 } from "../theme-library-client.js";
 import { THEME_TAG_SEED } from "../theme-tag-seed.js";
 
@@ -38,6 +40,15 @@ export interface StoreItem {
   readonly id: string;
   readonly kind: string;
   readonly name: string;
+  /** The browseable entries this listing contains, derived by the source from
+   *  the row it read: a theme is one member of itself, a pack one per unit, a
+   *  plugin one per contribution. Required and possibly empty, because every
+   *  listing has an answer — a collection's members are `includes`, not parts
+   *  of its package. */
+  readonly members: readonly MemberRecord[];
+  /** The catalogue ids a collection installs. Present only on a collection
+   *  entry, absent rather than undefined on every other kind. */
+  readonly includes?: readonly string[];
   readonly author: string | undefined;
   /** The document's own version, or `undefined` when it declares none. The
    *  caption line prints it beside the date (`1.4.0 · 2026-10-14`), and it
@@ -55,7 +66,7 @@ export interface StoreItem {
    *  absent, as `author` and `version` are: a cell reads the field rather than
    *  asking whether the key exists, and `exactOptionalPropertyTypes` forbids the
    *  optional spelling this would otherwise take. */
-  readonly origin: ThemeOrigin | undefined;
+  readonly origin: CatalogueOrigin | undefined;
   /** The catalogue's own facts about this item, or `undefined` for an item the
    *  library holds and the catalogue does not. `installedVersion` is the one
    *  field a source cannot fill: it is a fact about the library, so the source
@@ -120,32 +131,44 @@ export type CellAction = "open" | "assign" | "export" | "delete";
 export type FacetSelection = Readonly<Record<string, readonly string[]>>;
 
 /**
+ * One stored theme as the item the gallery draws.
+ *
+ * **One listing entry, and no second read.** Everything a cell needs — the
+ * facets, the author, the picture's address and the ground — is on the entry the
+ * host derived from the document it already parsed, so this maps what it is
+ * handed and opens nothing. The theme is one browseable member of its own
+ * listing, which is the shape the gallery reads for every kind.
+ */
+export function libraryThemeItemOf(entry: ThemeLibraryEntry): StoreItem {
+  return {
+    id: entry.id,
+    kind: DASHBOARD_THEME_KIND,
+    name: entry.name,
+    members: [{ id: entry.id, kind: DASHBOARD_THEME_KIND, name: entry.name }],
+    author: entry.author,
+    version: entry.version,
+    ...(entry.remixOf === undefined ? {} : { remixOf: entry.remixOf }),
+    updatedAt: entry.updatedAt,
+    thumbnailUrl: entry.thumbnailUrl,
+    ground: entry.ground,
+    origin: entry.origin,
+    catalogue: undefined,
+    facets: entry.facets,
+  };
+}
+
+/**
  * The host's own library as an `ItemSource`.
  *
- * **One listing, and no second read.** Everything a cell needs — the facets, the
- * author, the picture's address and the ground — is on the entry the host
- * derived from the document it already parsed, so `list()` maps what it is
- * handed and opens nothing.
+ * **One listing, and no second read.** Everything a cell needs is on the entry
+ * the host derived, so `list()` maps what it is handed and opens nothing.
  */
 export function localThemeSource(client: ThemeLibraryClient): ItemSource {
   return {
     kind: DASHBOARD_THEME_KIND,
     async list(): Promise<readonly StoreItem[]> {
       const entries = await client.list();
-      return entries.map((entry) => ({
-        id: entry.id,
-        kind: DASHBOARD_THEME_KIND,
-        name: entry.name,
-        author: entry.author,
-        version: entry.version,
-        ...(entry.remixOf === undefined ? {} : { remixOf: entry.remixOf }),
-        updatedAt: entry.updatedAt,
-        thumbnailUrl: entry.thumbnailUrl,
-        ground: entry.ground,
-        origin: entry.origin,
-        catalogue: undefined,
-        facets: entry.facets,
-      }));
+      return entries.map(libraryThemeItemOf);
     },
     refused(): readonly CatalogueRefusal[] {
       return [];

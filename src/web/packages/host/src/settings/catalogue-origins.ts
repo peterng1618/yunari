@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
+  type CatalogueOrigin,
   DASHBOARD_THEME_KIND,
   isStoreItemKind,
   type StoreItemKind,
@@ -20,16 +21,6 @@ import {
  * its update check read one fact, and a kind is a field on the row rather than
  * a directory it has to know about.
  */
-
-export interface CatalogueOrigin {
-  readonly kind: StoreItemKind;
-  readonly catalogueId: string;
-  readonly version: string;
-  readonly installedAt: string;
-  /** The collections an install through one recorded, kept so a collection
-   *  diff can name what this copy arrived with. */
-  readonly collections?: readonly string[];
-}
 
 export interface CatalogueOriginsStore {
   /** Every entry, keyed by `<kind>:<installedId>`. */

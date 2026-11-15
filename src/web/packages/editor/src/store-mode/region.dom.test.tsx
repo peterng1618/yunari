@@ -16,6 +16,10 @@
  * buttons are counted inside a really narrow region; what this file can say is
  * that no facet is conditionally rendered, so no width can drop one.
  */
+import {
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
+} from "@yunari/renderer-core";
 import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
@@ -28,7 +32,6 @@ import {
   type ThemedDisplay,
   type ThemeLibraryClient,
   type ThemeLibraryEntry,
-  type ThemeOrigin,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { type Facet, FacetRow, toggleFacet } from "./facet-row.js";
@@ -1996,6 +1999,7 @@ function catalogueEntry(
     favorites: facts.favorites ?? 7,
     packageUrl: `https://store.test/${id}.zip`,
     thumbnail: `${id}/thumbnail.png`,
+    members: [{ id, kind, name: facts.name ?? `Catalogue ${id}` }],
     facets: CATALOGUE_FACETS,
   };
 }
@@ -2007,7 +2011,8 @@ function fixtureWithOrigin(
   catalogueId: string,
   version: string,
 ): ThemeLibraryEntry {
-  const origin: ThemeOrigin = {
+  const origin: CatalogueOrigin = {
+    kind: DASHBOARD_THEME_KIND,
     catalogueId,
     version,
     installedAt: "2026-10-15T00:00:00.000Z",

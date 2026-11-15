@@ -36,6 +36,9 @@ const ENTRY = {
   favorites: 7,
   packageUrl: `https://store.test/catalogue/${ITEM_ID}/1.3.0.zip`,
   thumbnail: `catalogue/${ITEM_ID}/thumbnail.png`,
+  members: [
+    { id: "living-room", kind: DASHBOARD_THEME_KIND, name: "Office wall" },
+  ],
   facets: FACETS,
   status: "published",
 };
