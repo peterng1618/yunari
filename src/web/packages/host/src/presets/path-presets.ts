@@ -151,25 +151,57 @@ function freshUserId(base: string, taken: ReadonlySet<string>): string {
   }
 }
 
-function readPack(bytes: Uint8Array): PathPresetPack {
+/** One pack read, with the paint each preset's data draws already checked. */
+export type PathPresetPackReadResult =
+  | { readonly ok: true; readonly pack: PathPresetPack }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * A pack's bytes, read within bounds and checked against the paint its data
+ * draws.
+ *
+ * One owner for both the store's write and the collection pre-flight: a pack
+ * the pre-flight accepts is one `addPack` accepts, so a collection cannot pass
+ * pre-flight and then fail after an earlier member was written.
+ */
+export function readPathPresetPackBytes(
+  bytes: Uint8Array,
+): PathPresetPackReadResult {
   if (bytes.byteLength > MAX_PATH_PRESET_PACK_BYTES) {
-    throw new Error("That path preset pack is too large.");
+    return { ok: false, message: "That path preset pack is too large." };
   }
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new Error("That path preset pack is not UTF-8.");
+    return { ok: false, message: "That path preset pack is not UTF-8." };
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error("That path preset pack is not JSON.");
+    return { ok: false, message: "That path preset pack is not JSON." };
   }
   const result = readPathPresetPack(parsed);
-  if (!result.ok) throw new Error(result.message);
-  return result.pack;
+  if (!result.ok) return { ok: false, message: result.message };
+
+  for (const preset of result.pack.presets) {
+    try {
+      const paint = requireGeometry(preset.data, preset.id);
+      if (paint !== preset.paint) {
+        return {
+          ok: false,
+          message: `The path preset "${preset.id}" declares ${preset.paint} paint, but its data is ${paint}.`,
+        };
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  return { ok: true, pack: result.pack };
 }
 
 /** The same geometry rule the editor applies, repeated because this is a trust boundary. */
@@ -250,17 +282,9 @@ export function createPathPresetStore(
     },
 
     async addPack(bytes) {
-      const pack = readPack(bytes);
-      for (const preset of pack.presets) {
-        const paint = requireGeometry(preset.data, preset.id);
-        // Paint follows geometry, the same rule `userPathPresetFrom` applies;
-        // a declared value that disagrees would draw a filled path as a line.
-        if (paint !== preset.paint) {
-          throw new Error(
-            `The path preset "${preset.id}" declares ${preset.paint} paint, but its data is ${paint}.`,
-          );
-        }
-      }
+      const read = readPathPresetPackBytes(bytes);
+      if (!read.ok) throw new Error(read.message);
+      const pack = read.pack;
       const prefix = `pack:${pack.id}:`;
 
       return file.mutate((current) => {

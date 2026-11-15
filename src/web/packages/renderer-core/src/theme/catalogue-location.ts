@@ -13,9 +13,11 @@ export function catalogueIndexUrl(): string {
   return `${CATALOGUE_ORIGIN}/index.json`;
 }
 
-/** One item's JSON: version, facets and the version this item holds. */
-export function catalogueItemUrl(id: string): string {
-  return `${CATALOGUE_ORIGIN}/catalogue/${id}/item.json`;
+/** One item's JSON: version, facets and the version this item holds. The
+ *  origin is the configured store's, or the shipped catalogue's when none is
+ *  configured. */
+export function catalogueItemUrl(id: string, origin?: string): string {
+  return `${origin ?? CATALOGUE_ORIGIN}/catalogue/${id}/item.json`;
 }
 
 /** One version's package. The Worker serves a path per version, not one zip per

@@ -11,6 +11,7 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
+import type { PathPresetStore } from "../presets/path-presets.js";
 import {
   type CatalogueOrigin,
   type CatalogueOriginsStore,
@@ -610,6 +611,68 @@ describe("collection install and plan", () => {
     expect(calls).toEqual([]);
   });
 
+  it("refuses a paint-inconsistent path preset pack before writing any member", async () => {
+    const preset = strToU8(
+      JSON.stringify({
+        format: "yunari-path-preset-pack",
+        version: 1,
+        id: "bad",
+        name: "Bad Shapes",
+        presets: [
+          {
+            id: "bad",
+            label: "Bad",
+            // A closed path draws a fill; the pack declares a stroke.
+            data: "M 0 0 L 10 0 L 10 10 Z",
+            paint: "stroke",
+          },
+        ],
+      }),
+    );
+    const bytes = collectionBytes([
+      { id: WIDGET_A_ID },
+      { id: "66666666-6666-4666-8666-666666666666" },
+    ]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+      [
+        itemUrl("66666666-6666-4666-8666-666666666666"),
+        await itemJson({
+          id: "66666666-6666-4666-8666-666666666666",
+          kind: "path-preset-pack",
+          name: "Bad Shapes",
+          bytes: preset,
+        }),
+      ],
+      [packageUrl("66666666-6666-4666-8666-666666666666"), preset],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        widgetPacks: countingWidgetStore("starter", calls),
+        pathPresets: {} as PathPresetStore,
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.message).toContain("66666666-6666-4666-8666-666666666666");
+    expect(calls).toEqual([]);
+  });
+
   it("installs only the chosen optional members", async () => {
     const bytes = collectionBytes([
       { id: WIDGET_A_ID },
@@ -755,10 +818,12 @@ describe("collection install and plan", () => {
       await collectionRequest(bytes),
       options,
     );
-    const second = await installCatalogueItem(
-      await collectionRequest(bytes),
-      options,
-    );
+    // The member's listing and package are gone from the store: the retry is
+    // decided from the origin row alone and must still succeed.
+    const second = await installCatalogueItem(await collectionRequest(bytes), {
+      ...options,
+      fetch: storeFetch(new Map([[packageUrl(COLLECTION_ID), bytes]])),
+    });
 
     expect(first).toMatchObject({
       ok: true,

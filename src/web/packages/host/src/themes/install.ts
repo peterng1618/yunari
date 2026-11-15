@@ -152,11 +152,17 @@ async function installOnce(
  * Split out because the store's dispatcher holds the bytes already, and a
  * second download of the same package would pay the network twice and could
  * land different bytes than the digest it checked.
+ *
+ * `collections` rides this one origin write. A theme installed as a collection
+ * member must not need a second write to record the membership: the copy and
+ * its provenance are one result, and a write that failed after the theme
+ * landed would drop the membership while keeping the theme.
  */
 export async function installThemeBytes(
   request: Pick<InstallRequest, "catalogueId" | "version">,
   bytes: Uint8Array,
   options: InstallOptions,
+  collections?: readonly string[],
 ): Promise<InstallResult> {
   // The envelope is checked before either write path runs, so a refused video
   // leaves the library and the origins file exactly as they were.
@@ -193,6 +199,9 @@ export async function installThemeBytes(
       catalogueId: request.catalogueId,
       version: request.version,
       installedAt: new Date().toISOString(),
+      ...(collections === undefined || collections.length === 0
+        ? {}
+        : { collections }),
     });
   } catch {
     if (replacing) {

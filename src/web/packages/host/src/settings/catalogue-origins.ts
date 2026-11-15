@@ -96,6 +96,39 @@ export function catalogueInstalledIds(
     .map(([key]) => key.slice(prefix.length));
 }
 
+/** One installed row of a catalogue item, with the installed id the key holds. */
+export interface CatalogueOriginRow {
+  readonly kind: StoreItemKind;
+  readonly installedId: string;
+  readonly origin: CatalogueOrigin;
+}
+
+/**
+ * Every row naming this catalogue item, whatever its kind.
+ *
+ * A collection member is decided from the register alone before its listing is
+ * fetched, and the collection request names no member kind, so the lookup
+ * cannot start from one. Keeping the key slice here is what stops a caller
+ * from re-spelling `<kind>:<installedId>` to answer the same question.
+ */
+export function catalogueOriginRows(
+  origins: Readonly<Record<string, CatalogueOrigin>>,
+  catalogueId: string,
+): readonly CatalogueOriginRow[] {
+  const rows: CatalogueOriginRow[] = [];
+  for (const [key, origin] of Object.entries(origins)) {
+    if (origin.catalogueId !== catalogueId) continue;
+    const prefix = catalogueOriginKey(origin.kind, "");
+    if (!key.startsWith(prefix)) continue;
+    rows.push({
+      kind: origin.kind,
+      installedId: key.slice(prefix.length),
+      origin,
+    });
+  }
+  return rows;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

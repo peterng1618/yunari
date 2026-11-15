@@ -22,4 +22,10 @@ describe("the catalogue's addresses", () => {
       `${CATALOGUE_ORIGIN}/catalogue/${ID}/thumbnail.png`,
     );
   });
+
+  it("reads an item from the configured store's origin when one is given", () => {
+    expect(catalogueItemUrl(ID, "https://store.example")).toBe(
+      `https://store.example/catalogue/${ID}/item.json`,
+    );
+  });
 });

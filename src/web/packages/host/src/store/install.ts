@@ -10,9 +10,9 @@ import {
   readPluginPackage,
 } from "@yunari/extension-api";
 import {
-  CATALOGUE_ORIGIN,
   type CollectionPlan,
   type CollectionPlanMember,
+  catalogueItemUrl,
   isCatalogueId,
   isStoreItemKind,
   parseCatalogueItemFile,
@@ -23,7 +23,6 @@ import {
   MAX_COLLECTION_INCLUDES,
   readCollectionPackage,
   readEditorThemePackage,
-  readPathPresetPack,
   readThemePackage,
   readWidgetPackage,
   themeVideoRefusals,
@@ -32,14 +31,14 @@ import { LOCAL_PLUGIN_PUBLISHER } from "../extensions/install.js";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
 import {
-  MAX_PATH_PRESET_PACK_BYTES,
   type PathPresetStore,
+  readPathPresetPackBytes,
 } from "../presets/path-presets.js";
 import {
   type CatalogueOrigin,
+  type CatalogueOriginRow,
   type CatalogueOriginsStore,
-  catalogueInstalledIds,
-  catalogueOriginOf,
+  catalogueOriginRows,
 } from "../settings/catalogue-origins.js";
 import { downloadPackage } from "../themes/download.js";
 import {
@@ -303,17 +302,26 @@ async function installByKind(
     return installCollection(request, bytes, options);
   }
 
-  // Read before the write: a theme install rewrites its own origin row, so the
-  // memberships it arrived with must be carried into the row written after it.
+  // Read the memberships before the write. The theme installer's one origin
+  // write carries them; every other kind's row is written after it.
   const carried = await carriedCollections(request, options);
-  const installed = await installOne(request, bytes, options.stores);
+  const collections = mergeCollections(carried, collectionId);
+  const installed = await installOne(
+    request,
+    bytes,
+    options.stores,
+    collections,
+  );
   if (!installed.ok) return installed;
+
+  // The dashboard theme wrote its own origin with these memberships. A second
+  // write here is the one that could fail after the theme landed and drop them.
+  if (request.kind === "dashboard-theme") return installed;
 
   const recorded = await recordInstalled(
     request,
     installed.id,
-    collectionId,
-    carried,
+    collections,
     options,
   );
   if (!recorded.ok) return refuse("store", recorded.message);
@@ -331,10 +339,22 @@ async function installCollection(
   const selection = selectIncludes(parsed.package.includes, request.items);
   if (!selection.ok) return refuse("package", selection.message);
 
-  // Pre-flight: every chosen member is fetched, verified, read and consented
-  // before the first write, so one refused member leaves every store untouched.
-  const resolved: ResolvedMember[] = [];
+  // The register is read before any listing. A member installed at the version
+  // the collection names is decided from the row alone, so a retry still
+  // succeeds when the store no longer serves that listing.
+  const registered = await registeredOrigins(options);
+
+  // Pre-flight only the members that still have to be written: every one is
+  // fetched, verified, read and consented before the first write, so one
+  // refused member leaves every store untouched.
+  const resolved = new Map<string, ResolvedMember>();
   for (const include of selection.includes) {
+    if (
+      registered !== undefined &&
+      registeredAt(registered, include.id, request.version) !== undefined
+    ) {
+      continue;
+    }
     const member = await resolveMember(include, options);
     if (!member.ok) {
       return refuse(
@@ -342,26 +362,67 @@ async function installCollection(
         `Collection member "${include.id}": ${member.reason}`,
       );
     }
-    resolved.push(member.member);
+    resolved.set(include.id, member.member);
   }
 
   const outcomes: CollectionMemberOutcome[] = [];
   let consentNeeded = false;
+  let stoppedAt:
+    | {
+        readonly id: string;
+        readonly message: string;
+        readonly stage: MemberStage;
+      }
+    | undefined;
 
-  for (const [index, member] of resolved.entries()) {
-    const held = await installedRow(
-      options.origins,
-      member.listing.kind,
-      member.id,
-    );
-    if (held !== undefined && held.origin.version === member.listing.version) {
+  for (const include of selection.includes) {
+    const held =
+      registered === undefined
+        ? undefined
+        : registeredAt(registered, include.id, request.version);
+
+    if (stoppedAt !== undefined) {
+      outcomes.push(
+        held === undefined
+          ? {
+              id: include.id,
+              ok: false,
+              reason: "Not attempted after an earlier member failed.",
+            }
+          : { id: include.id, ok: true, reason: "Already installed." },
+      );
+      continue;
+    }
+
+    if (held !== undefined) {
       try {
         await mergeCollection(options.origins, held, request.catalogueId);
       } catch (error) {
-        outcomes.push({ id: member.id, ok: false, reason: messageOf(error) });
-        return stopped(outcomes, member.id, messageOf(error), "store");
+        stoppedAt = {
+          id: include.id,
+          message: messageOf(error),
+          stage: "store",
+        };
+        outcomes.push({ id: include.id, ok: false, reason: messageOf(error) });
+        continue;
       }
-      outcomes.push({ id: member.id, ok: true, reason: "Already installed." });
+      outcomes.push({ id: include.id, ok: true, reason: "Already installed." });
+      continue;
+    }
+
+    const member = resolved.get(include.id);
+    if (member === undefined) {
+      // Unreachable: every non-registered include was resolved above.
+      stoppedAt = {
+        id: include.id,
+        message: "The member was not resolved.",
+        stage: "package",
+      };
+      outcomes.push({
+        id: include.id,
+        ok: false,
+        reason: stoppedAt.message,
+      });
       continue;
     }
 
@@ -372,19 +433,21 @@ async function installCollection(
       request.catalogueId,
     );
     if (!installed.ok) {
-      outcomes.push({ id: member.id, ok: false, reason: installed.message });
-      for (const rest of resolved.slice(index + 1)) {
-        outcomes.push({
-          id: rest.id,
-          ok: false,
-          reason: "Not attempted after an earlier member failed.",
-        });
-      }
-      return stopped(outcomes, member.id, installed.message, installed.stage);
+      stoppedAt = {
+        id: include.id,
+        message: installed.message,
+        stage: installed.stage,
+      };
+      outcomes.push({ id: include.id, ok: false, reason: installed.message });
+      continue;
     }
 
     consentNeeded = consentNeeded || installed.consentRequired;
-    outcomes.push({ id: member.id, ok: true });
+    outcomes.push({ id: include.id, ok: true });
+  }
+
+  if (stoppedAt !== undefined) {
+    return stopped(outcomes, stoppedAt.id, stoppedAt.message, stoppedAt.stage);
   }
 
   return {
@@ -395,17 +458,24 @@ async function installCollection(
   };
 }
 
-/** The one item's path after the bytes are held. */
+/** The one item's path after the bytes are held. `collections` is this
+ *  install's merged membership set; only the dashboard theme writes it. */
 async function installOne(
   request: CatalogueInstallRequest,
   bytes: Uint8Array,
   stores: CatalogueInstallStores,
+  collections: readonly string[],
 ): Promise<CatalogueInstallResult> {
   switch (request.kind) {
     case "dashboard-theme": {
       if (stores.theme === undefined)
         return refuse("store", "This host records no theme origins.");
-      const installed = await installThemeBytes(request, bytes, stores.theme);
+      const installed = await installThemeBytes(
+        request,
+        bytes,
+        stores.theme,
+        collections,
+      );
       if (!installed.ok) return refuse(installed.stage, installed.message);
       return { ok: true, id: installed.id, consentRequired: false };
     }
@@ -653,10 +723,7 @@ async function fetchListing(
 > {
   let url: URL;
   try {
-    url = new URL(
-      `/catalogue/${id}/item.json`,
-      options.storeOrigin ?? CATALOGUE_ORIGIN,
-    );
+    url = new URL(catalogueItemUrl(id, options.storeOrigin));
   } catch {
     return { ok: false, reason: "The store origin is not a URL." };
   }
@@ -714,8 +781,10 @@ function readMemberPackage(
       return readResult(readWidgetPackage(bytes));
     case "editor-theme":
       return readResult(readEditorThemePackage(bytes));
-    case "path-preset-pack":
-      return readPathPresetBytes(bytes);
+    case "path-preset-pack": {
+      const read = readPathPresetPackBytes(bytes);
+      return read.ok ? { ok: true } : { ok: false, message: read.message };
+    }
     case "plugin":
       return readResult(readPluginPackage(bytes));
     case "collection":
@@ -731,27 +800,6 @@ function readResult(
     | { readonly ok: true }
     | { readonly ok: false; readonly message: string },
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } {
-  return result.ok ? { ok: true } : { ok: false, message: result.message };
-}
-
-/** The path preset store opens its package as JSON before reading it; the
- *  pre-flight applies the same decode so a malformed pack is refused before any
- *  earlier member is written. */
-function readPathPresetBytes(
-  bytes: Uint8Array,
-): { readonly ok: true } | { readonly ok: false; readonly message: string } {
-  if (bytes.byteLength > MAX_PATH_PRESET_PACK_BYTES) {
-    return { ok: false, message: "That path preset pack is too large." };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-    );
-  } catch {
-    return { ok: false, message: "That path preset pack is not UTF-8 JSON." };
-  }
-  const result = readPathPresetPack(parsed);
   return result.ok ? { ok: true } : { ok: false, message: result.message };
 }
 
@@ -831,36 +879,42 @@ function selectIncludes(
   };
 }
 
-/** The version this machine holds of one catalogue item, read from the origin
- *  register by the id and kind it records. */
+/** The version this machine holds of one catalogue item, for the kind its
+ *  listing names. */
 function installedVersionOf(
   origins: Readonly<Record<string, CatalogueOrigin>>,
   kind: StoreItemKind,
   catalogueId: string,
 ): string | undefined {
-  const installedId = [
-    ...catalogueInstalledIds(origins, kind, catalogueId),
-  ].sort()[0];
-  return installedId === undefined
-    ? undefined
-    : catalogueOriginOf(origins, kind, installedId)?.version;
+  return catalogueOriginRows(origins, catalogueId)
+    .filter((row) => row.kind === kind)
+    .sort((left, right) => left.installedId.localeCompare(right.installedId))[0]
+    ?.origin.version;
 }
 
-async function installedRow(
-  origins: CatalogueOriginsStore | undefined,
-  kind: StoreItemKind,
+/** The register, or nothing when this host records none or cannot read it. */
+async function registeredOrigins(
+  options: CatalogueInstallOptions,
+): Promise<Readonly<Record<string, CatalogueOrigin>> | undefined> {
+  if (options.origins === undefined) return undefined;
+  try {
+    return await options.origins.read();
+  } catch {
+    // An unreadable register costs the retry skip, not the install.
+    return undefined;
+  }
+}
+
+/** The row installing this catalogue item at this version, decided from the
+ *  register alone: a retry needs no listing to learn it is already installed. */
+function registeredAt(
+  origins: Readonly<Record<string, CatalogueOrigin>>,
   catalogueId: string,
-): Promise<
-  { readonly installedId: string; readonly origin: CatalogueOrigin } | undefined
-> {
-  if (origins === undefined) return undefined;
-  const rows = await origins.read();
-  const installedId = [
-    ...catalogueInstalledIds(rows, kind, catalogueId),
-  ].sort()[0];
-  if (installedId === undefined) return undefined;
-  const origin = catalogueOriginOf(rows, kind, installedId);
-  return origin === undefined ? undefined : { installedId, origin };
+  version: string,
+): CatalogueOriginRow | undefined {
+  return catalogueOriginRows(origins, catalogueId).find(
+    (row) => row.origin.version === version,
+  );
 }
 
 /** Collections are additive: one listing can belong to several, and a later
@@ -882,9 +936,11 @@ async function carriedCollections(
 ): Promise<readonly string[] | undefined> {
   if (options.origins === undefined) return undefined;
   try {
-    return (
-      await installedRow(options.origins, request.kind, request.catalogueId)
-    )?.origin.collections;
+    const rows = catalogueOriginRows(
+      await options.origins.read(),
+      request.catalogueId,
+    );
+    return rows.find((row) => row.kind === request.kind)?.origin.collections;
   } catch {
     // An unreadable register is not a reason to refuse an install; the write
     // below records this membership when it can.
@@ -892,20 +948,18 @@ async function carriedCollections(
   }
 }
 
-/** Records where the written copy came from. A copy already in a collection
- *  keeps that membership, and this collection joins it. */
+/** Records where the written copy came from, with the memberships its install
+ *  carried in. */
 async function recordInstalled(
   request: CatalogueInstallRequest,
   installedId: string,
-  collectionId: string | undefined,
-  carried: readonly string[] | undefined,
+  collections: readonly string[],
   options: CatalogueInstallOptions,
 ): Promise<
   { readonly ok: true } | { readonly ok: false; readonly message: string }
 > {
   if (options.origins === undefined) return { ok: true };
 
-  const collections = mergeCollections(carried, collectionId);
   try {
     await options.origins.write(request.kind, installedId, {
       kind: request.kind,
@@ -923,11 +977,11 @@ async function recordInstalled(
 /** A retry's skip still records that the copy is part of this collection. */
 async function mergeCollection(
   origins: CatalogueOriginsStore | undefined,
-  held: { readonly installedId: string; readonly origin: CatalogueOrigin },
+  held: CatalogueOriginRow,
   collectionId: string,
 ): Promise<void> {
   if (origins === undefined) return;
-  await origins.write(held.origin.kind, held.installedId, {
+  await origins.write(held.kind, held.installedId, {
     ...held.origin,
     collections: mergeCollections(held.origin.collections, collectionId),
   });

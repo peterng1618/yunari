@@ -4,12 +4,18 @@
 - **Status:** accepted
 - **Paths:** `src/web/packages/renderer-core/src/theme/catalogue-index.ts`
   `src/web/packages/renderer-core/src/theme/collection-plan.ts`
+  `src/web/packages/renderer-core/src/theme/catalogue-location.ts`
   `src/web/packages/renderer-core/src/index.ts`
   `src/web/packages/store-worker/src/catalogue/kinds.ts`
   `src/web/packages/store-worker/src/catalogue/entry.ts`
   `src/web/packages/store-worker/src/routes/public.ts`
   `src/web/packages/host/src/store/install.ts`
+  `src/web/packages/host/src/settings/catalogue-origins.ts`
   `src/web/packages/host/src/settings/theme-origins.ts`
+  `src/web/packages/host/src/presets/path-presets.ts`
+  `src/web/packages/host/src/themes/install.ts`
+  `src/web/packages/host/src/extensions/install.ts`
+  `src/web/packages/host/src/extensions/service.ts`
   `src/web/packages/host/src/server/theme-writes.ts`
   `src/web/packages/host/src/server/themes-routes.ts`
   `src/web/packages/host/src/server/extension-routes.ts`
@@ -88,6 +94,17 @@ Found: the backend is already largely kind-neutral.
 Unsolved: member derivation, a collection listing and package, the collection
 plan wire types, collection pre-flight/install, a kind-keyed origin register,
 and non-theme Library surfaces.
+
+The collection pre-flight adds no second owner for these mechanisms:
+`renderer-core/src/theme/catalogue-location.ts` `catalogueItemUrl` keeps the
+one spelling of `catalogue/<id>/item.json` and gains the store origin as an
+argument; `host/src/presets/path-presets.ts` owns the pack shape and its
+paint-versus-geometry rule, extracted so `addPack` and the pre-flight call one
+validator; `host/src/themes/install.ts` owns the dashboard theme's single
+origin write, which accepts the merged `collections` rather than leaving a
+second writer; `host/src/settings/catalogue-origins.ts` owns the register key
+and exposes the rows of one catalogue id; and `host/src/extensions/service.ts`
+owns the kill list, so `isKilled` is answered there for the pre-flight.
 
 ## Rung 2 — installed dependencies
 
