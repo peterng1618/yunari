@@ -16,6 +16,12 @@ import { newThemeId, STABLE_ID_PATTERN } from "./document.js";
  * store's nonce are their own vocabularies. Importing this pattern would make
  * independent namespaces look like one.
  *
+ * The host's catalogue-origin register is absent for a sharper reason: its
+ * installed id spans every catalogue kind, including a plugin key's
+ * `publisher/id` and a path-preset pack id of up to 200 characters. That is a
+ * wider vocabulary than a theme id, so the register is not a consumer of this
+ * rule — folding it in would either widen the theme id or narrow the register.
+ *
  * `themeIdFromName` in `@yunari/theme-package` is also absent on purpose: it
  * names a package file and is the host import's fallback when a package
  * carries no usable id. It is never how a new document is minted.
@@ -27,7 +33,6 @@ const CONSUMERS = [
   "renderer-core/src/theme/document.ts",
   "host/src/settings/active-theme.ts",
   "host/src/settings/theme-settings.ts",
-  "host/src/settings/theme-origins.ts",
   "host/src/themes/store.ts",
   "player/src/theme-loader.ts",
   "editor/src/theme-library-client.ts",

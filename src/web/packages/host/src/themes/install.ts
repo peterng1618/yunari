@@ -1,6 +1,9 @@
 import { DASHBOARD_THEME_KIND } from "@yunari/renderer-core";
 import { readThemePackage, themeVideoRefusals } from "@yunari/theme-package";
-import type { CatalogueOriginsStore } from "../settings/catalogue-origins.js";
+import {
+  type CatalogueOriginsStore,
+  catalogueInstalledIds,
+} from "../settings/catalogue-origins.js";
 import { downloadPackage } from "./download.js";
 import { importThemePackage, type ThemeImportResult } from "./import.js";
 import {
@@ -29,8 +32,6 @@ import type { ThumbnailStore } from "./thumbnails.js";
 
 /** The prefix every dashboard-theme row's key carries. The key format is the
  *  register's, and this module only needs the half that names its own kind. */
-const DASHBOARD_PREFIX = `${DASHBOARD_THEME_KIND}:`;
-
 export interface InstallRequest {
   readonly packageUrl: string;
   /** The catalogue's id for the item, never the library id. */
@@ -239,13 +240,9 @@ async function catalogueCopyId(
   options: InstallOptions,
 ): Promise<string | undefined> {
   const origins = await options.origins.read();
-  const ids = Object.entries(origins)
-    .filter(
-      ([key, origin]) =>
-        key.startsWith(DASHBOARD_PREFIX) && origin.catalogueId === catalogueId,
-    )
-    .map(([key]) => key.slice(DASHBOARD_PREFIX.length))
-    .sort();
+  const ids = [
+    ...catalogueInstalledIds(origins, DASHBOARD_THEME_KIND, catalogueId),
+  ].sort();
   if (ids.length === 0) return undefined;
 
   const listed = new Set((await options.store.list()).map((entry) => entry.id));
@@ -335,20 +332,13 @@ async function forgetOtherCopies(
   origins: CatalogueOriginsStore,
 ): Promise<void> {
   const all = await origins.read();
+  const others = catalogueInstalledIds(
+    all,
+    DASHBOARD_THEME_KIND,
+    catalogueId,
+  ).filter((other) => other !== id);
   await Promise.all(
-    Object.entries(all)
-      .filter(
-        ([key, origin]) =>
-          key !== `${DASHBOARD_PREFIX}${id}` &&
-          key.startsWith(DASHBOARD_PREFIX) &&
-          origin.catalogueId === catalogueId,
-      )
-      .map(([key]) =>
-        origins.remove(
-          DASHBOARD_THEME_KIND,
-          key.slice(DASHBOARD_PREFIX.length),
-        ),
-      ),
+    others.map((other) => origins.remove(DASHBOARD_THEME_KIND, other)),
   );
 }
 

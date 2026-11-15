@@ -3,6 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { Readable, Writable } from "node:stream";
 import {
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
@@ -34,8 +35,8 @@ function editorThemeBytes(name: string): Uint8Array {
   return written.bytes;
 }
 
-async function start(): Promise<string> {
-  const handler = createThemeWrites({
+function handler(): ReturnType<typeof createThemeWrites> {
+  return createThemeWrites({
     options: {
       editorThemesDirectory: path.join(directory, "editor-themes"),
     } as unknown as HostServerOptions,
@@ -52,9 +53,13 @@ async function start(): Promise<string> {
     storeOrigin: undefined,
     storeSession: undefined,
   });
+}
+
+async function start(): Promise<string> {
+  const handle = handler();
   const server = http.createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    void handler(request, response, url).then((handled) => {
+    void handle(request, response, url).then((handled) => {
       if (handled) return;
       response.writeHead(404);
       response.end();
@@ -65,6 +70,52 @@ async function start(): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
   return `http://127.0.0.1:${address.port}`;
+}
+
+/** One GET from a caller whose address the socket names, which a real loopback
+ *  server cannot be asked to lie about. */
+function callFrom(remoteAddress: string): Promise<{
+  readonly status: number;
+  readonly text: string;
+}> {
+  return new Promise((resolve) => {
+    const request = new Readable({
+      read() {
+        this.push(null);
+      },
+    }) as unknown as http.IncomingMessage;
+
+    request.method = "GET";
+    request.url = "/api/editor-themes";
+    request.headers = { host: "127.0.0.1:5173" };
+    (request as { socket: { remoteAddress: string } }).socket = {
+      remoteAddress,
+    };
+
+    const chunks: Buffer[] = [];
+    let statusCode = 200;
+    const response = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(Buffer.from(chunk));
+        callback();
+      },
+    }) as unknown as http.ServerResponse;
+
+    response.writeHead = ((status: number) => {
+      statusCode = status;
+      return response;
+    }) as unknown as typeof response.writeHead;
+    response.end = ((data?: unknown) => {
+      if (data) chunks.push(Buffer.from(data as string | Uint8Array));
+      resolve({
+        status: statusCode,
+        text: Buffer.concat(chunks).toString("utf8"),
+      });
+      return response;
+    }) as unknown as typeof response.end;
+
+    void handler()(request, response, new URL(request.url, "http://127.0.0.1"));
+  });
 }
 
 beforeEach(async () => {
@@ -133,5 +184,12 @@ describe("the editor theme listing", () => {
     const base = await start();
 
     expect(await (await fetch(`${base}/api/editor-themes`)).json()).toEqual([]);
+  });
+
+  it("refuses a non-loopback caller", async () => {
+    const answer = await callFrom("192.168.1.10");
+
+    expect(answer.status).toBe(403);
+    expect(answer.text).toBe("Editor themes are available on this PC only.");
   });
 });

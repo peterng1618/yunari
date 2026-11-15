@@ -1865,7 +1865,7 @@ function boundaryEnvelope(input: {
 }
 
 /** Where one copy came from, in the host's own record shape
- *  (`settings/theme-origins.ts`). */
+ *  (`settings/catalogue-origins.ts`). */
 const BOUNDARY_ORIGIN: ThemeOrigin = {
   catalogueId: "cat-office-wall",
   version: "1.2.0",

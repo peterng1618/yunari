@@ -79,6 +79,23 @@ export function catalogueOriginOf(
   return Object.hasOwn(origins, key) ? origins[key] : undefined;
 }
 
+/** The installed ids of one kind whose rows name this catalogue item. Callers
+ *  that need to find, forget or update a kind's copies should ask here rather
+ *  than slice keys themselves: the key format stays this module's. */
+export function catalogueInstalledIds(
+  origins: Readonly<Record<string, CatalogueOrigin>>,
+  kind: StoreItemKind,
+  catalogueId: string,
+): readonly string[] {
+  const prefix = catalogueOriginKey(kind, "");
+  return Object.entries(origins)
+    .filter(
+      ([key, origin]) =>
+        key.startsWith(prefix) && origin.catalogueId === catalogueId,
+    )
+    .map(([key]) => key.slice(prefix.length));
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

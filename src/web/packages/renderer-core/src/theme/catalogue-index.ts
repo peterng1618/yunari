@@ -588,7 +588,7 @@ function isDimension(value: unknown): boolean {
 }
 
 /** A field's own value, never an inherited one: a `__proto__` key in the document
-    is data, the habit `theme-origins.ts` follows. */
+    is data, the habit `catalogue-origins.ts` follows. */
 function field(record: Record<string, unknown>, key: string): unknown {
   return Object.hasOwn(record, key) ? record[key] : undefined;
 }
