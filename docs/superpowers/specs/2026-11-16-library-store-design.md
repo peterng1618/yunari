@@ -150,6 +150,10 @@ surface as unavailable and block collection install.
 - **Pre-flight before any write:** verify every chosen member's size and SHA-256,
   validate each with its existing package reader, check the kill list and resolve
   consent. One refused member refuses the collection by name and writes nothing.
+- A `POST /api/store/collection/plan` route returns that verified member list and
+  each code member's consent summary without writing, so the install sheet can
+  show capabilities and devices before the person presses Install. Install
+  re-runs the pre-flight and never trusts the plan.
 - **Then install each chosen member through its existing per-kind path.** A write
   failure part-way reports which members installed and which did not; a retry
   skips members already installed. This is the accepted non-atomic edge.
