@@ -27,6 +27,11 @@ import {
  * wire sees it, so run on the host's loop one panel's frame delays the others;
  * a plugin's device is already off this loop in the supervisor's child. The
  * decision and its measurements are `docs/decisions/0136`.
+ *
+ * **A driver that says it is not thread safe keeps this loop.** `serialport`
+ * completes its I/O on the default libuv loop, so a serial driver opened on a
+ * worker would enter that worker's isolate from the host's thread;
+ * `docs/decisions/0137`.
  */
 
 export interface PanelSessionOptions {
@@ -56,7 +61,8 @@ export interface PanelSession {
 export async function openPanelSession(
   options: PanelSessionOptions,
 ): Promise<PanelSession> {
-  const worker = options.builtin
+  const threaded = options.builtin && options.family.threadSafe !== false;
+  const worker = threaded
     ? await (options.workerFactory ?? openPanelWorker)({
         vendorId: options.family.vendorId,
         productId: options.family.productId,

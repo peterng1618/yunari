@@ -257,5 +257,14 @@ export interface PanelFamily {
   readonly renderModes?: readonly DisplayRenderMode[];
   /** Panels of this family attached right now, as record hints. */
   readonly attached: () => Promise<readonly PanelHint[]>;
+  /**
+   * Whether this driver may run on a worker thread. Absent means it may.
+   *
+   * A transport whose completions are dispatched on the process's default
+   * libuv loop — `serialport`'s binding is one — would then enter another
+   * thread's isolate, which aborts the process. Such a driver declares `false`
+   * and stays on the host's loop; `docs/decisions/0137`.
+   */
+  readonly threadSafe?: boolean;
   readonly open: (options?: PanelOpenOptions) => Promise<PanelDevice>;
 }

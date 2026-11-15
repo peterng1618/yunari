@@ -124,7 +124,9 @@ Screen 8.8-inch panels, the TURZX 5-inch panel, and NZXT Kraken Z53/Z63/Z73.
   the runner drive, and `panel-worker.ts` is the thread's program. A panel's
   synchronous HID wait and frame decode therefore cannot delay another panel, the
   sample tick or an HTTP reply. Bytes cross as copies; the handle never leaves the
-  thread. Plugin families already run in the extension supervisor's child.
+  thread. A driver whose transport completes on the host's default libuv loop
+  (`serialport`) declares `threadSafe: false` and opens on the host's loop
+  instead. Plugin families already run in the extension supervisor's child.
 - One `panel-raster-browser.ts` Chromium runtime serves every panel: one profile,
   one target per display, each target its own headless window. `panel-raster.ts`
   captures one display's page through that target. The browser stays in the host;

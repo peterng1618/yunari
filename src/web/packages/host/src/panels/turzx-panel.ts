@@ -1199,6 +1199,9 @@ export const TURZX_FAMILIES: readonly PanelFamily[] = [
       width: TURZX_GEOMETRY.width,
       height: TURZX_GEOMETRY.height,
     },
+    // `serialport` completes its reads and writes on the process's default
+    // libuv loop, so this driver must run on the host's thread.
+    threadSafe: false,
     attached: () => attachedTurzxPanels(),
     open: (options) => openTurzxPanel(options),
   },

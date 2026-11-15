@@ -87,4 +87,46 @@ describe("createPanelManager with a built-in panel", () => {
     expect(events).toContain("page:release");
     expect(events).toContain("close:device");
   });
+
+  it("keeps a thread-unsafe driver on the host's loop", async () => {
+    const events: string[] = [];
+    const present = vi.fn(async () => {});
+    const device = deviceOver({ events, present });
+    const inProcess = vi.fn(async () => device);
+    const family: PanelFamily = {
+      ...familyOver(inProcess),
+      threadSafe: false,
+    };
+
+    const workerFactory = vi.fn(async () => {
+      throw new Error("the manager opened a thread-unsafe driver on a thread");
+    });
+
+    const manager = managerOver(
+      {
+        rasterizer: () => ({
+          capture: async () => new Uint8Array([0]),
+          captureOverlay: async () => new Uint8Array([0]),
+          close: async () => {},
+        }),
+        browsers: [],
+        events,
+      },
+      {
+        families: new PanelFamilyRegistry([family]),
+        panelWorkerFactory: workerFactory,
+      },
+    );
+
+    await manager.start("strip");
+    await until(() => present.mock.calls.length > 0);
+
+    expect(workerFactory).not.toHaveBeenCalled();
+    expect(inProcess).toHaveBeenCalledTimes(1);
+    expect(manager.running()).toEqual(["strip"]);
+
+    await manager.stop("strip");
+
+    expect(events).toContain("close:device");
+  });
 });
