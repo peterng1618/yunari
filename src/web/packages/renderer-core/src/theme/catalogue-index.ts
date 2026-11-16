@@ -85,6 +85,60 @@ export function isCatalogueId(text: string): boolean {
   return CATALOGUE_ID_PATTERN.test(text);
 }
 
+/**
+ * The most listings one collection may install.
+ *
+ * The collection package reader and this wire parser are two reads of one
+ * package, so the bound lives here and the reader imports it: neither can admit
+ * a manifest the other refuses.
+ */
+export const MAX_COLLECTION_INCLUDES = 64;
+
+/**
+ * One catalogue listing a collection installs.
+ *
+ * `optional` is the author's default for the install sheet, not a hint: an
+ * unticked optional member may be skipped, so it does not decide whether the
+ * collection is "On this PC". The collection package reader, the catalogue wire
+ * and the install sheet all read this one shape; the type lives here beside the
+ * bound both readers enforce so neither can drift from the other.
+ */
+export interface CollectionInclude {
+  readonly id: string;
+  readonly optional: boolean;
+}
+
+/**
+ * One include record, or nothing where it is not `{ id, optional }`.
+ *
+ * An absent `optional` reads as `false`, which is what the collection package
+ * reader answers for a manifest written without the flag. A present flag that
+ * is not a boolean is malformed rather than coerced: the author declared
+ * something this wire cannot account for.
+ */
+export function collectionIncludeOf(
+  value: unknown,
+): CollectionInclude | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const id = field(record, "id");
+  const optional = field(record, "optional");
+  if (typeof id !== "string" || !isCatalogueId(id)) return undefined;
+  if (optional !== undefined && typeof optional !== "boolean") return undefined;
+  return { id, optional: optional === true };
+}
+
+/**
+ * The most browseable members one listing may declare.
+ *
+ * A path-preset pack can carry 1000 presets, the largest bound any package
+ * reader owns, so this ceiling sits above every package this build derives. A
+ * longer list is hostile input rather than a package that was written here.
+ */
+export const MAX_LISTING_MEMBERS = 1024;
+
 export interface CatalogueEntry {
   /** The catalogue's own id for the item, not a library id. */
   readonly id: string;
@@ -105,9 +159,10 @@ export interface CatalogueEntry {
    *  derived them. Every entry carries the key; one with nothing browseable has
    *  `[]`. */
   readonly members: readonly MemberRecord[];
-  /** The catalogue ids a collection installs. Allowed only on a `collection`
-   *  entry; a non-collection entry carrying it is malformed. */
-  readonly includes?: readonly string[];
+  /** The catalogue listings a collection installs, each with the author's
+   *  optional default. Allowed only on a `collection` entry; a non-collection
+   *  entry carrying it is malformed. */
+  readonly includes?: readonly CollectionInclude[];
   /** Derived by the producer from the envelope. Checked as a record and never
    *  re-derived: deriving it again would be a second owner of one fact. */
   readonly facets: FacetRecord;
@@ -195,10 +250,13 @@ export type CatalogueItemFileResult =
  *
  * This is the input half of the generator's contract: the names here are the
  * ones the uploader must write, and a typo names itself instead of publishing an
- * index with the item quietly missing.
+ * index with the item quietly missing. `id` is the catalogue directory's name,
+ * which the header itself omits; a caller that knows it hands it in so an
+ * include naming the collection itself is refused here as it is in the index.
  */
 export function parseCatalogueItemFile(
   value: unknown,
+  id?: string,
 ): CatalogueItemFileResult {
   if (!isObject(value)) {
     return { ok: false, reason: "item.json must be a JSON object." };
@@ -225,7 +283,7 @@ export function parseCatalogueItemFile(
   if (thumbnail === undefined) return refusedText("thumbnail");
   const members = membersOf(value);
   if (members === undefined) return refusedMembers();
-  const includes = includesOf(value, kind);
+  const includes = includesOf(value, kind, id);
   if (includes === null) return refusedIncludes();
   const publisher = optionalText(value, "publisher");
   if (publisher === null) return refusedText("publisher");
@@ -284,17 +342,19 @@ function optionalBytes(
   return bytes === undefined || bytes === 0 ? null : bytes;
 }
 
-/** The entry's members, or `undefined` when the key is absent or any record is
- *  not three non-empty strings. A member's `kind` is checked only for being a
- *  string: a newer package names member kinds this build does not ship, and the
- *  record is kept so its id and name still list. */
+/** The entry's members, or `undefined` when the key is absent, over the bound,
+ *  or any record is not three non-empty strings with a distinct id. A member's
+ *  `kind` is checked only for being a non-blank string: a newer package names
+ *  member kinds this build does not ship, and the record is kept so its id and
+ *  name still list. */
 function membersOf(
   record: Record<string, unknown>,
 ): readonly MemberRecord[] | undefined {
   const raw = field(record, "members");
-  if (!Array.isArray(raw)) return undefined;
+  if (!Array.isArray(raw) || raw.length > MAX_LISTING_MEMBERS) return undefined;
 
   const members: MemberRecord[] = [];
+  const ids = new Set<string>();
   for (const item of raw) {
     if (!isObject(item)) return undefined;
     const id = stringField(item, "id");
@@ -303,23 +363,48 @@ function membersOf(
     if (id === undefined || kind === undefined || name === undefined) {
       return undefined;
     }
+    if (id.trim() === "" || kind.trim() === "" || name.trim() === "") {
+      return undefined;
+    }
+    // A repeated id is one member counted twice: the second record names no
+    // separate member a reader could draw.
+    if (ids.has(id)) return undefined;
+    ids.add(id);
     members.push({ id, kind, name });
   }
   return members;
 }
 
-/** The ids a collection installs: `undefined` when the key is absent, `null`
- *  when it appears on any other kind or holds anything but catalogue ids. */
+/** The listings a collection installs: `undefined` when the key is absent,
+ *  `null` when it appears on any other kind or breaks any rule this wire owns —
+ *  it is not `1..MAX_COLLECTION_INCLUDES` distinct `{ id, optional }` records,
+ *  or one of them names the entry itself. Missing and empty are one refusal: a
+ *  collection with nothing to install is not a collection. */
 function includesOf(
   record: Record<string, unknown>,
   kind: string,
-): readonly string[] | undefined | null {
+  id: string | undefined,
+): readonly CollectionInclude[] | undefined | null {
   const raw = field(record, "includes");
-  if (raw === undefined) return undefined;
-  if (kind !== "collection" || !Array.isArray(raw)) return null;
-  return raw.every((id) => typeof id === "string" && isCatalogueId(id))
-    ? raw
-    : null;
+  if (kind !== "collection") return raw === undefined ? undefined : null;
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > MAX_COLLECTION_INCLUDES
+  ) {
+    return null;
+  }
+
+  const seen = new Set<string>();
+  const includes: CollectionInclude[] = [];
+  for (const value of raw) {
+    const include = collectionIncludeOf(value);
+    if (include === undefined) return null;
+    if (seen.has(include.id) || include.id === id) return null;
+    seen.add(include.id);
+    includes.push(include);
+  }
+  return includes;
 }
 
 /** Lowercase hex, exactly SHA-256's width. */
@@ -344,16 +429,14 @@ function refusedBytes(): CatalogueItemFileResult {
 function refusedMembers(): CatalogueItemFileResult {
   return {
     ok: false,
-    reason:
-      'item.json\'s "members" must be an array of { id, kind, name } non-empty strings.',
+    reason: `item.json's "members" must be an array of at most ${MAX_LISTING_MEMBERS} { id, kind, name } non-empty strings with distinct ids.`,
   };
 }
 
 function refusedIncludes(): CatalogueItemFileResult {
   return {
     ok: false,
-    reason:
-      'item.json\'s "includes" is only allowed on a "collection", as an array of catalogue ids.',
+    reason: `item.json's "includes" is only allowed on a "collection", as 1-${MAX_COLLECTION_INCLUDES} distinct { id, optional } catalogue listings that do not name the entry itself.`,
   };
 }
 
@@ -484,7 +567,7 @@ function asEntry(value: unknown): CatalogueEntry | undefined {
   const packageUrl = stringField(value, "packageUrl");
   const thumbnail = stringField(value, "thumbnail");
   const members = membersOf(value);
-  const includes = includesOf(value, kind ?? "");
+  const includes = includesOf(value, kind ?? "", id);
   const facets = facetsOf(value);
   const remixOf = field(value, "remixOf");
   const publisher = optionalText(value, "publisher");

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isCatalogueId,
   isCatalogueStatus,
+  MAX_COLLECTION_INCLUDES,
+  MAX_LISTING_MEMBERS,
   parseCatalogueIndex,
   parseCatalogueItemFile,
 } from "./catalogue-index.js";
@@ -12,6 +14,25 @@ const KNOWN = ["dashboard-theme"];
 
 /** A catalogue id: the UUID every `includes` value must be. */
 const INCLUDED_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
+const OTHER_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
+/** `count` distinct include records, for the bound's edge. */
+function includeIds(
+  count: number,
+): { readonly id: string; readonly optional: boolean }[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    optional: false,
+  }));
+}
+
+/** One include record; the flag defaults to required, as the wire requires it. */
+function include(
+  id: string,
+  optional = false,
+): { readonly id: string; readonly optional: boolean } {
+  return { id, optional };
+}
 
 /** The record the Action derives: every field a reader touches, which is the
     shallow check the parser makes and nothing more. */
@@ -362,7 +383,7 @@ describe("parseCatalogueIndex", () => {
 
   it("refuses includes on a non-collection entry", () => {
     const parsed = parseCatalogueIndex(
-      document([entry({ includes: [INCLUDED_ID] })]),
+      document([entry({ includes: [include(INCLUDED_ID)] })]),
       KNOWN,
     );
 
@@ -373,7 +394,7 @@ describe("parseCatalogueIndex", () => {
   });
 
   it("accepts a collection with includes and no members", () => {
-    const includes = [INCLUDED_ID];
+    const includes = [include(INCLUDED_ID)];
     const collection = entry({ kind: "collection", members: [], includes });
     const parsed = parseCatalogueIndex(document([collection]), [
       ...KNOWN,
@@ -392,9 +413,43 @@ describe("parseCatalogueIndex", () => {
     });
   });
 
+  it("keeps each include's optional flag from the wire", () => {
+    const includes = [include(INCLUDED_ID, true), include(OTHER_ID)];
+    const parsed = parseCatalogueIndex(
+      document([entry({ kind: "collection", members: [], includes })]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries[0]?.includes).toEqual(includes);
+  });
+
+  it.each([
+    ["a bare id string", [INCLUDED_ID]],
+    ["a record with no id", [{ optional: false }]],
+    [
+      "a record whose optional is not a boolean",
+      [{ id: INCLUDED_ID, optional: "yes" }],
+    ],
+  ])("refuses an include that is %s", (_label, includes) => {
+    const parsed = parseCatalogueIndex(
+      document([entry({ kind: "collection", members: [], includes })]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "collection", reason: "malformed", count: 1 },
+    ]);
+  });
+
   it("refuses a collection whose includes value is not a catalogue id", () => {
     const parsed = parseCatalogueIndex(
-      document([entry({ kind: "collection", includes: ["aurora"] })]),
+      document([
+        entry({
+          kind: "collection",
+          includes: [{ id: "aurora", optional: false }],
+        }),
+      ]),
       [...KNOWN, "collection"],
     );
 
@@ -414,6 +469,147 @@ describe("parseCatalogueIndex", () => {
     expect(parsed.refused).toStrictEqual([
       { kind: "dashboard-theme", reason: "malformed", count: 1 },
     ]);
+  });
+
+  it("refuses a member id repeated in one list", () => {
+    const members = [
+      { id: "clock", kind: "widget", name: "Clock" },
+      { id: "clock", kind: "widget", name: "Clock again" },
+    ];
+    const parsed = parseCatalogueIndex(document([entry({ members })]), KNOWN);
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "dashboard-theme", reason: "malformed", count: 1 },
+    ]);
+  });
+
+  it("refuses a whitespace-only member name or id", () => {
+    const parsed = parseCatalogueIndex(
+      document([
+        entry({
+          id: "blank-name",
+          members: [{ id: "clock", kind: "widget", name: "   " }],
+        }),
+        entry({
+          id: "blank-id",
+          members: [{ id: "\t", kind: "widget", name: "Clock" }],
+        }),
+      ]),
+      KNOWN,
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "dashboard-theme", reason: "malformed", count: 2 },
+    ]);
+  });
+
+  it("refuses an oversized members list but keeps the bound itself", () => {
+    const atBound = Array.from({ length: MAX_LISTING_MEMBERS }, (_, index) => ({
+      id: `member-${index}`,
+      kind: "widget",
+      name: `Member ${index}`,
+    }));
+
+    expect(
+      parseCatalogueIndex(document([entry({ members: atBound })]), KNOWN)
+        .refused,
+    ).toStrictEqual([]);
+
+    const oversized = [
+      ...atBound,
+      { id: "one-too-many", kind: "widget", name: "One too many" },
+    ];
+    expect(
+      parseCatalogueIndex(document([entry({ members: oversized })]), KNOWN)
+        .entries,
+    ).toStrictEqual([]);
+  });
+
+  it("refuses duplicate includes, so a count cannot read two as three", () => {
+    // Only X is installed: a `[X, X, Y]` list read as three includes would
+    // report "2 of 3", so the duplicate is refused before it can be counted.
+    const parsed = parseCatalogueIndex(
+      document([
+        entry({
+          kind: "collection",
+          members: [],
+          includes: [
+            include(INCLUDED_ID),
+            include(INCLUDED_ID),
+            include(OTHER_ID),
+          ],
+        }),
+      ]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "collection", reason: "malformed", count: 1 },
+    ]);
+  });
+
+  it("refuses a collection with an empty or missing includes list", () => {
+    const parsed = parseCatalogueIndex(
+      document([
+        entry({ id: "empty", kind: "collection", members: [], includes: [] }),
+        entry({ id: "missing", kind: "collection", members: [] }),
+      ]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "collection", reason: "malformed", count: 2 },
+    ]);
+  });
+
+  it("refuses a collection that includes itself", () => {
+    const parsed = parseCatalogueIndex(
+      document([
+        entry({
+          id: INCLUDED_ID,
+          kind: "collection",
+          members: [],
+          includes: [include(INCLUDED_ID), include(OTHER_ID)],
+        }),
+      ]),
+      [...KNOWN, "collection"],
+    );
+
+    expect(parsed.entries).toStrictEqual([]);
+    expect(parsed.refused).toStrictEqual([
+      { kind: "collection", reason: "malformed", count: 1 },
+    ]);
+  });
+
+  it("keeps a collection with the greatest allowed number of includes", () => {
+    const includes = includeIds(MAX_COLLECTION_INCLUDES);
+    const collection = entry({
+      kind: "collection",
+      members: [],
+      includes,
+    });
+
+    expect(
+      parseCatalogueIndex(document([collection]), [...KNOWN, "collection"])
+        .entries[0]?.includes,
+    ).toStrictEqual(includes);
+
+    expect(
+      parseCatalogueIndex(
+        document([
+          entry({
+            kind: "collection",
+            members: [],
+            includes: includeIds(MAX_COLLECTION_INCLUDES + 1),
+          }),
+        ]),
+        [...KNOWN, "collection"],
+      ).entries,
+    ).toStrictEqual([]);
   });
 
   it("carries the entry's fields through unchanged", () => {
@@ -535,6 +731,40 @@ describe("parseCatalogueItemFile", () => {
           'item.json\'s "kind" must be one of dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin, collection.',
       },
     );
+  });
+
+  it("refuses a collection header that includes the entry's own id", () => {
+    const header = entry({
+      kind: "collection",
+      members: [],
+      includes: [include(INCLUDED_ID), include(OTHER_ID)],
+    });
+
+    expect(parseCatalogueItemFile(header, INCLUDED_ID)).toStrictEqual({
+      ok: false,
+      reason: expect.stringContaining("itself"),
+    });
+    expect(
+      parseCatalogueItemFile(header, "11111111-1111-4111-8111-111111111111"),
+    ).toMatchObject({
+      ok: true,
+      file: {
+        kind: "collection",
+        includes: [include(INCLUDED_ID), include(OTHER_ID)],
+      },
+    });
+  });
+
+  it("refuses a duplicate member id in a header", () => {
+    const members = [
+      { id: "clock", kind: "widget", name: "Clock" },
+      { id: "clock", kind: "widget", name: "Clock again" },
+    ];
+
+    expect(parseCatalogueItemFile(entry({ members }))).toStrictEqual({
+      ok: false,
+      reason: expect.stringContaining("distinct ids"),
+    });
   });
 
   it("refuses a malformed remixOf with the one sentence", () => {

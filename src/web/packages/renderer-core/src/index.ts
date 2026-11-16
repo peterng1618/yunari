@@ -347,6 +347,7 @@ export type {
   CatalogueItemFileResult,
   CatalogueRefusal,
   CatalogueStatus,
+  CollectionInclude,
   MemberKind,
   MemberRecord,
   MineEntry,
@@ -354,10 +355,13 @@ export type {
 export {
   CATALOGUE_ID_PATTERN,
   type CatalogueKind,
+  collectionIncludeOf,
   DASHBOARD_THEME_KIND,
   isCatalogueId,
   isCatalogueStatus,
   isStoreItemKind,
+  MAX_COLLECTION_INCLUDES,
+  MAX_LISTING_MEMBERS,
   MEMBER_KINDS,
   parseCatalogueIndex,
   parseCatalogueItemFile,
@@ -505,7 +509,10 @@ export {
   supportsGlass,
   YUNARI_GLASS_PROPERTY,
 } from "./theme/glass.js";
-export type { ListingMemberInput } from "./theme/listing-members.js";
+export type {
+  ListingMemberInput,
+  ListingMembers,
+} from "./theme/listing-members.js";
 export { listingMemberRecords } from "./theme/listing-members.js";
 export type { EnvelopeMigration, MigrationResult } from "./theme/migrations.js";
 export {

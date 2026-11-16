@@ -1,22 +1,23 @@
-import { isCatalogueId } from "@yunari/renderer-core";
+import {
+  type CollectionInclude,
+  collectionIncludeOf,
+  isCatalogueId,
+  MAX_COLLECTION_INCLUDES,
+} from "@yunari/renderer-core";
+
+// Re-exported for this package's consumers: the value is renderer-core's one
+// owner, and a consumer holding the package read should not need a second
+// import for the bound that read enforces.
+export { MAX_COLLECTION_INCLUDES } from "@yunari/renderer-core";
 
 /** The collection format's own name and version: the manifest of a package
  *  that lists catalogue ids rather than carrying a theme. Both are written and
  *  checked here only, so a version bump is one edit. */
 export const COLLECTION_PACKAGE_FORMAT = "yunari-collection-package";
 export const COLLECTION_PACKAGE_VERSION = 1;
-export const MAX_COLLECTION_INCLUDES = 64;
 
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
-
-/** One catalogue listing a collection installs. `optional` is the author's
- *  default for the install sheet, not a hint: an unticked optional member may
- *  be skipped. */
-export interface CollectionInclude {
-  readonly id: string;
-  readonly optional: boolean;
-}
 
 export interface CollectionPackage {
   readonly name: string;
@@ -122,23 +123,26 @@ export function readCollectionPackage(
     if (!isRecord(entry)) {
       return fail("A collection include must be an object.");
     }
-    const id = entry["id"];
-    if (typeof id !== "string" || !isCatalogueId(id)) {
-      return fail(
-        "A collection include needs an id that is a lowercase catalogue UUID.",
-      );
-    }
-    if (seen.has(id)) {
-      return fail(`The collection include "${id}" appears twice.`);
-    }
-    seen.add(id);
-    const optional = entry["optional"];
-    if (optional !== undefined && typeof optional !== "boolean") {
+    // The record's shape is renderer-core's, beside the bound this reader
+    // imports: one parser answers what `{ id, optional }` is for both the
+    // package and the catalogue wire. The sentences below stay this format's.
+    const include = collectionIncludeOf(entry);
+    if (include === undefined) {
+      const id = entry["id"];
+      if (typeof id !== "string" || !isCatalogueId(id)) {
+        return fail(
+          "A collection include needs an id that is a lowercase catalogue UUID.",
+        );
+      }
       return fail(
         `The collection include "${id}" has an optional flag that is not a boolean.`,
       );
     }
-    includes.push({ id, optional: optional === true });
+    if (seen.has(include.id)) {
+      return fail(`The collection include "${include.id}" appears twice.`);
+    }
+    seen.add(include.id);
+    includes.push(include);
   }
 
   return { ok: true, package: { name, description, includes } };

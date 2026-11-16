@@ -45,36 +45,56 @@ export interface ListingMemberInput {
 }
 
 /**
- * The members one listing kind carries.
+ * The members one listing kind carries, with the refusal arm its input needs.
  *
- * A collection carries none: its included listings are the entry's `includes`,
- * not parts of its own package. A kind this build does not derive answers none
- * rather than inventing a member record for it.
+ * An empty list alone cannot say whether a listing carries no members or the
+ * input could not be read, so `unreadable` marks the second fact. A collection,
+ * and a kind this build does not derive, carries none: both answer an empty
+ * list with `unreadable: false` rather than inventing a member record.
  */
+export interface ListingMembers extends ReadonlyArray<MemberRecord> {
+  /** True when a present input could not be read: the caller held something
+   *  that names members, not a listing that carries none. The list is empty,
+   *  because a partly readable package is refused rather than half-listed. */
+  readonly unreadable: boolean;
+}
+
+/** A member list tagged with the read's outcome. */
+function members(
+  records: readonly MemberRecord[],
+  unreadable = false,
+): ListingMembers {
+  return Object.assign([...records], { unreadable });
+}
+
 export function listingMemberRecords(
   kind: string,
   input: ListingMemberInput,
-): readonly MemberRecord[] {
+): ListingMembers {
   if (kind === DASHBOARD_THEME_KIND) {
     const theme = input.theme;
     return theme === undefined
-      ? []
-      : [{ id: theme.id, kind: DASHBOARD_THEME_KIND, name: theme.name }];
+      ? members([], true)
+      : members([
+          { id: theme.id, kind: DASHBOARD_THEME_KIND, name: theme.name },
+        ]);
   }
-  if (kind === "collection") return [];
+  if (kind === "collection") return members([]);
   if (kind === "editor-theme") {
     // The document declares no id, so its validated name is the only stable
     // identity the store holds.
     const name = textOf(input.editorThemeName);
-    return name === undefined ? [] : [{ id: name, kind, name }];
+    return name === undefined
+      ? members([], true)
+      : members([{ id: name, kind, name }]);
   }
 
   const namedKind = memberKindOf(kind);
   if (namedKind !== undefined) return namedRecords(input.named, namedKind);
   if (kind === "plugin") {
-    return pluginMemberRecords(input.contributions ?? {});
+    return members(pluginMemberRecords(input.contributions ?? {}));
   }
-  return [];
+  return members([]);
 }
 
 function memberKindOf(kind: string): string | undefined {
@@ -83,20 +103,22 @@ function memberKindOf(kind: string): string | undefined {
     : undefined;
 }
 
-/** A widget unit or path preset: `{ id, label }`, with an entry that has no
- *  readable id left out rather than listed under a name nothing declared. */
-function namedRecords(value: unknown, kind: string): readonly MemberRecord[] {
-  if (!Array.isArray(value)) return [];
+/** A widget unit or path preset: `{ id, label }`. Input that is not a list, or
+ *  any entry without a non-empty id, is unreadable rather than a shorter list:
+ *  dropping a record would list a package as carrying members it declared and
+ *  the reader could not name. */
+function namedRecords(value: unknown, kind: string): ListingMembers {
+  if (!Array.isArray(value)) return members([], true);
 
   const records: MemberRecord[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
+    if (typeof entry !== "object" || entry === null) return members([], true);
     const record = entry as Readonly<Record<string, unknown>>;
     const id = textOf(field(record, "id"));
-    if (id === undefined) continue;
+    if (id === undefined) return members([], true);
     records.push({ id, kind, name: textOf(field(record, "label")) ?? id });
   }
-  return records;
+  return members(records);
 }
 
 /** A field's own value, never an inherited one: a `__proto__` key in a
@@ -109,5 +131,5 @@ function field(
 }
 
 function textOf(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
