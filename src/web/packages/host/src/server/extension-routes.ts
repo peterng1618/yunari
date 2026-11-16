@@ -342,6 +342,14 @@ export function createExtensionRoutes(
       }
 
       await extensions.remove(key);
+      // The origin is a fact about a copy that existed here, so it goes with
+      // the removal. Its failure cannot undo the removal, so it is logged and
+      // the answer stands.
+      try {
+        await deps.origins?.remove("plugin", key);
+      } catch (error) {
+        console.error(error);
+      }
       sendJson(response, 200, { ok: true });
       return true;
     }

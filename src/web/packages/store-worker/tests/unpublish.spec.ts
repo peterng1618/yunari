@@ -1,4 +1,5 @@
 import { env, SELF } from "cloudflare:test";
+import { collectionManifest } from "@yunari/theme-package";
 import { beforeAll, describe, expect, it } from "vitest";
 import { favoriteCount } from "../src/db/favorites";
 import { thumbnailKey } from "../src/storage/keys";
@@ -8,6 +9,7 @@ import {
   fixturePackageKey,
   ITEM_ID,
   indexIds,
+  putPackage,
   seedPublished,
   statusOf,
   versionsOf,
@@ -15,6 +17,64 @@ import {
 
 const MISSING_ID = "00000000-0000-4000-8000-000000000000";
 const FOREIGN_OWNER = "user-somebody-else";
+const COLLECTION_ID = "22222222-2222-4222-8222-222222222222";
+const MEMBER_ID = "33333333-3333-4333-8333-333333333333";
+const INSTANT = "2026-10-01T00:00:00.000Z";
+
+/**
+ * An unpublished collection at one version, whose stored package is a real
+ * collection manifest naming `MEMBER_ID`, plus the member in the state a spec
+ * chooses.
+ */
+async function seedCollectionRepublish(
+  memberStatus: "published" | "unpublished",
+): Promise<void> {
+  for (const id of [COLLECTION_ID, MEMBER_ID]) {
+    await env.DB.prepare("DELETE FROM item_version WHERE item_id = ?")
+      .bind(id)
+      .run();
+    await env.DB.prepare("DELETE FROM item WHERE id = ?").bind(id).run();
+  }
+
+  const insertItem = async (
+    id: string,
+    kind: string,
+    status: string,
+  ): Promise<void> => {
+    await env.DB.prepare(
+      `INSERT INTO item (id, kind, author_user_id, name, status, status_reason,
+         created_at, updated_at, published_at, unpublished_at, removed_at,
+         downloads, remix_of_id)
+       VALUES (?, ?, ?, 'Seeded', ?, NULL, ?, ?, NULL, NULL, NULL, 0, NULL)`,
+    )
+      .bind(id, kind, USER_ID, status, INSTANT, INSTANT)
+      .run();
+  };
+
+  await insertItem(MEMBER_ID, "dashboard-theme", memberStatus);
+  await insertItem(COLLECTION_ID, "collection", "unpublished");
+
+  const bytes = collectionManifest({
+    name: "Ops Pack",
+    description: "",
+    includes: [{ id: MEMBER_ID, optional: false }],
+  });
+  await env.DB.prepare(
+    `INSERT INTO item_version (item_id, version, envelope_json, facets_json,
+       package_key, thumbnail_key, bytes, sha256, created_at)
+     VALUES (?, '1.0.0', '{}', '{}', ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      COLLECTION_ID,
+      fixturePackageKey(COLLECTION_ID, "1.0.0"),
+      thumbnailKey(COLLECTION_ID),
+      bytes.byteLength,
+      "0".repeat(64),
+      INSTANT,
+    )
+    .run();
+  await putPackage(fixturePackageKey(COLLECTION_ID, "1.0.0"), bytes);
+}
 
 describe("unpublish and republish", () => {
   beforeAll(async () => {
@@ -67,6 +127,24 @@ describe("unpublish and republish", () => {
     expect(await indexIds()).toContain(ITEM_ID);
     expect(await downloads(env.DB, ITEM_ID)).toBe(4);
     expect(await versionsOf(env.DB, ITEM_ID)).toEqual(["1.0.0", "1.0.1"]);
+  });
+
+  it("refuses to republish a collection whose stored include is unpublished", async () => {
+    const headers = await sessionHeaders();
+    await seedCollectionRepublish("unpublished");
+
+    const refused = await publish(headers, COLLECTION_ID);
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain(MEMBER_ID);
+    expect(await statusOf(env.DB, COLLECTION_ID)).toBe("unpublished");
+
+    // The same listing publishes once its member does.
+    await env.DB.prepare("UPDATE item SET status = 'published' WHERE id = ?")
+      .bind(MEMBER_ID)
+      .run();
+    const republished = await publish(headers, COLLECTION_ID);
+    expect(republished.status).toBe(200);
+    expect(await statusOf(env.DB, COLLECTION_ID)).toBe("published");
   });
 
   it("404s a foreign or missing id and 401s without a session", async () => {

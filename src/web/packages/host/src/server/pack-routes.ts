@@ -181,6 +181,14 @@ async function handleWidgetPackRoutes(deps: PackRouteDeps): Promise<boolean> {
     // A bundled pack has nothing on disk; its removal is the same no-op the
     // store's contract promises.
     await store.remove(id);
+    // The origin is a fact about a copy that existed here, so it goes with the
+    // removal. Its failure cannot undo the removal — the bytes are already
+    // gone — so a stale row is logged and the answer stands.
+    try {
+      await deps.origins?.remove("widget-pack", id);
+    } catch (error) {
+      console.error(error);
+    }
     sendJson(response, 200, { ok: true });
     return true;
   }
@@ -448,6 +456,14 @@ async function handlePathPresetRoutes(deps: PackRouteDeps): Promise<boolean> {
     }
     try {
       await pathPresets.removePack(packId);
+      // The register keys a preset pack's row by the pack id the saved rows
+      // carry, not by the preset ids inside it. Its failure cannot undo a
+      // removal that already happened, so it is logged and the answer stands.
+      try {
+        await deps.origins?.remove("path-preset-pack", packId);
+      } catch (error) {
+        console.error(error);
+      }
       sendJson(response, 200, { ok: true });
     } catch (error) {
       sendStoreFailure(response, error);

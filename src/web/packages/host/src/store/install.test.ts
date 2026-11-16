@@ -5,13 +5,17 @@ import type { InstalledPlugin, PluginManifest } from "@yunari/extension-api";
 import type { CatalogueOrigin, StoreItemKind } from "@yunari/renderer-core";
 import {
   EDITOR_THEME_TOKENS,
+  MAX_ARCHIVE_BYTES,
   writeEditorThemePackage,
 } from "@yunari/theme-package";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionService } from "../extensions/service.js";
 import type { WidgetPackStore } from "../packs/widget-packs.js";
-import type { PathPresetStore } from "../presets/path-presets.js";
+import {
+  createPathPresetStore,
+  type PathPresetStore,
+} from "../presets/path-presets.js";
 import {
   type CatalogueOriginsStore,
   catalogueOriginKey,
@@ -485,11 +489,12 @@ async function itemJson(input: {
 }
 
 function storeFetch(
-  routes: ReadonlyMap<string, Uint8Array | number>,
+  routes: ReadonlyMap<string, Uint8Array | number | Response>,
 ): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const body = routes.get(String(input));
     if (body === undefined) return new Response("Not found", { status: 404 });
+    if (body instanceof Response) return body;
     if (typeof body === "number")
       return new Response("Refused", { status: body });
     return new Response(body as unknown as BodyInit);
@@ -998,5 +1003,267 @@ describe("collection install and plan", () => {
     });
     expect(calls).toEqual([]);
     expect(origins.rows()).toEqual({});
+  });
+
+  it("forwarding a collection's approval press reaches the held member's installer", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: PLUGIN_ID }]);
+    const held = {
+      key: "local/acme-sensors",
+      name: "Acme Sensors",
+      publisher: "local",
+      reasons: ["capability:sensor:provide"],
+    };
+    const calls: unknown[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+    ]);
+    const options = {
+      fetch: storeFetch(routes),
+      stores: stores({
+        extensions: extensionService({
+          install: async (_bytes, installOptions) => {
+            calls.push(installOptions);
+            if (installOptions?.approveUpdate !== true)
+              return { ok: false, held };
+            return {
+              ok: true,
+              plugin: {
+                key: "local/acme-sensors",
+                publisher: "local",
+                manifest: panelManifest(),
+                directory: "/nowhere",
+                contentHash: "hash",
+              },
+            };
+          },
+        }),
+      }),
+      storeOrigin: ORIGIN,
+    };
+
+    const first = await installCatalogueItem(
+      await collectionRequest(bytes),
+      options,
+    );
+    expect(first).toMatchObject({
+      ok: false,
+      stage: "review",
+      held,
+      members: [{ id: PLUGIN_ID, ok: false }],
+    });
+
+    // The browser's approve press rides the collection request; without it the
+    // member would be held forever.
+    const second = await installCatalogueItem(
+      await collectionRequest(bytes, { approveUpdate: true }),
+      options,
+    );
+    expect(second).toMatchObject({
+      ok: true,
+      members: [{ id: PLUGIN_ID, ok: true }],
+    });
+    expect(calls).toEqual([{ approveUpdate: false }, { approveUpdate: true }]);
+  });
+
+  it("reports a plugin member whose installer throws, keeping earlier members", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }, { id: PLUGIN_ID }]);
+    const calls: string[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(WIDGET_A_ID),
+        await itemJson({
+          id: WIDGET_A_ID,
+          kind: "widget-pack",
+          name: "A",
+          bytes: WIDGET_PACK_BYTES,
+        }),
+      ],
+      [packageUrl(WIDGET_A_ID), WIDGET_PACK_BYTES],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        widgetPacks: countingWidgetStore("starter", calls),
+        extensions: extensionService({
+          install: async () => {
+            throw new Error("the extensions directory is read-only");
+          },
+        }),
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain(PLUGIN_ID);
+    expect(result).toMatchObject({
+      ok: false,
+      members: [
+        { id: WIDGET_A_ID, ok: true },
+        {
+          id: PLUGIN_ID,
+          ok: false,
+          reason: "the extensions directory is read-only",
+        },
+      ],
+    });
+    expect(calls).toEqual(["starter"]);
+  });
+
+  it("plans an installed member the store no longer serves without blocking", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    // The member was installed, then unpublished: the register still names it,
+    // and the install would skip it before fetching anything.
+    const origins = memoryOrigins({
+      [catalogueOriginKey("widget-pack", "starter")]: {
+        kind: "widget-pack",
+        catalogueId: WIDGET_A_ID,
+        version: "1.0.0",
+        installedAt: "2026-11-01T00:00:00.000Z",
+      },
+    });
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [itemUrl(WIDGET_A_ID), 404],
+    ]);
+
+    const planned = await planCollection(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores(),
+      storeOrigin: ORIGIN,
+      origins,
+    });
+
+    expect(planned).toMatchObject({
+      ok: true,
+      plan: {
+        missing: [],
+        members: [
+          {
+            id: WIDGET_A_ID,
+            kind: "widget-pack",
+            installedVersion: "1.0.0",
+          },
+        ],
+      },
+    });
+  });
+
+  it("refuses a second listing whose package reuses an installed pack id", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "yunari-presets-"));
+    temporary.push(directory);
+    const presets = createPathPresetStore(directory, []);
+    const pack = strToU8(
+      JSON.stringify({
+        format: "yunari-path-preset-pack",
+        version: 1,
+        id: "shared",
+        name: "Shared Shapes",
+        presets: [
+          {
+            id: "star",
+            label: "Star",
+            data: "M 0 0 L 10 0 L 5 10 Z",
+            paint: "fill",
+          },
+        ],
+      }),
+    );
+    const first = "8f14e45f-ceea-4d67-b1a2-000000000021";
+    const second = "8f14e45f-ceea-4d67-b1a2-000000000022";
+    const origins = memoryOrigins();
+
+    const all = await digestOf(pack);
+    const firstResult = await installCatalogueItem(
+      {
+        packageUrl: `${ORIGIN}/catalogue/${first}/1.0.0.zip`,
+        catalogueId: first,
+        kind: "path-preset-pack",
+        version: "1.0.0",
+        sha256: all,
+        bytes: pack.byteLength,
+        publisher: "acme",
+      },
+      {
+        fetch: fetchBytes(pack),
+        stores: stores({ pathPresets: presets }),
+        storeOrigin: ORIGIN,
+        origins,
+      },
+    );
+    expect(firstResult).toMatchObject({ ok: true, id: "shared" });
+
+    const secondResult = await installCatalogueItem(
+      {
+        packageUrl: `${ORIGIN}/catalogue/${second}/1.0.0.zip`,
+        catalogueId: second,
+        kind: "path-preset-pack",
+        version: "1.0.0",
+        sha256: all,
+        bytes: pack.byteLength,
+        publisher: "acme",
+      },
+      {
+        fetch: fetchBytes(pack),
+        stores: stores({ pathPresets: presets }),
+        storeOrigin: ORIGIN,
+        origins,
+      },
+    );
+    expect(secondResult.ok).toBe(false);
+    if (!secondResult.ok) expect(secondResult.message).toContain("shared");
+    // The first listing's saved rows are untouched.
+    expect((await presets.read()).presets.map((preset) => preset.id)).toEqual([
+      "pack:shared:star",
+    ]);
+  });
+
+  it("refuses an oversized member listing under the package byte cap", async () => {
+    const bytes = collectionBytes([{ id: WIDGET_A_ID }]);
+    const calls: string[] = [];
+    const oversized = new Response("{}", {
+      headers: {
+        "content-length": String(MAX_ARCHIVE_BYTES + 1),
+      },
+    });
+    const routes = new Map<string, Uint8Array | number | Response>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [itemUrl(WIDGET_A_ID), oversized],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        widgetPacks: countingWidgetStore("starter", calls),
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("too large");
+    expect(calls).toEqual([]);
   });
 });

@@ -26,11 +26,6 @@ import {
   planCollection,
 } from "../store/install.js";
 import { importThemePackage } from "../themes/import.js";
-import {
-  type InstallRequest,
-  installCatalogueItem as installThemeItem,
-  parseInstallRequest,
-} from "../themes/install.js";
 import { normalizeVideo } from "../themes/normalize-video.js";
 import {
   isValidThemeId,
@@ -126,7 +121,6 @@ export function createThemeWrites(
             store: themeStore,
             origins: catalogueOrigins,
             ...(thumbnails === undefined ? {} : { thumbnails }),
-            ...(fetcher === undefined ? {} : { fetch: fetcher }),
           },
         }),
     ...(options.widgetPacks === undefined
@@ -288,85 +282,6 @@ export function createThemeWrites(
       return true;
     }
 
-    // The catalogue's Install action. The host fetches the package because the
-    // editor's browser cannot, and the operation records
-    // the origin after the write so the listing can say where a theme came from.
-    // Matched here, before `/api/themes/:id`, for the same reason `import` is.
-    if (url.pathname === "/api/themes/install") {
-      if (request.method !== "POST") {
-        sendText(response, 405, "Only POST is supported.");
-        return true;
-      }
-      // Installing is a theme modification: a paired phone reads themes, it does
-      // not add to the library.
-      if (!isLoopbackRemote(request.socket.remoteAddress)) {
-        sendText(response, 403, "Theme modification is loopback only.");
-        return true;
-      }
-      // A loopback address is not the same origin: any page can POST here with
-      // a body no preflight covers, and this route replaces a library copy.
-      if (isForeignOrigin(request)) {
-        sendText(response, 403, "That request is from another origin.");
-        return true;
-      }
-      // No origin owner, no install: the record is half of what this route
-      // promises, and a theme that lands without one reads as a theme that did
-      // not come from the catalogue.
-      if (catalogueOrigins === undefined) {
-        sendText(response, 503, "This host records no theme origins.");
-        return true;
-      }
-
-      let raw: string;
-      try {
-        raw = await readBody(request);
-      } catch {
-        // `readBody`'s only refusal is its size limit; the import route answers
-        // the same class of input with 413.
-        sendText(response, 413, "That install request is too large.");
-        return true;
-      }
-
-      let install: InstallRequest;
-      try {
-        const parsed = parseInstallRequest(JSON.parse(raw));
-        if (parsed === undefined) {
-          sendText(
-            response,
-            400,
-            "An install needs packageUrl, catalogueId, version and kind.",
-          );
-          return true;
-        }
-        install = parsed;
-      } catch {
-        sendText(response, 400, "That install request is not JSON.");
-        return true;
-      }
-
-      const installed = await installThemeItem(install, {
-        store: themeStore,
-        origins: catalogueOrigins,
-        ...(thumbnails === undefined ? {} : { thumbnails }),
-        ...(fetcher === undefined ? {} : { fetch: fetcher }),
-      });
-      if (!installed.ok) {
-        // The refusing owner's own words. 502 when the remote end failed, 500
-        // when this host's own store could not record the install; 400 when the
-        // request's address, package or kind is one this build will not take.
-        const status =
-          installed.stage === "download"
-            ? 502
-            : installed.stage === "store"
-              ? 500
-              : 400;
-        sendText(response, status, installed.message);
-        return true;
-      }
-      sendJson(response, 200, { ok: true, id: installed.id });
-      return true;
-    }
-
     // A collection's verified member list, for the install sheet to show size,
     // availability and each code member's consent before anything is written.
     // The plan is an answer about the store; the install re-runs the same
@@ -468,10 +383,15 @@ export function createThemeWrites(
       const installed = await installCatalogueItem(install, installOptions);
       if (!installed.ok && installed.stage === "review") {
         // A held update is an answer the browser draws as a review notice; its
-        // approval press re-posts with this item's approveUpdate flag.
+        // approval press re-posts with this item's approveUpdate flag. A
+        // collection names the members it had already written, so the review is
+        // about one member and the retry knows which ones landed.
         sendJson(response, 409, {
           ok: false,
           ...(installed.held === undefined ? {} : { held: installed.held }),
+          ...(installed.members === undefined
+            ? {}
+            : { members: installed.members }),
         });
         return true;
       }
@@ -530,7 +450,16 @@ export function createThemeWrites(
         return true;
       }
 
-      const register = await catalogueOrigins.read();
+      // A register this machine cannot read is a fault here, not an empty
+      // library: answering `[]` would claim nothing is installed.
+      let register: Readonly<Record<string, CatalogueOrigin>>;
+      try {
+        register = await catalogueOrigins.read();
+      } catch (error) {
+        console.error(error);
+        sendText(response, 500, "This host could not read its store origins.");
+        return true;
+      }
       sendJson(response, 200, { origins: Object.values(register) });
       return true;
     }
@@ -578,7 +507,13 @@ export function createThemeWrites(
         sendText(response, 403, "Editor themes are available on this PC only.");
         return true;
       }
-      const id = decodeURIComponent(editorThemeMatch[1] ?? "");
+      let id: string;
+      try {
+        id = decodeURIComponent(editorThemeMatch[1] ?? "");
+      } catch {
+        sendText(response, 400, "Invalid editor theme id.");
+        return true;
+      }
       if (!isCatalogueId(id)) {
         sendText(response, 400, "Invalid editor theme id.");
         return true;

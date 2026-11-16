@@ -314,7 +314,14 @@ describe("the collection submission route", () => {
 
   it("refuses a collection as a member, by name", async () => {
     const store = storeOf({
-      entries: [entry(MEMBER_ID, { kind: "collection" })],
+      entries: [
+        entry(MEMBER_ID, {
+          kind: "collection",
+          // A collection entry with no includes is malformed, so it would drop
+          // out of the published map before the membership check could name it.
+          includes: [{ id: OTHER_ID, optional: false }],
+        }),
+      ],
     });
     const answered = await submit(draft(), depsOf(store.fetcher));
     expect(answered?.status).toBe(400);

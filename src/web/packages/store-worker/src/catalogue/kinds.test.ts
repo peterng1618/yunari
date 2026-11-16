@@ -1,7 +1,9 @@
-import { defaultFacetsFor } from "@yunari/renderer-core";
+import {
+  type CollectionInclude,
+  defaultFacetsFor,
+} from "@yunari/renderer-core";
 import {
   COLLECTION_PACKAGE_FORMAT,
-  type CollectionInclude,
   EDITOR_THEME_TOKENS,
   writeEditorThemePackage,
   writeWidgetPackage,

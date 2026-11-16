@@ -8,6 +8,7 @@ import {
   type WidgetDocument,
   writeWidgetPackage,
 } from "@yunari/theme-package";
+import { strToU8 } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createWidgetPackStore,
@@ -22,6 +23,7 @@ import {
   type CatalogueOriginsStore,
   createCatalogueOriginsStore,
 } from "../settings/catalogue-origins.js";
+import { installCatalogueItem } from "../store/install.js";
 import { createLargeBodyGate } from "./http.js";
 import { MAX_WIDGET_PACK_BYTES } from "./limits.js";
 import { handlePackRoutes } from "./pack-routes.js";
@@ -73,6 +75,16 @@ function pathPresetPackBytes(): Uint8Array {
       ],
     }),
   );
+}
+
+async function digestOf(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    bytes as unknown as BufferSource,
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function start(
@@ -206,6 +218,100 @@ describe("the widget pack routes", () => {
       packs: Record<string, unknown>[];
     };
     expect(listed.packs[0]?.origin).toEqual(origin);
+  });
+
+  it("forgets the pack's origin on removal, so a collection retry re-installs it", async () => {
+    const storeOrigin = "https://store.test";
+    const memberId = "8f14e45f-ceea-4d67-b1a2-000000000011";
+    const collectionId = "8f14e45f-ceea-4d67-b1a2-000000000012";
+    const base = await start();
+    const bytes = widgetPackageBytes();
+    await fetch(`${base}/api/widget-packs/import`, {
+      method: "POST",
+      body: bytes.buffer as ArrayBuffer,
+    });
+
+    const origin = {
+      kind: "widget-pack",
+      catalogueId: memberId,
+      version: "1.0.0",
+      installedAt: "2026-11-16T00:00:00.000Z",
+    } as const;
+    const register = origins as CatalogueOriginsStore;
+    await register.write("widget-pack", "pack-one", origin);
+
+    const removed = await fetch(`${base}/api/widget-packs/pack-one`, {
+      method: "DELETE",
+    });
+    expect(removed.status).toBe(200);
+    expect(await register.read()).toEqual({});
+
+    // A collection naming that catalogue item now re-installs the pack rather
+    // than answering "Already installed" over bytes that are gone.
+    const collection = strToU8(
+      JSON.stringify({
+        format: "yunari-collection-package",
+        version: 1,
+        name: "Ops",
+        description: "",
+        includes: [{ id: memberId }],
+      }),
+    );
+    const listing = strToU8(
+      JSON.stringify({
+        kind: "widget-pack",
+        name: "Pack One",
+        version: "1.0.0",
+        createdAt: "2026-11-01T00:00:00Z",
+        updatedAt: "2026-11-02T00:00:00Z",
+        downloads: 0,
+        favorites: 0,
+        packageUrl: `${storeOrigin}/catalogue/${memberId}/1.0.0.zip`,
+        thumbnail: "catalogue/thumb.png",
+        members: [],
+        sha256: await digestOf(bytes),
+        bytes: bytes.byteLength,
+        publisher: "acme",
+      }),
+    );
+    const routes = new Map<string, Uint8Array>([
+      [`${storeOrigin}/catalogue/${collectionId}/1.0.0.zip`, collection],
+      [`${storeOrigin}/catalogue/${memberId}/item.json`, listing],
+      [`${storeOrigin}/catalogue/${memberId}/1.0.0.zip`, bytes],
+    ]);
+
+    const result = await installCatalogueItem(
+      {
+        packageUrl: `${storeOrigin}/catalogue/${collectionId}/1.0.0.zip`,
+        catalogueId: collectionId,
+        kind: "collection",
+        version: "1.0.0",
+        sha256: await digestOf(collection),
+        bytes: collection.byteLength,
+        publisher: "acme",
+      },
+      {
+        fetch: (async (input: RequestInfo | URL) => {
+          const body = routes.get(String(input));
+          return body === undefined
+            ? new Response("Not found", { status: 404 })
+            : new Response(body as unknown as BodyInit);
+        }) as unknown as typeof fetch,
+        stores: { widgetPacks: store as WidgetPackStore },
+        storeOrigin,
+        origins: register,
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      members: [{ id: memberId, ok: true }],
+    });
+    expect(result.ok ? result.members?.[0]?.reason : "refused").toBeUndefined();
+    expect((await register.read())["widget-pack:pack-one"]?.catalogueId).toBe(
+      memberId,
+    );
+    expect((await fetch(`${base}/api/widget-packs/pack-one`)).status).toBe(200);
   });
 
   it("refuses an invalid package with the reader's message", async () => {
@@ -437,6 +543,8 @@ describe("the path preset routes", () => {
     });
     expect(removed.status).toBe(200);
     expect(await removed.json()).toEqual({ ok: true });
+    // The pack's rows are gone, so the register's row about them goes too.
+    expect(await origins?.read()).toEqual({});
 
     const after = (await (await fetch(`${base}/api/path-presets`)).json()) as {
       readonly presets: readonly { readonly id: string }[];

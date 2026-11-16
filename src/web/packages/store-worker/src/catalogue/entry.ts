@@ -59,7 +59,9 @@ export function entryOf(
     return {
       ...shared,
       name: item.name,
-      members: membersOf(item, version, envelope),
+      // The derivation tags its refusal on the array; the wire carries a plain
+      // list, or every consumer would compare the tag as if it were a member.
+      members: [...membersOf(item, version, envelope)],
       ...(remixOf === undefined ? {} : { remixOf }),
     };
   }
@@ -73,13 +75,16 @@ export function entryOf(
       ...shared,
       name: metadata.name,
       members: [],
-      includes: (metadata.includes ?? []).map((entry) => entry.id),
+      // The wire carries the author's optional default, so an index-built
+      // collection row and its package agree about which members may be
+      // skipped. The metadata was validated when the version was finalized.
+      includes: metadata.includes ?? [],
     };
   }
 
   const name = metadataName(version.metadata_json);
   if (name === undefined) return undefined;
-  return { ...shared, name, members: membersOf(item, version) };
+  return { ...shared, name, members: [...membersOf(item, version)] };
 }
 
 /**

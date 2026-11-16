@@ -9,7 +9,7 @@ import {
   writeEditorThemePackage,
 } from "@yunari/theme-package";
 import { strToU8, zipSync } from "fflate";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionService } from "../extensions/service.js";
 import type { PublishedStore } from "../serve/published.js";
 import {
@@ -37,13 +37,15 @@ function editorThemeBytes(name: string): Uint8Array {
   return written.bytes;
 }
 
-function handler(): ReturnType<typeof createThemeWrites> {
+function handler(
+  catalogueOrigins: CatalogueOriginsStore = origins,
+): ReturnType<typeof createThemeWrites> {
   return createThemeWrites({
     options: {
       editorThemesDirectory: path.join(directory, "editor-themes"),
     } as unknown as HostServerOptions,
     themeStore: {} as ThemeStore,
-    catalogueOrigins: origins,
+    catalogueOrigins,
     thumbnails: undefined,
     themeMedia: undefined,
     fetcher: undefined,
@@ -80,6 +82,7 @@ function callFrom(
   remoteAddress: string,
   path = "/api/editor-themes",
   headers: Readonly<Record<string, string>> = {},
+  handle: ReturnType<typeof createThemeWrites> = handler(),
 ): Promise<{
   readonly status: number;
   readonly text: string;
@@ -120,7 +123,7 @@ function callFrom(
       return response;
     }) as unknown as typeof response.end;
 
-    void handler()(request, response, new URL(request.url, "http://127.0.0.1"));
+    void handle(request, response, new URL(request.url, "http://127.0.0.1"));
   });
 }
 
@@ -198,6 +201,13 @@ describe("the editor theme listing", () => {
     expect(answer.status).toBe(403);
     expect(answer.text).toBe("Editor themes are available on this PC only.");
   });
+
+  it("answers 400 for a malformed percent escape, not 500", async () => {
+    const answer = await callFrom("127.0.0.1", "/api/editor-themes/%E0%A4%A");
+
+    expect(answer.status).toBe(400);
+    expect(answer.text).toBe("Invalid editor theme id.");
+  });
 });
 
 describe("the store origin register", () => {
@@ -234,6 +244,35 @@ describe("the store origin register", () => {
     expect(await (await fetch(`${base}/api/store/origins`)).json()).toEqual({
       origins: [],
     });
+  });
+
+  it("answers 500 when the register could not be read", async () => {
+    const unreadable: CatalogueOriginsStore = {
+      read: async () => {
+        throw Object.assign(new Error("EACCES: permission denied"), {
+          code: "EACCES",
+        });
+      },
+      write: async () => undefined,
+      remove: async () => undefined,
+    };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const answer = await callFrom(
+        "127.0.0.1",
+        "/api/store/origins",
+        {},
+        handler(unreadable),
+      );
+
+      expect(answer.status).toBe(500);
+      expect(answer.text).toBe("This host could not read its store origins.");
+      expect(answer.text).not.toContain("EACCES");
+      expect(logged).toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it("refuses a non-loopback caller", async () => {

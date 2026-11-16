@@ -4,7 +4,6 @@ import {
   type CatalogueOriginsStore,
   catalogueInstalledIds,
 } from "../settings/catalogue-origins.js";
-import { downloadPackage } from "./download.js";
 import { importThemePackage, type ThemeImportResult } from "./import.js";
 import {
   storeRefusalMessage,
@@ -43,8 +42,6 @@ export interface InstallOptions {
   readonly origins: CatalogueOriginsStore;
   /** The picture's owner; omitted costs the package's picture and nothing else. */
   readonly thumbnails?: ThumbnailStore;
-  /** Injected so a test drives the download without a network. */
-  readonly fetch?: typeof fetch;
 }
 
 /** `stage` is which owner refused, so a route can answer 502 for the remote end,
@@ -74,18 +71,6 @@ export const INSTALL_REFUSALS = {
   rolledBackFailed:
     "The Host could not record where that theme came from, and could not remove it; delete it from Your themes before installing again.",
 } as const;
-
-/**
- * The catalogue's `kind` names a shape this build runs; the library has no such
- * field. An item of another kind is refused by its identifier — a display word
- * is not what a catalogue author has to match against.
- */
-export async function installCatalogueItem(
-  request: InstallRequest,
-  options: InstallOptions,
-): Promise<InstallResult> {
-  return exclusively(request.catalogueId, () => installOnce(request, options));
-}
 
 /**
  * Installs of one catalogue item run one at a time.
@@ -120,38 +105,9 @@ async function exclusively<T>(
   }
 }
 
-async function installOnce(
-  request: InstallRequest,
-  options: InstallOptions,
-): Promise<InstallResult> {
-  if (request.kind !== DASHBOARD_THEME_KIND) {
-    return {
-      ok: false,
-      stage: "package",
-      message: `This build installs "${DASHBOARD_THEME_KIND}" items, not "${request.kind}".`,
-    };
-  }
-
-  const downloaded = await downloadPackage(request.packageUrl, {
-    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-  });
-  if (!downloaded.ok) {
-    return {
-      ok: false,
-      stage: downloaded.stage,
-      message: downloaded.message,
-    };
-  }
-
-  return installThemeBytes(request, downloaded.bytes, options);
-}
-
 /**
- * The half after the download: validate, write, then record the origin.
- *
- * Split out because the store's dispatcher holds the bytes already, and a
- * second download of the same package would pay the network twice and could
- * land different bytes than the digest it checked.
+ * The write, with the item's copy and its provenance as one result: validate,
+ * record the origin, and keep the library and the register in step.
  *
  * `collections` rides this one origin write. A theme installed as a collection
  * member must not need a second write to record the membership: the copy and
@@ -159,6 +115,17 @@ async function installOnce(
  * landed would drop the membership while keeping the theme.
  */
 export async function installThemeBytes(
+  request: Pick<InstallRequest, "catalogueId" | "version">,
+  bytes: Uint8Array,
+  options: InstallOptions,
+  collections?: readonly string[],
+): Promise<InstallResult> {
+  return exclusively(request.catalogueId, () =>
+    installBytesOnce(request, bytes, options, collections),
+  );
+}
+
+async function installBytesOnce(
   request: Pick<InstallRequest, "catalogueId" | "version">,
   bytes: Uint8Array,
   options: InstallOptions,
@@ -347,37 +314,4 @@ async function forgetOtherCopies(
   await Promise.all(
     others.map((other) => origins.remove(DASHBOARD_THEME_KIND, other)),
   );
-}
-
-/**
- * The route's body as a request, or nothing when it is not the four strings the
- * install needs. Lives beside the request it builds so the wire shape has one
- * owner rather than a copy in the router.
- */
-export function parseInstallRequest(
-  value: unknown,
-): InstallRequest | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const { packageUrl, catalogueId, version, kind } = value as Record<
-    string,
-    unknown
-  >;
-
-  if (
-    typeof packageUrl !== "string" ||
-    packageUrl === "" ||
-    typeof catalogueId !== "string" ||
-    catalogueId === "" ||
-    typeof version !== "string" ||
-    version === "" ||
-    typeof kind !== "string" ||
-    kind === ""
-  ) {
-    return undefined;
-  }
-
-  return { packageUrl, catalogueId, version, kind };
 }

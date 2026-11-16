@@ -238,11 +238,21 @@ function normalizeLegacyOrigins(
   return Object.fromEntries(pairs);
 }
 
+/** A file the caller may not read is this machine's fault and is thrown: an
+ *  empty answer would read as "nothing installed". A missing file is the one
+ *  absence that means exactly that. A file that is present but not JSON is
+ *  dropped the same way a malformed row is. */
 async function readJson(file: string): Promise<unknown> {
+  let text: string;
   try {
-    return JSON.parse(await readFile(file, "utf8"));
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  try {
+    return JSON.parse(text);
   } catch {
-    // No file, or an unreadable one: nothing this file records.
     return undefined;
   }
 }

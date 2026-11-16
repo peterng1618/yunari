@@ -435,6 +435,47 @@ describe("buildCatalogueIndexCommand", () => {
     );
   });
 
+  it("refuses an item.json collection that includes itself", async () => {
+    const errors = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const catalogue = await catalogueOf([
+      { id: "alpha" },
+      {
+        id: "ops",
+        item: {
+          ...(itemFor("ops") as Record<string, unknown>),
+          kind: "collection",
+          includes: [{ id: "ops", optional: false }],
+        },
+        packageBytes: null,
+      },
+    ]);
+    const out = path.join(catalogue, "index.json");
+
+    const status = await buildCatalogueIndexCommand([
+      "--build-catalogue-index",
+      catalogue,
+      "--out",
+      out,
+      "--generated-at",
+      GENERATED_AT,
+    ]);
+
+    // The entry id is known at the item parse, so the self include is refused
+    // there rather than only by the built index's own check.
+    expect(status).toBe(0);
+    expect(errors.mock.calls.flat().join("\n")).toContain(
+      "do not name the entry itself",
+    );
+
+    const parsed = parseCatalogueIndex(
+      JSON.parse(await readFile(out, "utf8")),
+      [...STORE_ITEM_KINDS],
+    );
+    expect(parsed.entries.map((entry) => entry.id)).toEqual(["alpha"]);
+  });
+
   it("fails on a catalogue directory that does not exist", async () => {
     const errors = vi
       .spyOn(console, "error")

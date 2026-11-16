@@ -11,6 +11,7 @@ import {
 } from "@yunari/extension-api";
 import {
   type CatalogueOrigin,
+  type CollectionInclude,
   type CollectionPlan,
   type CollectionPlanMember,
   catalogueItemUrl,
@@ -20,7 +21,7 @@ import {
   type StoreItemKind,
 } from "@yunari/renderer-core";
 import {
-  type CollectionInclude,
+  MAX_ARCHIVE_BYTES,
   MAX_COLLECTION_INCLUDES,
   readCollectionPackage,
   readEditorThemePackage,
@@ -38,6 +39,7 @@ import {
 import {
   type CatalogueOriginRow,
   type CatalogueOriginsStore,
+  catalogueOriginOf,
   catalogueOriginRows,
 } from "../settings/catalogue-origins.js";
 import { downloadPackage } from "../themes/download.js";
@@ -219,6 +221,25 @@ export async function planCollection(
   for (const include of selection.includes) {
     const resolved = await resolveMember(include, options);
     if (!resolved.ok) {
+      // The install skips a registered member before it fetches anything, so a
+      // listing that has since been unpublished must not block the sheet
+      // either. The register names the kind and version; it holds no display
+      // name or size, so the id stands in for the name and the row costs no
+      // bytes. The install still reports it "Already installed".
+      const held = registeredRow(origins, include.id);
+      if (held !== undefined) {
+        members.push({
+          id: include.id,
+          kind: held.kind,
+          name: include.id,
+          version: held.origin.version,
+          bytes: 0,
+          publisher: "",
+          optional: include.optional,
+          installedVersion: held.origin.version,
+        });
+        continue;
+      }
       missing.push({ id: include.id, reason: resolved.reason });
       continue;
     }
@@ -306,12 +327,7 @@ async function installByKind(
   // write carries them; every other kind's row is written after it.
   const carried = await carriedCollections(request, options);
   const collections = mergeCollections(carried, collectionId);
-  const installed = await installOne(
-    request,
-    bytes,
-    options.stores,
-    collections,
-  );
+  const installed = await installOne(request, bytes, options, collections);
   if (!installed.ok) return installed;
 
   // The dashboard theme wrote its own origin with these memberships. A second
@@ -432,7 +448,7 @@ async function installCollection(
     }
 
     const installed = await installByKind(
-      memberRequest(member),
+      memberRequest(member, request.approveUpdate),
       member.bytes,
       options,
       request.catalogueId,
@@ -477,9 +493,10 @@ async function installCollection(
 async function installOne(
   request: CatalogueInstallRequest,
   bytes: Uint8Array,
-  stores: CatalogueInstallStores,
+  options: CatalogueInstallOptions,
   collections: readonly string[],
 ): Promise<CatalogueInstallResult> {
+  const stores = options.stores;
   switch (request.kind) {
     case "dashboard-theme": {
       if (stores.theme === undefined)
@@ -511,6 +528,31 @@ async function installOne(
     case "path-preset-pack": {
       if (stores.pathPresets === undefined)
         return refuse("store", "This host keeps no path presets.");
+      // The saved rows are keyed by the pack's own id, not the catalogue's, and
+      // an install replaces every row under that prefix. Two listings whose
+      // packages declare one internal id would therefore overwrite each other,
+      // so the second is refused before the first's rows are touched.
+      const parsed = readPathPresetPackBytes(bytes);
+      if (!parsed.ok) return refuse("package", parsed.message);
+      if (options.origins !== undefined) {
+        let held: CatalogueOrigin | undefined;
+        try {
+          held = catalogueOriginOf(
+            await options.origins.read(),
+            "path-preset-pack",
+            parsed.pack.id,
+          );
+        } catch {
+          // An unreadable register costs the collision check, not the install.
+          held = undefined;
+        }
+        if (held !== undefined && held.catalogueId !== request.catalogueId) {
+          return refuse(
+            "package",
+            `The path preset pack id "${parsed.pack.id}" is already used by another catalogue item.`,
+          );
+        }
+      }
       try {
         const result = await stores.pathPresets.addPack(bytes);
         return { ok: true, id: result.packId, consentRequired: false };
@@ -541,10 +583,17 @@ async function installOne(
     case "plugin": {
       if (stores.extensions === undefined)
         return refuse("store", "This host keeps no plugins.");
-      const installed: PluginInstallResult = await stores.extensions.install(
-        bytes,
-        { approveUpdate: request.approveUpdate === true },
-      );
+      // The installer reads and writes the same archive; a filesystem refusal
+      // is this machine's stage, never an exception that escapes the collection
+      // with the earlier members already written.
+      let installed: PluginInstallResult;
+      try {
+        installed = await stores.extensions.install(bytes, {
+          approveUpdate: request.approveUpdate === true,
+        });
+      } catch (error) {
+        return refuse("store", messageOf(error));
+      }
       if (installed.held !== undefined) {
         return {
           ok: false,
@@ -755,14 +804,10 @@ async function fetchListing(
     };
   }
 
-  let value: unknown;
-  try {
-    value = await response.json();
-  } catch {
-    return { ok: false, reason: `The listing for "${id}" is not JSON.` };
-  }
+  const read = await readListingBody(id, response);
+  if (!read.ok) return { ok: false, reason: read.reason };
 
-  const parsed = parseCatalogueItemFile(value);
+  const parsed = parseCatalogueItemFile(read.value, id);
   if (!parsed.ok) return { ok: false, reason: parsed.reason };
   // The reader admits a kind this build ships; the wire type keeps room for a
   // newer store's name, so the member path narrows it here.
@@ -771,6 +816,61 @@ async function fetchListing(
     return { ok: false, reason: `Unsupported catalogue kind "${kind}".` };
   }
   return { ok: true, file: { ...parsed.file, kind } };
+}
+
+/**
+ * A listing's JSON under the package path's byte cap.
+ *
+ * The cap is enforced while the body arrives rather than after it: a listing is
+ * small, and a store that would answer an unbounded body must not be able to
+ * make this host buffer it. A declared length over the cap is refused before a
+ * byte is read.
+ */
+async function readListingBody(
+  id: string,
+  response: Response,
+): Promise<
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly reason: string }
+> {
+  const tooLarge = `The listing for "${id}" is too large.`;
+  const declared = response.headers.get("content-length");
+  if (declared !== null) {
+    const size = Number(declared);
+    if (Number.isFinite(size) && size > MAX_ARCHIVE_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      return { ok: false, reason: tooLarge };
+    }
+  }
+  if (response.body === null) {
+    return { ok: false, reason: `The listing for "${id}" is not JSON.` };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_ARCHIVE_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return { ok: false, reason: tooLarge };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) };
+  } catch {
+    return { ok: false, reason: `The listing for "${id}" is not JSON.` };
+  }
 }
 
 /** The package readers for every kind that can be a collection member. Each
@@ -1000,8 +1100,13 @@ async function mergeCollection(
   });
 }
 
-/** The request a member's bytes are installed under. */
-function memberRequest(member: ResolvedMember): CatalogueInstallRequest {
+/** The request a member's bytes are installed under. The collection's own
+ *  approval press rides every member: a held plugin update is approved by the
+ *  same request that carried it, not a second one the browser cannot make. */
+function memberRequest(
+  member: ResolvedMember,
+  approveUpdate: boolean | undefined,
+): CatalogueInstallRequest {
   return {
     packageUrl: member.listing.packageUrl,
     catalogueId: member.id,
@@ -1015,6 +1120,7 @@ function memberRequest(member: ResolvedMember): CatalogueInstallRequest {
       : {
           executionProfile: member.listing.executionProfile as ExecutionProfile,
         }),
+    ...(approveUpdate === true ? { approveUpdate: true } : {}),
   };
 }
 

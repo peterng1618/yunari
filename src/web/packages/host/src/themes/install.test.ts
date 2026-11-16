@@ -16,7 +16,7 @@ import {
 import {
   INSTALL_REFUSALS,
   type InstallRequest,
-  installCatalogueItem,
+  installThemeBytes,
 } from "./install.js";
 import {
   createThemeStore,
@@ -77,32 +77,6 @@ function packageWithLongVideo(id: string, name: string): Uint8Array {
   return written.bytes;
 }
 
-/** An injected fetcher that records every URL it was asked for, so a case can
- *  prove the kind gate refused before the network. */
-function recorded(answer: () => Response): {
-  readonly fetch: typeof fetch;
-  readonly seen: string[];
-} {
-  const seen: string[] = [];
-  const fetcher: typeof globalThis.fetch = async (input) => {
-    seen.push(
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url,
-    );
-    return answer();
-  };
-  return { fetch: fetcher, seen };
-}
-
-function serving(bytes: Uint8Array): typeof fetch {
-  // `new Uint8Array(bytes)` is ArrayBuffer-backed, which is what `Response`
-  // accepts; the writer's return type is the wider `ArrayBufferLike`.
-  return async () => new Response(new Uint8Array(bytes));
-}
-
 const REQUEST: InstallRequest = {
   packageUrl: PACKAGE_URL,
   catalogueId: "aurora",
@@ -110,7 +84,7 @@ const REQUEST: InstallRequest = {
   kind: DASHBOARD_THEME_KIND,
 };
 
-describe("installCatalogueItem", () => {
+describe("installThemeBytes", () => {
   let libraryDir: string;
   let originsDir: string;
   let store: ThemeStore;
@@ -140,11 +114,11 @@ describe("installCatalogueItem", () => {
   it("installs an item and records its origin", async () => {
     const startedAt = Date.now();
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins },
+    );
 
     expect(result).toEqual({ ok: true, id: "living-room" });
 
@@ -161,10 +135,9 @@ describe("installCatalogueItem", () => {
   });
 
   it("records no origin when the write was refused", async () => {
-    const result = await installCatalogueItem(REQUEST, {
+    const result = await installThemeBytes(REQUEST, new Uint8Array([1, 2, 3]), {
       store,
       origins,
-      fetch: serving(new Uint8Array([1, 2, 3])),
     });
 
     expect(result.ok).toBe(false);
@@ -188,11 +161,11 @@ describe("installCatalogueItem", () => {
       installedAt: new Date(0).toISOString(),
     });
     const listedBefore = await store.list();
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageWithLongVideo("living-room", "Living Room 2")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageWithLongVideo("living-room", "Living Room 2"),
+      { store, origins },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -209,22 +182,6 @@ describe("installCatalogueItem", () => {
     );
   });
 
-  it("refuses a kind this build does not run", async () => {
-    const { fetch, seen } = recorded(() => new Response("no"));
-
-    const result = await installCatalogueItem(
-      { ...REQUEST, kind: "widget-preset" },
-      { store, origins, fetch },
-    );
-
-    expect(result.ok).toBe(false);
-    // The identifier, never a display word.
-    expect(result.ok ? "" : result.message).toContain("widget-preset");
-    // Refused before anything was fetched or written.
-    expect(seen).toEqual([]);
-    expect(await origins.read()).toEqual({});
-  });
-
   it("removes a fresh import when its origin could not be written", async () => {
     const refusing: CatalogueOriginsStore = {
       ...origins,
@@ -233,11 +190,11 @@ describe("installCatalogueItem", () => {
       },
     };
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins: refusing,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins: refusing },
+    );
 
     expect(result.ok).toBe(false);
     expect(result.ok ? "" : result.stage).toBe("store");
@@ -263,11 +220,11 @@ describe("installCatalogueItem", () => {
       },
     };
 
-    const result = await installCatalogueItem(REQUEST, {
-      store: stuck,
-      origins: refusing,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store: stuck, origins: refusing },
+    );
 
     expect(result.ok ? "" : result.message).toBe(
       INSTALL_REFUSALS.rolledBackFailed,
@@ -296,11 +253,11 @@ describe("installCatalogueItem", () => {
       },
     };
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins: refusing,
-      fetch: serving(packageOf("living-room", "Living Room 2")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room 2"),
+      { store, origins: refusing },
+    );
 
     expect(result.ok).toBe(false);
     expect(result.ok ? "" : result.stage).toBe("store");
@@ -320,11 +277,11 @@ describe("installCatalogueItem", () => {
       expectFree: true,
     });
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins },
+    );
 
     expect(result).toEqual({ ok: true, id: "living-room-2" });
     expect((await store.read("living-room-2"))?.envelope.id).toBe(
@@ -333,34 +290,6 @@ describe("installCatalogueItem", () => {
     expect(Object.keys(await origins.read())).toEqual([
       "dashboard-theme:living-room-2",
     ]);
-  });
-
-  it("forwards an address no catalogue can produce as the caller's refusal", async () => {
-    const { fetch } = recorded(() => new Response("no"));
-
-    const result = await installCatalogueItem(
-      { ...REQUEST, packageUrl: "http://github.com/x/y.zip" },
-      { store, origins, fetch },
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.ok ? "" : result.stage).toBe("address");
-    expect(await origins.read()).toEqual({});
-  });
-
-  it("records no origin when the download was refused", async () => {
-    const { fetch } = recorded(() => new Response("no", { status: 404 }));
-
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch,
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.ok ? "" : result.stage).toBe("download");
-    expect(await origins.read()).toEqual({});
-    expect(await store.list()).toEqual([]);
   });
 
   it("replaces the copy the origin names", async () => {
@@ -376,11 +305,11 @@ describe("installCatalogueItem", () => {
       installedAt: new Date(0).toISOString(),
     });
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room 2")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room 2"),
+      { store, origins },
+    );
 
     expect(result).toEqual({ ok: true, id: "aurora-copy" });
     expect((await store.list()).map((entry) => entry.id)).toEqual([
@@ -415,11 +344,11 @@ describe("installCatalogueItem", () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
     try {
-      const result = await installCatalogueItem(REQUEST, {
-        store: failing,
-        origins,
-        fetch: serving(packageOf("living-room", "Living Room 2")),
-      });
+      const result = await installThemeBytes(
+        REQUEST,
+        packageOf("living-room", "Living Room 2"),
+        { store: failing, origins },
+      );
 
       expect(result.ok ? "" : result.stage).toBe("package");
       // The person is shown the step; the platform's path stays in the log.
@@ -432,25 +361,19 @@ describe("installCatalogueItem", () => {
   });
 
   it("bumps the origin's version", async () => {
-    await installCatalogueItem(
+    await installThemeBytes(
       { ...REQUEST, version: "1.2.0" },
-      {
-        store,
-        origins,
-        fetch: serving(packageOf("living-room", "Living Room")),
-      },
+      packageOf("living-room", "Living Room"),
+      { store, origins },
     );
     const before = (await origins.read())["dashboard-theme:living-room"];
 
     // Distinct instants, so a second write of the first one is caught.
     await new Promise((resolve) => setTimeout(resolve, 5));
-    await installCatalogueItem(
+    await installThemeBytes(
       { ...REQUEST, version: "1.3.0" },
-      {
-        store,
-        origins,
-        fetch: serving(packageOf("living-room", "Living Room")),
-      },
+      packageOf("living-room", "Living Room"),
+      { store, origins },
     );
 
     const all = await origins.read();
@@ -467,11 +390,11 @@ describe("installCatalogueItem", () => {
       expectFree: true,
     });
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins },
+    );
 
     expect(result).toEqual({ ok: true, id: "living-room-2" });
     expect((await store.list()).map((entry) => entry.id)).toEqual([
@@ -488,11 +411,11 @@ describe("installCatalogueItem", () => {
       installedAt: new Date(0).toISOString(),
     });
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins },
+    );
 
     // The import path's id, not the deleted copy's: an origin alone is not
     // proof a theme is there to replace.
@@ -517,11 +440,11 @@ describe("installCatalogueItem", () => {
       installedAt: new Date(0).toISOString(),
     });
 
-    const result = await installCatalogueItem(REQUEST, {
-      store,
-      origins,
-      fetch: serving(packageOf("living-room", "Living Room")),
-    });
+    const result = await installThemeBytes(
+      REQUEST,
+      packageOf("living-room", "Living Room"),
+      { store, origins },
+    );
 
     // Repaired under the origin's id, not minted beside it: the broken folder
     // was still this item's copy.
@@ -538,38 +461,17 @@ describe("installCatalogueItem", () => {
   it("lands two items that resolve the same library id on distinct ids", async () => {
     // Different catalogue items, same package id — the shape in which the
     // import candidates are identical and neither item's queue entry covers the
-    // other. Both downloads finish together so both writes reach the free-id
-    // claim in the same instant, which is the race this pins.
-    let arrived = 0;
-    let releaseBoth!: () => void;
-    const bothArrived = new Promise<void>((resolve) => {
-      releaseBoth = resolve;
-    });
-    const fetcher: typeof fetch = async (input) => {
-      arrived += 1;
-      if (arrived === 2) releaseBoth();
-      await bothArrived;
-      return new Response(
-        new Uint8Array(packageOf("living-room", "Living Room")),
-      );
-    };
-
+    // other.
     const [first, second] = await Promise.all([
-      installCatalogueItem(
-        {
-          ...REQUEST,
-          catalogueId: "aurora",
-          packageUrl: cataloguePackageUrl("aurora", "1.2.0"),
-        },
-        { store, origins, fetch: fetcher },
+      installThemeBytes(
+        { ...REQUEST, catalogueId: "aurora" },
+        packageOf("living-room", "Living Room"),
+        { store, origins },
       ),
-      installCatalogueItem(
-        {
-          ...REQUEST,
-          catalogueId: "borealis",
-          packageUrl: cataloguePackageUrl("borealis", "1.2.0"),
-        },
-        { store, origins, fetch: fetcher },
+      installThemeBytes(
+        { ...REQUEST, catalogueId: "borealis" },
+        packageOf("living-room", "Living Room"),
+        { store, origins },
       ),
     ]);
 
@@ -592,21 +494,15 @@ describe("installCatalogueItem", () => {
 
   it("serialises two installs of one item", async () => {
     const [first, second] = await Promise.all([
-      installCatalogueItem(
+      installThemeBytes(
         { ...REQUEST, version: "1.2.0" },
-        {
-          store,
-          origins,
-          fetch: serving(packageOf("living-room", "Living Room")),
-        },
+        packageOf("living-room", "Living Room"),
+        { store, origins },
       ),
-      installCatalogueItem(
+      installThemeBytes(
         { ...REQUEST, version: "1.3.0" },
-        {
-          store,
-          origins,
-          fetch: serving(packageOf("living-room", "Living Room 2")),
-        },
+        packageOf("living-room", "Living Room 2"),
+        { store, origins },
       ),
     ]);
 

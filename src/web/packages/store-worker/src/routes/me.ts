@@ -317,11 +317,50 @@ async function publish(
   if (item.status !== "unpublished")
     return conflict(item.status, "unpublished");
 
+  // A collection is public only while every member it names is public: an
+  // include unpublished since the collection was last listed would otherwise
+  // return to the index and promise an install nobody can make. The stored
+  // package is re-read here, so finalize and publish apply one rule.
+  const collectionRefusal = await refuseCollectionRepublish(env, item);
+  if (collectionRefusal !== undefined) return collectionRefusal;
+
   const now = new Date().toISOString();
   if (!(await setStatus(env.DB, itemId, ["unpublished"], "published", now)))
     return conflict(await currentStatus(env, itemId, item), "unpublished");
 
   return Response.json({ ok: true, status: "published" });
+}
+
+/**
+ * The publish-time half of collection validation, or nothing when every
+ * include is still a published non-collection item. The same reader and the
+ * same published-id check finalize uses, over the bytes the version stored.
+ */
+async function refuseCollectionRepublish(
+  env: Env,
+  item: ItemRow,
+): Promise<Response | undefined> {
+  if (item.kind !== "collection") return undefined;
+
+  const version = await latestVersion(env.DB, item.id);
+  if (version === undefined) return notFound();
+  const object = await openObject(env.BUCKET, version.package_key);
+  if (object === undefined) return notFound();
+
+  const finalized = validateFinalizedPackage(
+    "collection",
+    new Uint8Array(await object.arrayBuffer()),
+  );
+  if (!finalized.ok) return badRequest(finalized.message);
+  if (finalized.finalized.collection === undefined) return undefined;
+
+  const includes = finalized.finalized.collection.includes;
+  const published = await publishedIdsOf(
+    env.DB,
+    includes.map((entry) => entry.id),
+  );
+  const refusal = validateCollectionIncludes(includes, published, item.id);
+  return refusal.ok ? undefined : badRequest(refusal.message);
 }
 
 /** A guarded write that changed no row raced another actor; name what won. */

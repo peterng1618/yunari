@@ -271,8 +271,8 @@ describe("entryOf members", () => {
 
   it("serves includes and no members for a collection", () => {
     const included = [
-      "11111111-2222-4ccc-8ddd-555555555555",
-      "99999999-8888-4777-8666-555555555555",
+      { id: "11111111-2222-4ccc-8ddd-555555555555", optional: false },
+      { id: "99999999-8888-4777-8666-555555555555", optional: true },
     ];
     const entry = madeEntry(
       itemRow({ kind: "collection" }),
@@ -281,13 +281,15 @@ describe("entryOf members", () => {
         metadata_json: JSON.stringify({
           name: "Starter Kit",
           description: "Hand-picked.",
-          includes: included.map((id) => ({ id, optional: false })),
+          includes: included,
         }),
       }),
       0,
       URL,
       THUMBNAIL,
     );
+    // The wire keeps the author's optional default, so a catalogue row and the
+    // package it was derived from agree about which members may be skipped.
     expect(entry).toMatchObject({
       kind: "collection",
       name: "Starter Kit",

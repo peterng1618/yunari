@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { CatalogueOrigin, StoreItemKind } from "@yunari/renderer-core";
@@ -45,6 +45,15 @@ describe("catalogue origins", () => {
 
   it("reads an absent file as no origins", async () => {
     expect(await store.read()).toEqual({});
+  });
+
+  it("throws a read that failed for a reason other than absence", async () => {
+    // A directory where the register belongs is a file this process cannot
+    // read as JSON. Reading it must not answer `{}`, which would claim nothing
+    // is installed: the route turns the throw into a 500 instead.
+    await mkdir(catalogueFile(dir), { recursive: true });
+
+    await expect(store.read()).rejects.toThrow();
   });
 
   it("reads a legacy theme-origins row as a dashboard theme", async () => {

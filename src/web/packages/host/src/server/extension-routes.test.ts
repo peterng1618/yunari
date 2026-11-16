@@ -317,6 +317,26 @@ describe("extension routes", () => {
     ).toEqual({ extensions: [] });
   });
 
+  it("forgets the plugin's origin when it is removed", async () => {
+    await call(handle, "POST", "/api/extensions/install", {
+      body: pluginBytes(),
+    });
+    await origins.write("plugin", "local/acme-sensors", {
+      kind: "plugin",
+      catalogueId: "8f14e45f-ceea-4d67-b1a2-000000000004",
+      version: "1.0.0",
+      installedAt: "2026-11-16T00:00:00.000Z",
+    });
+
+    const removed = await call(
+      handle,
+      "DELETE",
+      "/api/extensions/local/acme-sensors",
+    );
+    expect(removed.status).toBe(200);
+    expect(await origins.read()).toEqual({});
+  });
+
   it("joins a catalogue origin onto the plugin it names", async () => {
     await call(handle, "POST", "/api/extensions/install", {
       body: pluginBytes(),

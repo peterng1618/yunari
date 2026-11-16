@@ -68,7 +68,7 @@ export function catalogueIndexOf(
 
 /** One entry, or nothing when the header or the input cannot make one. */
 function entryOf(item: CatalogueItem): CatalogueEntry | undefined {
-  const file = parseCatalogueItemFile(item.item);
+  const file = parseCatalogueItemFile(item.item, item.id);
   if (!file.ok) return undefined;
 
   if (file.file.kind === DASHBOARD_THEME_KIND) {
@@ -158,7 +158,7 @@ export async function buildCatalogueIndexCommand(
         unknownKind = true;
         continue;
       }
-      const header = parseCatalogueItemFile(item);
+      const header = parseCatalogueItemFile(item, name);
       if (!header.ok || header.file.kind !== DASHBOARD_THEME_KIND) {
         // Another kind's package is not a theme: its facets come from the
         // authoring input, and the index parse below validates them.
@@ -278,8 +278,8 @@ async function readBytes(file: string): Promise<Uint8Array> {
 }
 
 /** Why the pure half dropped this item, resolved only for the items it dropped. */
-function refusalOf({ item, theme, facets }: CatalogueItem): string {
-  const file = parseCatalogueItemFile(item);
+function refusalOf({ id, item, theme, facets }: CatalogueItem): string {
+  const file = parseCatalogueItemFile(item, id);
   if (!file.ok) return file.reason;
 
   if (file.file.kind !== DASHBOARD_THEME_KIND) {
