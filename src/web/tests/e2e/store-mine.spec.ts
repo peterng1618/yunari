@@ -274,12 +274,18 @@ test("a refused unpublish states the store's sentence and leaves the row as it w
   const row = region.locator(`[data-yunari-submission="${ITEM_ID}"]`);
   await row.locator("[data-yunari-submission-action='unpublish']").click();
 
-  // The page's live region is the announcement a screen reader hears, and it
-  // carries the host's sentence verbatim.
+  // The row's own live region is the announcement a screen reader hears, and
+  // it carries the host's sentence verbatim. A refusal is the row's fact, so
+  // it is stated where the row is rather than in a page-level region.
+  const refusal = row.locator("[data-yunari-submission-refusal]");
   await expect(
-    region.locator("[data-yunari-submissions-announcement]"),
-    "the store's refusal is not what the live region says",
+    refusal,
+    "the store's refusal is not what the row announces",
   ).toHaveText(REFUSAL);
+  await expect(
+    refusal,
+    "the row's refusal is not the live region a screen reader hears",
+  ).toHaveAttribute("role", "status");
   await expect(
     row.locator("[data-yunari-submission-action='unpublish']"),
     "a refused change moved the item's state",

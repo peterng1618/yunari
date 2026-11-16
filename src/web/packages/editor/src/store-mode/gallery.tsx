@@ -326,9 +326,15 @@ function Cell(props: {
   /** **A catalogue theme this PC installed keeps the four theme commands.** Its
    *  library copy is the row the host's `/api/themes` routes act on, and
    *  `installedId` is how the join named it; without them the only reading left
-   *  would be the mark, and the copy could not be opened or removed. */
+   *  would be the mark, and the copy could not be opened or removed.
+   *
+   *  **Only a copy at the catalogue's version is installed.** An older copy
+   *  keeps the install reading instead, because the commands would hide the one
+   *  press that brings it up to the catalogue. */
   const themeCommands =
-    item.kind === "dashboard-theme" && item.installedId !== undefined;
+    item.kind === "dashboard-theme" &&
+    item.installedId !== undefined &&
+    installState === "installed";
   /** A reason names the member's own kind where the card draws one, so a
    *  widget's card does not say a theme command is unavailable. */
   const actionKind = member?.kind ?? item.kind;

@@ -1629,7 +1629,7 @@ test("the online half lists the catalogue, its kind badge and a thousands-separa
   await captureVisualReview(page, testInfo, "store-online-catalogue", region);
 });
 
-test("the online half draws Installed, Update and Install for the library's three cases", async ({
+test("the online half draws an installed theme's commands, and Update or Install for the other two", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1640,20 +1640,23 @@ test("the online half draws Installed, Update and Install for the library's thre
       `[data-yunari-store-cell='${id}'] [data-yunari-store-cell-install='${state}']`,
     );
 
-  // Held at the catalogue's own version: a mark, because there is nothing to do.
-  const installed = actionOf("cat-skyline", "installed");
+  // Held at the catalogue's own version: there is nothing to install, so the
+  // cell draws the four commands the join's `installedId` enables against the
+  // library copy — **the commands are the installed state**, and the install
+  // press is gone. A catalogue cell this PC never installed draws Install
+  // instead (`cat-ember` below), which is what makes this cell's reading a
+  // fact of the join rather than of the card's own choices.
+  const installed = region.locator("[data-yunari-store-cell='cat-skyline']");
   await expect(
-    installed,
-    "an item held at the same version is not marked Installed",
-  ).toBeVisible();
-  await expect(
-    installed,
-    "the Installed mark does not read Installed",
-  ).toHaveText("Installed");
-  expect(
-    await installed.evaluate((node) => node.tagName),
-    "Installed is drawn as a control rather than a mark",
-  ).toBe("SPAN");
+    installed.locator("[data-yunari-store-cell-install]"),
+    "an item held at the same version still offers an install press",
+  ).toHaveCount(0);
+  for (const action of ["assign", "open", "export", "delete"]) {
+    await expect(
+      installed.locator(`[data-yunari-store-cell-action='${action}']`),
+      `an item held at the same version does not draw its ${action} command`,
+    ).toBeEnabled();
+  }
 
   // Held at an older version: Update, live, because the press installs it.
   const update = actionOf("cat-tide", "update");
@@ -1681,7 +1684,7 @@ test("the online half draws Installed, Update and Install for the library's thre
   );
 });
 
-test("pressing Install on an online cell draws the item as Installed once the host answers ok", async ({
+test("pressing Install on an online cell draws the item's commands once the host answers ok", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1705,23 +1708,22 @@ test("pressing Install on an online cell draws the item as Installed once the ho
   await install.click();
 
   // **The re-list is the evidence**: the host answered `ok`, the surface read
-  // the library back, and the join drew what the host wrote. A word set on the
-  // press would still read Installed if the re-list never happened.
-  const installed = cell.locator(
-    "[data-yunari-store-cell-install='installed']",
-  );
+  // the library back, and the join drew what the host wrote. The four commands
+  // are drawn only for a catalogue row the joined library named as installed,
+  // so a word set on the press could not produce them if the re-list never
+  // happened.
   await expect(
-    installed,
-    "the cell the host installed is not drawn as Installed",
-  ).toBeVisible();
+    cell.locator("[data-yunari-store-cell-install]"),
+    "the cell the host installed still offers an install press",
+  ).toHaveCount(0);
   await expect(
-    installed,
-    "the installed cell does not read Installed",
-  ).toHaveText("Installed");
-  expect(
-    await installed.evaluate((node) => node.tagName),
-    "Installed is drawn as a control rather than a mark",
-  ).toBe("SPAN");
+    cell.locator("[data-yunari-store-cell-action='open']"),
+    "the cell the host installed does not draw the commands its copy allows",
+  ).toBeEnabled();
+  await expect(
+    cell.locator("[data-yunari-store-cell-action='delete']"),
+    "the installed cell does not draw the delete command its copy allows",
+  ).toBeEnabled();
 
   await captureVisualReview(
     page,
@@ -1731,7 +1733,7 @@ test("pressing Install on an online cell draws the item as Installed once the ho
   );
 });
 
-test("an item the library holds at an older version reads Update before the press and Installed after", async ({
+test("an item the library holds at an older version reads Update before the press and draws its commands after", async ({
   page,
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
@@ -1758,17 +1760,16 @@ test("an item the library holds at an older version reads Update before the pres
   await cell.hover();
   await update.click();
 
-  const installed = cell.locator(
-    "[data-yunari-store-cell-install='installed']",
-  );
+  // The re-listed copy is at the catalogue's version, so the join draws the
+  // installed commands rather than an Update press.
   await expect(
-    installed,
-    "the updated item is not drawn as Installed",
-  ).toBeVisible();
+    cell.locator("[data-yunari-store-cell-install='update']"),
+    "the updated item still offers the update press",
+  ).toHaveCount(0);
   await expect(
-    installed,
-    "the updated cell does not read Installed",
-  ).toHaveText("Installed");
+    cell.locator("[data-yunari-store-cell-action='open']"),
+    "the updated item does not draw the commands its copy now allows",
+  ).toBeEnabled();
 
   await captureVisualReview(
     page,

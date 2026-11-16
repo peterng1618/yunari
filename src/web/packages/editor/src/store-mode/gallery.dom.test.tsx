@@ -1658,6 +1658,74 @@ it("shows Installed, Update or Install from the origin version", async () => {
 });
 
 /**
+ * **Only a copy at the catalogue's version is installed.** The join's
+ * `installedId` lets an installed item draw its four commands in place of the
+ * install reading; an older copy keeps the reading, because the commands would
+ * hide the one press that brings it up to the catalogue.
+ */
+it("keeps Update on an older installed copy, and commands once it matches", async () => {
+  const container = await mount(
+    <Gallery
+      items={[
+        item({
+          installedId: "living-room-copy",
+          catalogue: catalogue({ installedVersion: "1.3.0" }),
+        }),
+      ]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  const older = cellOf(container, "living-room");
+  expect(
+    older.querySelector("[data-yunari-store-cell-action]"),
+    "an older copy draws its commands in place of the Update press",
+  ).toBeNull();
+  expect(
+    must(
+      older.querySelector<HTMLElement>(
+        '[data-yunari-store-cell-install="update"]',
+      ),
+      "an older copy's Update press",
+    ).tagName,
+    "an older copy's Update is not a live control",
+  ).toBe("BUTTON");
+
+  const currentContainer = await mount(
+    <Gallery
+      items={[
+        item({
+          installedId: "living-room-copy",
+          catalogue: catalogue({ installedVersion: "1.4.0" }),
+        }),
+      ]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  const current = cellOf(currentContainer, "living-room");
+  expect(
+    current.querySelector("[data-yunari-store-cell-install]"),
+    "a copy at the catalogue's version still draws an install reading",
+  ).toBeNull();
+  expect(
+    must(
+      current.querySelector<HTMLElement>(
+        "[data-yunari-store-cell-action='open']",
+      ),
+      "a copy at the catalogue's version draws no commands",
+    ).tagName,
+    "the installed copy's Open command is not drawn as a control",
+  ).toBe("BUTTON");
+});
+
+/**
  * **A collection counts the includes this PC already holds**, and its action
  * follows that count: partial reads *Update*, every include held reads
  * *Installed*, none held reads *Install*. The count is the origin register's
