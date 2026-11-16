@@ -2,13 +2,12 @@ import {
   type CatalogueEntry,
   type CatalogueRefusal,
   type CatalogueStatus,
-  DASHBOARD_THEME_KIND,
   isCatalogueStatus,
   parseCatalogueIndex,
   STORE_ITEM_KINDS,
   type StoreItemKind,
 } from "@yunari/renderer-core";
-import type { ItemSource, StoreItem } from "./local-source.js";
+import type { StoreItem } from "./local-source.js";
 import { catalogueItemOf } from "./online-source.js";
 
 /** The route the host proxies the author's own rows through. */
@@ -45,17 +44,23 @@ interface ItemState {
  * would report every other kind as `unknown-kind`, which is a failure the author
  * did not have and which hides the empty state.
  */
+/** One page's read of the author's own rows: the listing, and the entries the
+ *  read refused so the page can state what it left out. */
+export interface MineSource {
+  list(): Promise<readonly StoreItem[]>;
+  refused(): readonly CatalogueRefusal[];
+}
+
 export function mineThemeSource(options: {
   readonly kinds: readonly StoreItemKind[];
   readonly url?: string;
   readonly fetch?: typeof fetch;
-}): ItemSource {
+}): MineSource {
   const url = options.url ?? MINE_PATH;
   const kinds = options.kinds;
   let refused: readonly CatalogueRefusal[] = [];
 
   return {
-    kind: DASHBOARD_THEME_KIND,
     async list(): Promise<readonly StoreItem[]> {
       // Cleared before the read, so `refused()` always describes the most recent
       // attempt: a failed read answers none, never the previous read's rows.

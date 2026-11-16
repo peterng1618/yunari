@@ -30,7 +30,7 @@ import type { FacetRecord } from "@yunari/renderer-core";
 import { Canvas, type FabricObject, Rect, Textbox } from "fabric/es";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ColourPicker } from "./components/ui/colour-picker.js";
 import type { ModalSettle } from "./components/ui/modal-host.js";
 import { activePreviewLenses } from "./display-lens.js";
@@ -48,6 +48,7 @@ import { PublishControl } from "./editor-shell/publish-control.js";
 import { createShellLayout } from "./editor-shell/shell-layout.js";
 import type { PublishSurfaceStore } from "./editor-shell/shell-stores.js";
 import { ShortcutReference } from "./editor-shell/shortcut-reference.js";
+import { LibraryRegion } from "./library-mode/region.js";
 import { NewDocumentChooser } from "./new-document-chooser.js";
 import { STARTER_TEMPLATE } from "./new-fabric-theme.js";
 import { createSelectionInspector } from "./selection-inspector/index.js";
@@ -216,6 +217,120 @@ it("reads the shortcut sheet, the publish popover and the two dialogs", async ()
     destroy();
   }
 });
+
+/**
+ * The Library mode's listing, its toolbar and an item's own surface.
+ *
+ * The library surfaces replaced the store's theme-only grid, so the words they
+ * draw are read here: the toolbar's facet and sort names, the gallery's four
+ * cell actions, and the modal the name press opens. The listed theme's own
+ * name is data — the same carve-out a preset's name gets — so
+ * `isListingName` drops it and nothing else.
+ */
+it("reads the Library listing, its toolbar and an item's surface", async () => {
+  vi.stubGlobal("fetch", listingServing());
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      createElement(LibraryRegion, {
+        page: "dashboard-themes",
+        onPage: () => undefined,
+        state: "all",
+        onState: () => undefined,
+      }),
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(
+      host.querySelector("[data-yunari-store-cell]"),
+      "the Library listing drew no cell",
+    ).not.toBeNull(),
+  );
+
+  const owned = new Set(copy());
+  const region = host.querySelector("[data-yunari-library-region]");
+  if (region === null) throw new Error("the Library rendered no region");
+  expect(
+    host.querySelector("[data-yunari-library-toolbar]"),
+    "the listing drew no toolbar",
+  ).not.toBeNull();
+  const listingSaid = spokenIn(region);
+  expect(listingSaid).not.toEqual([]);
+  expect(
+    listingSaid.filter((text) => !owned.has(text) && !isListingName(text)),
+  ).toEqual([]);
+
+  await act(async () =>
+    (
+      host.querySelector(
+        "[data-yunari-store-cell-name-press]",
+      ) as HTMLButtonElement | null
+    )?.click(),
+  );
+  const modal = await vi.waitFor(() => {
+    const found = document.body.querySelector("[data-yunari-store-item]");
+    if (found === null) throw new Error("the item press opened no surface");
+    return found;
+  });
+  const modalSaid = spokenIn(modal);
+  expect(modalSaid).not.toEqual([]);
+  expect(
+    modalSaid.filter((text) => !owned.has(text) && !isListingName(text)),
+  ).toEqual([]);
+
+  await act(async () => root.unmount());
+  document.body.replaceChildren();
+  vi.unstubAllGlobals();
+});
+
+/** The listed theme's name, which a cell and the modal print as data. */
+const LISTING_NAME = "Mira's wall";
+
+/** The words a listing's own rows and cells say that are data, not copy. */
+function isListingName(text: string): boolean {
+  return text === LISTING_NAME;
+}
+
+/** A catalogue of one dashboard theme plus the host's empty listings, so the
+ *  Library's two halves both answer. */
+function listingServing(): typeof fetch {
+  const theme = {
+    id: "11111111-1111-4111-8111-111111111111",
+    kind: "dashboard-theme",
+    name: LISTING_NAME,
+    version: "1.0.0",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    downloads: 0,
+    favorites: 0,
+    packageUrl: "https://store.test/theme.zip",
+    thumbnail: "11111111-1111-4111-8111-111111111111/thumbnail.png",
+    members: [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "dashboard-theme",
+        name: LISTING_NAME,
+      },
+    ],
+    facets: FACETS,
+  };
+  const answer = (body: unknown): Response =>
+    new Response(JSON.stringify(body), { status: 200 });
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/index.json")) {
+      return answer({
+        generatedAt: "2026-10-21T00:00:00.000Z",
+        entries: [theme],
+      });
+    }
+    if (url.startsWith("/api/themes")) return answer({ themes: [] });
+    if (url.startsWith("/api/store/origins")) return answer({ origins: [] });
+    return new Response("", { status: 404 });
+  }) as unknown as typeof fetch;
+}
 
 /** One surface this walk reads, and the mount that puts it in the tree. */
 interface ReadSurface {

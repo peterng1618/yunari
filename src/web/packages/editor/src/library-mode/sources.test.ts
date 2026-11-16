@@ -110,8 +110,8 @@ describe("the catalogue's page source", () => {
       ]),
     });
 
-    const [theme] = await themes.list();
-    const [collection] = await collections.list();
+    const [theme] = (await themes.list()).rows;
+    const [collection] = (await collections.list()).rows;
 
     expect(theme?.members).toEqual([
       { id: "living-room", kind: "dashboard-theme", name: "Living room" },
@@ -135,7 +135,7 @@ describe("the catalogue's page source", () => {
       ]),
     });
 
-    const [item] = await source.list();
+    const [item] = (await source.list()).rows;
 
     expect(item?.members.map((member) => member.kind)).toEqual([
       "dashboard-theme",
@@ -187,12 +187,14 @@ describe("the catalogue's page source", () => {
       ]),
     });
 
-    expect((await widgets.list()).map((item) => item.id)).toEqual(["packed"]);
-    expect((await sensors.list()).map((item) => item.id)).toEqual([
+    expect((await widgets.list()).rows.map((item) => item.id)).toEqual([
+      "packed",
+    ]);
+    expect((await sensors.list()).rows.map((item) => item.id)).toEqual([
       "sensor-plugin",
       "data-plugin",
     ]);
-    expect((await collections.list()).map((item) => item.id)).toEqual([
+    expect((await collections.list()).rows.map((item) => item.id)).toEqual([
       "bundle",
     ]);
     expect(widgets.memberKind).toBe("widget");
@@ -288,23 +290,33 @@ describe("the library's page source", () => {
     const themes = await librarySourceFor(
       "dashboard-themes",
       clients({ themes: async () => [theme(origin("dashboard-theme"))] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const appThemes = await librarySourceFor(
       "app-themes",
       clients({ editorThemes: async () => [editorTheme] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const widgets = await librarySourceFor(
       "widgets",
       clients({ widgetPacks: async () => [pack] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const shapes = await librarySourceFor(
       "shapes",
       clients({ pathPresets: async () => [preset, userPreset] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const sensors = await librarySourceFor(
       "sensor-providers",
       clients({ extensions: async () => [sensorPlugin] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
 
     expect(themes[0]).toMatchObject({
       id: "living-room",
@@ -380,15 +392,21 @@ describe("the library's page source", () => {
     const widgets = await librarySourceFor(
       "widgets",
       clients({ widgetPacks: async () => [emptyPack] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const sensors = await librarySourceFor(
       "sensor-providers",
       clients({ extensions: async () => [assetPlugin] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
     const assets = await librarySourceFor(
       "asset-sources",
       clients({ extensions: async () => [assetPlugin] }),
-    ).list();
+    )
+      .list()
+      .then((read) => read.rows);
 
     expect(widgets).toEqual([]);
     expect(sensors).toEqual([]);

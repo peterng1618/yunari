@@ -1,18 +1,17 @@
 import { expect, type Page, test } from "@playwright/test";
 import { CATALOGUE_ORIGIN } from "@yunari/renderer-core";
 import { uiCopy } from "../../packages/editor/src/ui-copy.js";
-import { captureVisualReview } from "./editor-canvas.js";
 import { isDesktopSurface } from "./surface.js";
 
 /**
- * The author's own store rows, proved in a built bundle: Mine, the state word,
- * and the two commands the item's modal offers.
+ * The author's own store rows, proved in a built bundle: My submissions, the
+ * state word, and the two commands each row offers.
  *
  * **The editor preview serves no host API**, so every store answer this spec
  * reads is routed here: the session probe, the author's own listing, and the two
- * command POSTs. The routed listing is the state — the surface keeps no copy of
- * its own, so a command changes the answer and the re-read redraws it
- * (`mine-listing.ts`). What these routes cannot prove is the Worker's own
+ * command POSTs. The routed listing is the state — the page keeps no copy of its
+ * own, so a command changes the answer and the re-read redraws it
+ * (`collection-builder.tsx`). What these routes cannot prove is the Worker's own
  * behaviour; that belongs to the deployed store.
  */
 
@@ -70,15 +69,14 @@ interface StoreHost {
 }
 
 /**
- * The host's answers for the surface's four routes. The command route is the
- * one a case can refuse, so the refusal case answers 403 in the host's words
- * and leaves the listing where it was.
+ * The host's answers for the surface's routes. The command route is the one a
+ * case can refuse, so the refusal case answers 403 in the host's words and
+ * leaves the listing where it was.
  */
 async function routeStoreHost(
   page: Page,
   options: {
     readonly status: Status;
-    /** The host's own sentence for a refused command, when the case is one. */
     readonly refusal?: string;
   },
 ): Promise<StoreHost> {
@@ -110,12 +108,8 @@ async function routeStoreHost(
           json: { ok: false, message: options.refusal },
         });
       }
-      // The Worker's answer names the new state, and the surface re-reads the
-      // listing rather than trusting it — so the routed listing moves with it.
       host.status = command[2] === "unpublish" ? "unpublished" : "published";
-      return route.fulfill({
-        json: { ok: true, status: host.status },
-      });
+      return route.fulfill({ json: { ok: true, status: host.status } });
     }
 
     return route.fulfill({ status: 404, body: "" });
@@ -124,8 +118,8 @@ async function routeStoreHost(
   return host;
 }
 
-/** The editor's boot, the Library mode and the author's own half, listed. */
-async function openMine(page: Page) {
+/** The editor's boot, the Library mode, and the My submissions page. */
+async function openSubmissions(page: Page) {
   await page.goto(EDITOR);
   await expect(
     page.locator("#yunari-fabric-editor canvas.upper-canvas"),
@@ -137,24 +131,18 @@ async function openMine(page: Page) {
 
   const region = page.locator("[data-yunari-mode-region='library']");
   await expect(region, "the Library renders no region").toBeVisible();
-  const mine = region.locator("[data-yunari-store-mine]");
+  await region.locator("[data-yunari-library-nav-item='submissions']").click();
   await expect(
-    mine,
-    "the routed session did not offer the Mine toggle",
+    region.locator("[data-yunari-submissions-page]"),
+    "My submissions is not the page showing",
   ).toBeVisible();
-  await mine.click();
-  await expect(
-    mine,
-    "Mine is not the pressed toggle after the press",
-  ).toHaveAttribute("aria-pressed", "true");
   return region;
 }
 
 test.beforeEach(async ({ page }) => {
-  // The region reads the public catalogue when it mounts, Local half included,
-  // and this spec claims nothing about it: a 404 with the origin's own CORS
-  // header keeps the read answered rather than rejected and the network out of
-  // the case.
+  // Every page reads the catalogue's index, and this spec claims nothing about
+  // it: a 404 with the origin's own CORS header keeps the read answered rather
+  // than rejected and the network out of the case.
   await page.route("**/index.json", (route) =>
     route.fulfill({
       status: 404,
@@ -166,11 +154,9 @@ test.beforeEach(async ({ page }) => {
     (url) => url.pathname.startsWith("/api/themes"),
     (route) => route.fulfill({ json: { themes: [] } }),
   );
-  // The entry's picture is a path on the store's own origin, and this spec
-  // claims nothing about it: a 1×1 pixel at the panel ground keeps the stage an
-  // empty box rather than the browser's broken-image mark. The host comes from
-  // `CATALOGUE_ORIGIN` rather than a copy of it, so a moved origin cannot leave
-  // these rows drawing broken marks while the spec passes.
+  // The submission's picture is a path on the store's own origin, and this spec
+  // claims nothing about it: a 1×1 pixel keeps the row an empty box rather than
+  // the browser's broken-image mark.
   const storeHostname = new URL(CATALOGUE_ORIGIN).hostname;
   await page.route(
     (url) => url.hostname === storeHostname && url.pathname.endsWith(".png"),
@@ -179,76 +165,65 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test("Mine lists an unpublished item", async ({ page }, testInfo) => {
+test("My submissions lists an unpublished item", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await routeStoreHost(page, { status: "unpublished" });
 
-  const region = await openMine(page);
-  const cell = region.locator(`[data-yunari-store-cell="${ITEM_ID}"]`);
-  await expect(cell, "Mine does not list the author's own row").toBeVisible();
+  const region = await openSubmissions(page);
+  const row = region.locator(`[data-yunari-submission="${ITEM_ID}"]`);
   await expect(
-    cell.locator("[data-yunari-store-cell-name]"),
-    "the Mine row does not draw the item's own name",
-  ).toHaveText(ITEM_NAME);
+    row,
+    "My submissions does not list the author's own row",
+  ).toBeVisible();
+  await expect(row, "the row does not draw the item's own name").toContainText(
+    ITEM_NAME,
+  );
 
   // The literal, not `uiCopy.store.status.unpublished`: the badge's whole value
   // is that a renamed word fails here.
-  const badge = cell.locator("[data-yunari-store-status]");
+  const badge = row.locator("[data-yunari-store-status]");
   await expect(
     badge,
-    "the Mine row does not draw the state its answer carries",
+    "the row does not draw the state its answer carries",
   ).toHaveText("Unpublished");
   await expect(badge).toHaveAttribute(
     "data-yunari-store-status",
     "unpublished",
   );
-
-  await captureVisualReview(page, testInfo, "store-mine-listing", region);
+  await expect(
+    row.locator("[data-yunari-submission-action='republish']"),
+    "an unpublished row does not offer Republish",
+  ).toBeVisible();
 });
 
-test("Unpublish action in the item modal", async ({ page }, testInfo) => {
+test("Unpublish moves the row to Unpublished once the host answers", async ({
+  page,
+}, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   const host = await routeStoreHost(page, { status: "published" });
 
-  const region = await openMine(page);
-  await region
-    .locator(
-      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-cell-surface]`,
-    )
-    .click();
-
-  const modal = page.locator("[data-yunari-store-item]");
-  await expect(modal, "the cell did not open the item").toBeVisible();
-  await expect(
-    modal.locator("[data-yunari-store-status]"),
-    "a published row drew a state word the public listing already gives it",
-  ).toHaveCount(0);
-
-  const unpublish = modal.getByRole("button", {
-    name: "Unpublish",
-    exact: true,
-  });
+  const region = await openSubmissions(page);
+  const row = region.locator(`[data-yunari-submission="${ITEM_ID}"]`);
+  const unpublish = row.locator("[data-yunari-submission-action='unpublish']");
   await expect(
     unpublish,
-    "the modal does not offer Unpublish for a published item",
+    "a published row does not offer Unpublish",
   ).toBeVisible();
-
-  await captureVisualReview(page, testInfo, "store-mine-unpublish", modal);
-
   await unpublish.click();
-  // The change is the listing's: the routed answer moved it and the surface
+
+  // The change is the listing's: the routed answer moved it and the page
   // re-read it, so the badge and the offered command both follow.
   await expect(
-    modal.locator("[data-yunari-store-status]"),
-    "the redrawn modal does not draw the state the re-read answered",
+    row.locator("[data-yunari-store-status]"),
+    "the redrawn row does not draw the state the re-read answered",
   ).toHaveText("Unpublished");
   await expect(
-    modal.getByRole("button", { name: "Republish", exact: true }),
-    "the redrawn modal does not offer the command its new state allows",
+    row.locator("[data-yunari-submission-action='republish']"),
+    "the redrawn row does not offer the command its new state allows",
   ).toBeVisible();
   await expect(
-    modal.getByRole("button", { name: "Unpublish", exact: true }),
-    "the redrawn modal still offers the command it just ran",
+    row.locator("[data-yunari-submission-action='unpublish']"),
+    "the redrawn row still offers the command it just ran",
   ).toHaveCount(0);
   expect(
     host.reads(),
@@ -256,70 +231,27 @@ test("Unpublish action in the item modal", async ({ page }, testInfo) => {
   ).toBe(2);
 });
 
-test("an outside press closes the modal instead of reaching the gallery", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-  await routeStoreHost(page, { status: "published" });
-
-  const region = await openMine(page);
-  await region
-    .locator(
-      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-cell-surface]`,
-    )
-    .click();
-
-  const modal = page.locator("[data-yunari-store-item]");
-  await expect(modal, "the cell did not open the item").toBeVisible();
-
-  // The box is 960 wide in a 1280 viewport, so this point is the scrim beside
-  // it rather than the popup. If the press reaches the gallery instead, the
-  // cell beneath opens the modal again and the count stays at one.
-  await page.mouse.click(40, 360);
-
-  await expect(
-    modal,
-    "an outside press neither closed the modal nor was swallowed by it",
-  ).toHaveCount(0);
-});
-
-test("Republish action restores the item", async ({ page }, testInfo) => {
+test("Republish restores the item", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   const host = await routeStoreHost(page, { status: "unpublished" });
 
-  const region = await openMine(page);
-  await region
-    .locator(
-      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-cell-surface]`,
-    )
-    .click();
-
-  const modal = page.locator("[data-yunari-store-item]");
-  await expect(modal, "the cell did not open the item").toBeVisible();
+  const region = await openSubmissions(page);
+  const row = region.locator(`[data-yunari-submission="${ITEM_ID}"]`);
   await expect(
-    modal.locator("[data-yunari-store-status]"),
+    row.locator("[data-yunari-store-status]"),
     "an unpublished row does not draw its state",
   ).toHaveText("Unpublished");
 
-  const republish = modal.getByRole("button", {
-    name: "Republish",
-    exact: true,
-  });
-  await expect(
-    republish,
-    "the modal does not offer Republish for an unpublished item",
-  ).toBeVisible();
+  await row.locator("[data-yunari-submission-action='republish']").click();
 
-  await captureVisualReview(page, testInfo, "store-mine-republish", modal);
-
-  await republish.click();
+  // A published row carries no badge word: the public surface already shows it.
   await expect(
-    modal.locator("[data-yunari-store-status]"),
+    row.locator("[data-yunari-store-status]"),
     "the republished row still draws a state word",
   ).toHaveCount(0);
   await expect(
-    modal.getByRole("button", { name: "Unpublish", exact: true }),
-    "the republished modal does not offer the command its state allows",
+    row.locator("[data-yunari-submission-action='unpublish']"),
+    "the republished row does not offer the command its state allows",
   ).toBeVisible();
   expect(
     host.reads(),
@@ -336,40 +268,23 @@ test("a refused unpublish states the store's sentence and leaves the row as it w
     refusal: REFUSAL,
   });
 
-  const region = await openMine(page);
-  await region
-    .locator(
-      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-cell-surface]`,
-    )
-    .click();
+  const region = await openSubmissions(page);
+  const row = region.locator(`[data-yunari-submission="${ITEM_ID}"]`);
+  await row.locator("[data-yunari-submission-action='unpublish']").click();
 
-  const modal = page.locator("[data-yunari-store-item]");
-  await expect(modal).toBeVisible();
-  await modal.getByRole("button", { name: "Unpublish", exact: true }).click();
-
-  // The region's one live region is the surface's announcement: the visible
-  // sentence is the cell's and the modal's, and this is what a screen reader
-  // hears. Hidden, so the assertion reads text rather than visibility.
+  // The page's live region is the announcement a screen reader hears, and it
+  // carries the host's sentence verbatim.
   await expect(
-    region.locator("[data-yunari-store-install-announcement]"),
+    region.locator("[data-yunari-submissions-announcement]"),
     "the store's refusal is not what the live region says",
   ).toHaveText(REFUSAL);
   await expect(
-    modal.getByRole("button", { name: "Unpublish", exact: true }),
+    row.locator("[data-yunari-submission-action='unpublish']"),
     "a refused change moved the item's state",
   ).toBeVisible();
   await expect(
-    modal.locator("[data-yunari-store-status]"),
+    row.locator("[data-yunari-store-status]"),
     "a refused change invented a state word",
-  ).toHaveCount(0);
-  // **The row behind the modal is the listing's too.** A refusal changes
-  // nothing, so the cell still carries no state word and the listing was never
-  // re-read: a re-read here would be drawing an answer the refusal did not make.
-  await expect(
-    region.locator(
-      `[data-yunari-store-cell="${ITEM_ID}"] [data-yunari-store-status]`,
-    ),
-    "a refused change moved the cell behind the modal",
   ).toHaveCount(0);
   expect(
     host.reads(),

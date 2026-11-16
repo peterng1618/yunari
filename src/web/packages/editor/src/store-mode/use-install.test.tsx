@@ -116,7 +116,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function source(list: () => Promise<readonly StoreItem[]>): ItemSource {
-  return { kind: "collection", list, refused: () => [] };
+  return { kind: "collection", list };
 }
 
 interface HarnessOptions {

@@ -43,8 +43,8 @@ const HEADER_STRIP_PX = 42;
 /**
  * **No case in this spec may reach the catalogue's public URL.**
  *
- * A catalogue page starts its online read when it mounts
- * (`online-listing.ts`), and the installed half is read beside it, so every case
+ * A page starts its online read when it mounts
+ * (`library-mode/sources.ts`), and the installed half is read beside it, so every case
  * that opens the Library mode would otherwise ask `yunari-store.workers.dev`
  * for a catalogue that does not exist until phase E. The answer would be
  * whatever the network says that day, not what the case is measuring.

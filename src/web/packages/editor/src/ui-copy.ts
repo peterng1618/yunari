@@ -13,6 +13,7 @@ import {
   type ColourMode,
   MEMBER_KINDS,
   type Orientation,
+  type SemanticFamily,
 } from "@yunari/renderer-core";
 import { BUILTIN_PATH_PRESETS, type VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
@@ -1237,6 +1238,15 @@ export const uiCopy = {
       pendingReview: "Waiting for the owner's review.",
       removedPermanent:
         "The owner removed this item; it cannot be republished.",
+      /** The fallback for a non-2xx the host answered with no sentence of its
+       *  own. A refusal is the Worker's words where they exist, so this is
+       *  drawn only where they do not (`collection-builder.tsx`). */
+      changeRefused: (status: number): string =>
+        `The store refused the change (${status}).`,
+      /** The store accepted the command but the author's rows could not be read
+       *  back: the change landed, so silence would leave a stale word on screen. */
+      unrefreshed:
+        "The change was saved, but your items could not be refreshed.",
     },
     /** The author's own two commands, drawn in the item's modal only: they act
      *  on the author's store row, where the cell's four actions act on the
@@ -1244,6 +1254,62 @@ export const uiCopy = {
     actions: {
       unpublish: "Unpublish",
       republish: "Republish",
+    },
+    /** The five facets, in the order the listing's toolbar draws them. The
+     *  values each offers are derived from the rows, so the only words here are
+     *  the ones a value cannot carry itself. */
+    facets: {
+      label: "Filter listings",
+      author: "Author",
+      colourMode: "Color mode",
+      sensors: "Sensors",
+      shape: "Shape",
+      style: "Style",
+      /** The Sensors facet's headings: one per family the vocabulary files a
+       *  semantic key under, so a person choosing values sees them grouped the
+       *  way `describeSemanticKey` groups them rather than in one flat list.
+       *
+       *  Typed from `SemanticFamily`, so a family added to the vocabulary
+       *  without a word fails to compile here rather than printing an identifier
+       *  at a person. A key this build does not know has no family and is drawn
+       *  under no heading at all, which is the vocabulary's own answer. */
+      sensorFamilies: {
+        cpu: "CPU",
+        ram: "RAM",
+        gpu: "GPU",
+        vram: "VRAM",
+        disk: "Disk",
+        network: "Network",
+        time: "Time",
+        date: "Date",
+      } as const satisfies Record<SemanticFamily, string>,
+      /** The Shape facet's three headings, in the surface's own order: the
+       *  orientation words, the aspect buckets and the exact pixel sizes. */
+      shapeGroups: {
+        orientation: "Orientation",
+        aspect: "Aspect ratio",
+        size: "Pixel size",
+      },
+      /** What the Shape popover says above its three groups, because choosing
+       *  in two of them is not an "either": a listing must match every group it
+       *  is asked about, which is R115's rule and the reason the groups are
+       *  labelled at all. */
+      shapeHint: "A listing must match every group.",
+      /** A value facet's search field. One name for all four: the popover they
+       *  sit in is already named by the facet, so a sentence repeating it would
+       *  print the facet's name twice to a screen reader. */
+      search: "Search values",
+      searchPlaceholder: "Search values",
+      /** A query that matches no value, where the facet does have values. */
+      noSearchMatches: "No value matches that search.",
+      /** A facet whose values the listing does not carry; the surface says so
+       *  rather than drawing a popover that looks like a failed load. */
+      empty: "No listing declares a value for this filter.",
+      /** The colour facet's own empty sentence: a listing with a picture behind
+       *  the board has no background colour for the record to classify, which
+       *  is why it offers neither mode. */
+      colourModeEmpty:
+        "No listing declares a background color, so this filter has no values.",
     },
     /** The facet values that are words rather than data: the two colour modes a
      *  person can ask for, the three orientations, and the aspect bucket that is
@@ -1307,6 +1373,13 @@ export const uiCopy = {
       favorites: (count: number): string =>
         count === 1 ? "favorite" : "favorites",
     },
+    /** One line per refusal from the catalogue read, **naming the identifier the
+     *  catalogue used**: a kind this build does not ship has no display word, and
+     *  inventing one would be a word for something nothing declared. An entry
+     *  that declared no kind at all is named by nothing, so the sentence says
+     *  where it was rather than what it claimed. */
+    catalogueRefused: (kind: string | undefined, count: number): string =>
+      `${count} ${count === 1 ? "entry" : "entries"} ${kind === undefined ? "in the store" : `of kind ${kind}`} could not be read.`,
     /** The online half's install, whose sentences the client composes where the
      *  host's own words cannot reach: a library item has no package (the
      *  controls never draw for one, so this is a guard's answer), a refusal with
@@ -1625,6 +1698,37 @@ export const uiCopy = {
     },
     /** The failure's one way forward: read the same listing again. */
     retry: "Try again",
+    /** A removal the host refused, in the host's own words where it gave
+     *  them: the theme is still in the library, so this is a PC that could not
+     *  move one to its recycle bin rather than a lost document. */
+    deleteFailed: (reason: string): string =>
+      `Could not delete the theme: ${reason}`,
+    /** A client that cannot delete is offered no deletion; the cell still
+     *  reports the press rather than failing at the moment it is made. */
+    deleteUnavailable: "This host cannot delete themes.",
+    /** The confirmation a removal asks for: the host's trash is recoverable,
+     *  and the sentence is how the author knows where the theme went. */
+    deleteConfirm: {
+      title: "Delete this theme?",
+      note: "The theme will be moved to the Recycle Bin, where you can restore it.",
+      cancel: "Cancel",
+      confirm: "Delete",
+    },
+    /** An export that could not be read back or written, in the failure's own
+     *  words: nothing was downloaded, so the sentence is the whole outcome. */
+    exportFailed: (reason: string): string =>
+      `Could not export the theme package: ${reason}`,
+    /** The listing's one sort well. The keys are the facts either half can
+     *  carry: a name and an updated instant from the host, and the catalogue's
+     *  published instant and counts where the row has them. */
+    sort: {
+      label: "Sort listings",
+      name: "Name",
+      updated: "Updated",
+      created: "Created",
+      downloads: "Downloads",
+      favorites: "Favorites",
+    },
     /** One cell of either gallery. The actions are keyed by `CellAction`, so an
      *  action added to the cell without a word for it fails to compile rather
      *  than drawing an icon-only button nobody can name.
@@ -1703,6 +1807,18 @@ export const uiCopy = {
        *  a bare "done" (`assign-display.tsx`). */
       assigned: (where: string): string => `Assigned to ${where}`,
     },
+    /** The grid's density slider. Its four levels are named rather than
+     *  numeric: the count is derived from the pane's width, so a number would
+     *  move on resize while the choice stayed still. */
+    density: {
+      label: "Density",
+      levels: {
+        compact: "Compact",
+        comfortable: "Comfortable",
+        roomy: "Roomy",
+        spacious: "Spacious",
+      },
+    },
   },
   /**
    * The library's own words: the chooser dialog and the Library mode.
@@ -1770,6 +1886,8 @@ export const uiCopy = {
       heading: "Your submissions",
       empty: NO_SUBMISSIONS,
       loading: "Reading your submissions…",
+      /** One row's command, named with the item it acts on. */
+      command: (action: string, name: string): string => `${action}: ${name}`,
       /** A row's kind, where the store has a word for it. An unknown kind
        *  prints its identifier, the rule every listing surface follows. */
       kind: (kind: string): string =>

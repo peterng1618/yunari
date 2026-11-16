@@ -88,31 +88,26 @@ it("words the local origin badge the way the surface does", () => {
 });
 
 /**
- * **The retired store surface's words are gone with it.** The Library's state
- * filter is the one choice over what a page lists, and its pages draw the
- * gallery rather than the store region's own header row. A key surviving in the
- * table is the retired surface coming back through a later reader of it.
+ * **The retired store surface's words are gone with it**, and the ones the
+ * Library's own listing needs are the listing's: the toolbar's facets, sort and
+ * density, the catalogue's refusals, and the three stored-theme commands.
  */
 it("no longer words the retired store surface", () => {
-  for (const key of [
-    "halves",
-    "mine",
-    "search",
-    "facets",
-    "sort",
-    "density",
-    "empty",
-    "deleteFailed",
-    "deleteUnavailable",
-    "deleteConfirm",
-    "exportFailed",
-  ]) {
+  for (const key of ["halves", "mine", "search", "empty"]) {
     expect(
       uiCopy.store,
       `retired store key "${key}" is back`,
     ).not.toHaveProperty(key);
   }
   expect(uiCopy.store.cell).not.toHaveProperty("kinds");
+  // The listing's own words, restored with its toolbar and its actions.
+  expect(uiCopy.store.facets.label).toBeTypeOf("string");
+  expect(uiCopy.store.sort.name).toBeTypeOf("string");
+  expect(uiCopy.store.density.label).toBeTypeOf("string");
+  expect(uiCopy.store.catalogueRefused("future-thing", 2)).toContain("2");
+  expect(uiCopy.store.deleteConfirm.confirm).toBeTypeOf("string");
+  expect(uiCopy.store.deleteUnavailable).toBeTypeOf("string");
+  expect(uiCopy.store.exportFailed("why")).toContain("why");
 });
 
 it("names every member kind, and a kind this build does not ship prints itself", () => {

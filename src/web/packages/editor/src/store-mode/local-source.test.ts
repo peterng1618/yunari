@@ -10,12 +10,26 @@ import type {
   ThemeLibraryEntry,
 } from "../theme-library-client.js";
 import {
-  localThemeSource,
+  libraryThemeItemOf,
   matchesFacets,
   matchesQuery,
   type StoreItem,
   settledTags,
 } from "./local-source.js";
+
+/** A list of this PC's themes, read the way the Library page reads it: the
+ *  host's listing mapped to the items the gallery draws. */
+function localThemeSource(client: ThemeLibraryClient): {
+  readonly kind: string;
+  list(): Promise<readonly StoreItem[]>;
+} {
+  return {
+    kind: DASHBOARD_THEME_KIND,
+    async list(): Promise<readonly StoreItem[]> {
+      return (await client.list()).map(libraryThemeItemOf);
+    },
+  };
+}
 
 /**
  * The local half's item source: what one item is, and what narrows the list.

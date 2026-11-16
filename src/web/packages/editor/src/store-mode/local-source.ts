@@ -1,6 +1,5 @@
 import {
   type CatalogueOrigin,
-  type CatalogueRefusal,
   type CatalogueStatus,
   DASHBOARD_THEME_KIND,
   type FacetRecord,
@@ -9,19 +8,14 @@ import {
   type Orientation,
   type ThemeRemix,
 } from "@yunari/renderer-core";
-import type {
-  ThemeLibraryClient,
-  ThemeLibraryEntry,
-} from "../theme-library-client.js";
+import type { ThemeLibraryEntry } from "../theme-library-client.js";
 import { THEME_TAG_SEED } from "../theme-tag-seed.js";
 
 /**
  * The local half's items, behind the one hop that makes a second kind cheap.
  *
- * The gallery reads `ItemSource` and never `ThemeLibraryClient` or the host's
- * store, so a second kind is a second source rather than a rewrite of this tab.
- * `ThemeLibraryClient`
- * gains nothing here: the source wraps it.
+ * A surface reads a source's `list()` and never the host's client, so a second
+ * kind is a second reader rather than a rewrite of this tab.
  */
 
 /** One item the gallery draws, whichever kind it is.
@@ -111,12 +105,7 @@ export interface CatalogueFacts {
 export interface ItemSource {
   readonly kind: string;
   list(): Promise<readonly StoreItem[]>;
-  /** What the last `list()` skipped, so a caller reads one shape whether it
-   *  holds the library or the catalogue. The library has no wire entries to
-   *  refuse and answers none. */
-  refused(): readonly CatalogueRefusal[];
 }
-
 /**
  * The commands a card and the item's own surface can offer.
  *
@@ -176,25 +165,6 @@ export function libraryThemeItemOf(entry: ThemeLibraryEntry): StoreItem {
     origin: entry.origin,
     catalogue: undefined,
     facets: entry.facets,
-  };
-}
-
-/**
- * The host's own library as an `ItemSource`.
- *
- * **One listing, and no second read.** Everything a cell needs is on the entry
- * the host derived, so `list()` maps what it is handed and opens nothing.
- */
-export function localThemeSource(client: ThemeLibraryClient): ItemSource {
-  return {
-    kind: DASHBOARD_THEME_KIND,
-    async list(): Promise<readonly StoreItem[]> {
-      const entries = await client.list();
-      return entries.map(libraryThemeItemOf);
-    },
-    refused(): readonly CatalogueRefusal[] {
-      return [];
-    },
   };
 }
 

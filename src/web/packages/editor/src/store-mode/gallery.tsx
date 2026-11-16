@@ -128,9 +128,8 @@ export function Gallery(props: {
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
   /** The pack cards this surface has open. Absent where the surface cannot
-   *  open one — the store halves mount this grid without an expand handler —
-   *  which draws no expand control, and keeps the pack card's own install
-   *  because its member cards are unreachable. */
+   *  open one, which draws no expand control and keeps the pack card's own
+   *  install because its member cards are unreachable. */
   readonly expanded?: ReadonlySet<string> | undefined;
   /** Reports one pack card's press; the surface flips the key. */
   readonly onExpand?: ((key: string) => void) | undefined;

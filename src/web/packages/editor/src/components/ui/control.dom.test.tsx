@@ -144,6 +144,14 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "submission form fields: Enter must not publish and Escape must not discard, so the draft/commit decision does not apply",
   ],
   [
+    "library-mode/facet-row.tsx",
+    "the facet popover's search field filters values already read; nothing is authored to commit or cancel",
+  ],
+  [
+    "library-mode/density-slider.tsx",
+    "a range input: a drag is the value, with no draft to compose or commit",
+  ],
+  [
     "asset-finder/finder-controls.tsx",
     "the search field is a filter that re-runs on a debounce: nothing is authored to commit or cancel",
   ],

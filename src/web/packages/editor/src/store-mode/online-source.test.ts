@@ -5,7 +5,34 @@ import {
   DASHBOARD_THEME_KIND,
 } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
-import { onlineThemeSource } from "./online-source.js";
+import type { StoreItem } from "./local-source.js";
+import {
+  type CatalogueReadOptions,
+  catalogueItemOf,
+  readCatalogueListing,
+} from "./online-source.js";
+
+/** The catalogue's listing as one page reads it: the rows it can draw and the
+ *  entries the read refused. */
+function onlineThemeSource(options: CatalogueReadOptions = {}): {
+  readonly kind: string;
+  list(): Promise<readonly StoreItem[]>;
+  refused(): readonly import("@yunari/renderer-core").CatalogueRefusal[];
+} {
+  let refused: readonly import("@yunari/renderer-core").CatalogueRefusal[] = [];
+  return {
+    kind: DASHBOARD_THEME_KIND,
+    async list(): Promise<readonly StoreItem[]> {
+      refused = [];
+      const parsed = await readCatalogueListing(options, [
+        DASHBOARD_THEME_KIND,
+      ]);
+      refused = parsed.refused;
+      return parsed.entries.map(catalogueItemOf);
+    },
+    refused: () => refused,
+  };
+}
 
 /**
  * The catalogue's own listing, as one static document.

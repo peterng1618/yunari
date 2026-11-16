@@ -1541,7 +1541,7 @@ it("expands a pack into its member cards and collapses it again", async () => {
  *  the hook's rather than a fixture's. */
 function InstallingGallery(): React.JSX.Element {
   const source = useMemo<ItemSource>(
-    () => ({ kind: "widget-pack", list: async () => [], refused: () => [] }),
+    () => ({ kind: "widget-pack", list: async () => [] }),
     [],
   );
   const install = useInstall({ source, onListed: () => undefined });

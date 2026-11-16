@@ -3,10 +3,9 @@ import {
   type CatalogueRefusal,
   catalogueIndexUrl,
   catalogueThumbnailUrl,
-  DASHBOARD_THEME_KIND,
   parseCatalogueIndex,
 } from "@yunari/renderer-core";
-import type { ItemSource, StoreItem } from "./local-source.js";
+import type { StoreItem } from "./local-source.js";
 
 /** Where the index is read from, and with what transport. */
 export interface CatalogueReadOptions {
@@ -40,33 +39,6 @@ export async function readCatalogueListing(
     throw new Error(`The catalogue answered ${response.status}.`);
   }
   return parseCatalogueIndex(await response.json(), knownKinds);
-}
-
-/**
- * The catalogue's listing as an `ItemSource`, through {@link readCatalogueListing}.
- *
- * The refusals describe the most recent `list()`: they are cleared at its entry,
- * so a failed read answers none rather than the previous read's rows.
- */
-export function onlineThemeSource(
-  options: CatalogueReadOptions = {},
-): ItemSource {
-  let refused: readonly CatalogueRefusal[] = [];
-
-  return {
-    kind: DASHBOARD_THEME_KIND,
-    async list(): Promise<readonly StoreItem[]> {
-      refused = [];
-      const parsed = await readCatalogueListing(options, [
-        DASHBOARD_THEME_KIND,
-      ]);
-      refused = parsed.refused;
-      return parsed.entries.map(catalogueItemOf);
-    },
-    refused(): readonly CatalogueRefusal[] {
-      return refused;
-    },
-  };
 }
 
 /** One parsed catalogue entry as the item the gallery draws. Shared with the

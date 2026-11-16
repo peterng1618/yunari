@@ -1,6 +1,7 @@
 import type { InstalledExtension } from "@yunari/extension-api";
 import {
   type CatalogueOrigin,
+  type CatalogueRefusal,
   defaultFacetsFor,
   listingMemberRecords,
   type MemberKind,
@@ -46,6 +47,19 @@ export type LibraryPage =
   | "collections"
   | "submissions";
 
+/** The Library's state filter: which side of the catalogue a page draws. A
+ *  store row is on this PC when it carries an origin, and a library row is
+ *  installed by construction. */
+export type LibraryState = "all" | "on-this-pc" | "not-installed";
+
+/** One page's read: the rows it can draw, and the catalogue entries the read
+ *  could not use. A page that reads this PC's own listings answers no refusals,
+ *  because there is no wire entry to refuse. */
+export interface LibraryPageRows {
+  readonly rows: readonly StoreItem[];
+  readonly refused: readonly CatalogueRefusal[];
+}
+
 /**
  * What one page reads.
  *
@@ -58,7 +72,7 @@ export interface LibraryPageSource {
   readonly page: LibraryPage;
   /** Listings that carry at least one member of this page's kind. */
   readonly memberKind: MemberKind | "collection" | "listing";
-  list(): Promise<readonly StoreItem[]>;
+  list(): Promise<LibraryPageRows>;
 }
 
 /** One Library page's rule. */
@@ -144,11 +158,14 @@ export function catalogueSourceFor(
   return {
     page,
     memberKind: rule.memberKind,
-    async list(): Promise<readonly StoreItem[]> {
+    async list(): Promise<LibraryPageRows> {
       const parsed = await readCatalogueListing(options, STORE_ITEM_KINDS);
-      return parsed.entries
-        .filter((entry) => keeps(rule, entry))
-        .map(catalogueItemOf);
+      return {
+        rows: parsed.entries
+          .filter((entry) => keeps(rule, entry))
+          .map(catalogueItemOf),
+        refused: parsed.refused,
+      };
     },
   };
 }
@@ -352,9 +369,12 @@ export function librarySourceFor(
   return {
     page,
     memberKind: rule.memberKind,
-    async list(): Promise<readonly StoreItem[]> {
+    async list(): Promise<LibraryPageRows> {
       const items = await reader(clients);
-      return items.filter((item) => keeps(rule, item));
+      return {
+        rows: items.filter((item) => keeps(rule, item)),
+        refused: [],
+      };
     },
   };
 }

@@ -367,6 +367,45 @@ export function SubmissionsPage(props: {
     setListingsAttempt((current) => current + 1);
   };
 
+  /** The last author command the store refused, in its own words; the page's
+   *  one live region speaks it. */
+  const [announcement, setAnnouncement] = useState("");
+
+  /**
+   * Posts one author command, and lets the listing answer it. The Worker's
+   * answer names the new state, but this page keeps no copy of it: the author's
+   * own rows are the source, so a successful change re-reads them and a
+   * re-listing that disagrees wins. A non-2xx is the store's own sentence and
+   * the row is left untouched.
+   */
+  const statusChange = (id: string, action: "unpublish" | "publish"): void => {
+    setAnnouncement("");
+    void (async () => {
+      try {
+        const response = await (fetcher ?? fetch)(
+          `/api/store/items/${encodeURIComponent(id)}/${action}`,
+          { method: "POST" },
+        );
+        if (!response.ok) {
+          const body: unknown = await response.json().catch(() => undefined);
+          const message =
+            typeof body === "object" && body !== null
+              ? (body as { readonly message?: unknown }).message
+              : undefined;
+          setAnnouncement(
+            typeof message === "string" && message.trim() !== ""
+              ? message
+              : uiCopy.store.status.changeRefused(response.status),
+          );
+          return;
+        }
+        setMineAttempt((current) => current + 1);
+      } catch (error) {
+        setAnnouncement(error instanceof Error ? error.message : String(error));
+      }
+    })();
+  };
+
   return (
     <div
       data-yunari-submissions-page=""
@@ -405,10 +444,44 @@ export function SubmissionsPage(props: {
                   {uiCopy.library.submissions.kind(item.kind)}
                 </span>
                 <StoreStatusBadge status={item.status} />
+                {item.status === "published" ||
+                item.status === "unpublished" ? (
+                  <button
+                    type="button"
+                    data-yunari-submission-action={
+                      item.status === "published" ? "unpublish" : "republish"
+                    }
+                    aria-label={uiCopy.library.submissions.command(
+                      item.status === "published"
+                        ? uiCopy.store.actions.unpublish
+                        : uiCopy.store.actions.republish,
+                      item.name,
+                    )}
+                    onClick={() =>
+                      statusChange(
+                        item.id,
+                        item.status === "published" ? "unpublish" : "publish",
+                      )
+                    }
+                    className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-text enabled:hover:border-muted"
+                  >
+                    {item.status === "published"
+                      ? uiCopy.store.actions.unpublish
+                      : uiCopy.store.actions.republish}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+        <span
+          data-yunari-submissions-announcement=""
+          role="status"
+          aria-live="polite"
+          className="sr-only"
+        >
+          {announcement}
+        </span>
       </section>
 
       {listings.state === "failed" ? (
