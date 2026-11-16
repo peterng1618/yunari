@@ -409,7 +409,8 @@ collection entry additionally carries `includes`, a list of catalogue ids, and
 no member of its own. The parser keeps a member kind this build does not ship
 and refuses only a malformed member; `includes` is refused on any other kind.
 The catalogue's `item.json` and `/index.json` are one projection of the same
-entry, so both carry the same fields.
+entry: both carry `members` and `includes`. `item.json` omits `facets`, which
+belong to the index, and drops `id`, which its route re-adds.
 
 **Members are derived once, by the store, from the package it already
 validated.** Dashboard and editor themes are one member; a widget pack's units
@@ -437,19 +438,21 @@ without writing, so the install sheet can state what a press will do. It
 fetches each member's `catalogue/<id>/item.json` from the configured store
 origin, never a client-supplied URL, and resolves that listing's latest
 published version. `POST /api/store/install` re-runs the same pre-flight and
-never trusts the plan: every chosen member's size and SHA-256 are verified, its
-reader validates it, the kill list is checked and consent is resolved before
-any write. One refused member refuses the collection by name and writes
-nothing. Each chosen member then goes through its existing per-kind install
+never trusts the plan: every chosen member this PC does not already hold has its
+size and SHA-256 verified, its reader validates it, the kill list is checked and
+consent is resolved before any write. One refused member refuses the collection
+by name and writes nothing. Each chosen member then goes through its existing per-kind install
 path; a mid-way failure reports which members landed and which did not, and a
 retry skips members already registered. That non-atomic edge is accepted.
 
 **One catalogue-origin register.** `settings/catalogue-origins.json` holds
 `{ kind, catalogueId, version, installedAt, collections? }` per installed
 object, keyed `<kind>:<installed id>`, so two kinds with one id cannot collide.
-The file is read additively: rows in the legacy `theme-origins.json` are read
-as `dashboard-theme` and are never dropped, and a write rewrites the entry in
-the new shape. Every kind's listing route (`/api/themes`, `/api/editor-themes`,
+The legacy `theme-origins.json` is a one-time fallback, not a second register:
+it is read only while `catalogue-origins.json` is absent, and the first write
+snapshots its rows into the new file as `dashboard-theme`. The legacy file is
+never read again, so a row this register later removes cannot come back. Every
+kind's listing route (`/api/themes`, `/api/editor-themes`,
 `/api/widget-packs`, `/api/path-presets`, `/api/extensions`) spreads that
 object's origin on its rows, and `GET /api/store/origins` serves the register
 itself for the Library's state filter and a collection's installed count. A

@@ -231,9 +231,10 @@ The listing serves six kinds: `dashboard-theme`, `editor-theme`,
 `widget-pack`, `path-preset-pack`, `plugin` and `collection`. A non-theme
 version is stored in `item_version.metadata_json`; a dashboard theme keeps
 `envelope_json`. Both are written by the Worker from a package it read and
-validated, never from the browser's claims. Finalize derives each listing's
-`members` from that validated metadata (`units`, `presets`, `manifest`,
-`envelope_json`), so membership needs no column of its own.
+validated, never from the browser's claims. Each listing's `members` are derived
+from the metadata finalize stored (`units`, `presets`, `manifest`,
+`envelope_json`), when the catalogue entry is built, so membership needs no
+column of its own.
 
 A hardware plugin — one contributing a panel family or asking for
 `usb:device`/`serial:device` — finalizes as `pending` and is published by an
@@ -247,12 +248,14 @@ curl -X POST https://<worker>/api/admin/items/<id>/review \
 
 Collections are self-serve and carry no review. My submissions has a collection
 builder: the author picks published listings, marks each optional or required,
-then names, versions and describes the set. The host packages it — it
-revalidates every include, builds the `yunari-collection-package` manifest with
-the shared writer, hashes it and forwards it — and a name matching one of the
-author's own collections adds a `minor` version instead of minting a listing.
-The cover is the first include's published thumbnail; when that picture cannot
-be fetched the publish is refused and the member is named. Finalize refuses an
+then names and describes the set. The host packages it — it revalidates every
+include, builds the `yunari-collection-package` manifest with the shared writer,
+hashes it and forwards it — and assigns the version on publish: a name matching
+one of the author's own collections adds a `minor` version instead of minting a
+listing, and a new name starts at the first version. The cover is the published
+thumbnail of the first required include, or of the first include when every
+include is optional; when that picture cannot be fetched the publish is refused
+and the member is named. Finalize refuses an
 unknown, unpublished, duplicate or self include and any nested collection, so
 collections stay one level deep.
 
@@ -283,16 +286,19 @@ through `GET /api/editor-themes/:id` for the Settings import control.
 and answers the verified member list and each code member's consent summary
 without writing.
 
-A collection install verifies every chosen include — size, SHA-256, its
-package reader, the kill list and consent — before the first write. One killed,
-unpublished or refused member blocks the collection by name and nothing is
-written; each chosen member that verifies then installs through its existing
-per-kind path, and a part-way failure reports which members landed. A retry
-skips members already recorded, so `settings/catalogue-origins.json` is the one
+A collection install verifies every chosen include this PC does not already
+hold — size, SHA-256, its package reader, the kill list and consent — before the
+first write. One killed, unpublished or refused member blocks the collection by
+name and nothing is written; each chosen member that verifies then installs
+through its existing per-kind path, and a part-way failure reports which members
+landed. A retry skips members already recorded, so
+`settings/catalogue-origins.json` is the one
 record of what a collection installed: it holds `{ kind, catalogueId, version,
 installedAt, collections? }` per object keyed `<kind>:<installed id>`, and a
-member written by a collection names it in `collections`. Rows in a legacy
-`theme-origins.json` are read as dashboard themes and never dropped.
+member written by a collection names it in `collections`. The legacy
+`theme-origins.json` is a one-time fallback: it is read only while
+`catalogue-origins.json` is absent, and the first write snapshots its rows into
+the new file as dashboard themes; the legacy file is never read again.
 
 The Free plan allows 10 ms CPU per invocation; the runbook's step 11 describes
 the measurement and the Paid-plan threshold.

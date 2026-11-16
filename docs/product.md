@@ -114,8 +114,9 @@ when the version is finalized and again by the host after download.
 
 A listing is one catalogue item with one package and one version ladder; its
 **members** are the things a person browses and installs. Every listing carries
-a `members` array, derived by the store at finalize from the package it already
-validated, so a submission never declares its own members. The member kinds are
+a `members` array, derived by the store from the metadata finalize stored, when
+the catalogue entry is built, so a submission never declares its own members.
+The member kinds are
 `dashboard-theme`, `editor-theme`, `widget`, `shape`, `sensor-provider`,
 `asset-source`, `panel-driver` and `data-source`. A theme is one member, a
 widget pack one per unit, a path-preset pack one per preset, and a plugin one
@@ -132,8 +133,9 @@ versions, so an include always resolves to its latest published version and a
 member update needs no collection release. Changing membership ships a new
 collection version: publishing a name that matches one of the author's own
 collections adds a `minor` version instead of a new listing. A collection's
-cover is its first include's published thumbnail; when that picture cannot be
-fetched the publish is refused. Collections are self-serve and carry no review.
+cover is the published thumbnail of its first required include, or of its first
+include when every include is optional; when that picture cannot be fetched the
+publish is refused. Collections are self-serve and carry no review.
 
 The publisher is the store account's slug, derived from the account when an item
 is first submitted. A manifest's own `publisher` field is ignored, and reserved
@@ -150,9 +152,10 @@ profile requires consent. An update that adds a capability, contribution,
 device, execution profile or store publisher is held for the owner's review
 instead of installing.
 
-A collection install runs one pre-flight over every chosen include — size,
-SHA-256, the kind's own package reader, the kill list and consent — before any
-write. One killed, unpublished or refused member refuses the collection by name
+A collection install runs one pre-flight over every chosen include this PC does
+not already hold — size, SHA-256, the kind's own package reader, the kill list
+and consent — before any write. One killed, unpublished or refused member
+refuses the collection by name
 and writes nothing. Each chosen member then installs through its existing
 per-kind path, so an install part-way through reports which members landed; a
 retry skips members this PC already holds, and a member records the collection
