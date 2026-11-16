@@ -57,34 +57,50 @@ export function cardsOf(items: readonly StoreItem[]): readonly StoreCard[] {
 /** The catalogue ids the register names, as one membership test for the cards
  *  drawn from it. The same read feeds the update diff later, so a card never
  *  asks the host a second question to draw its count. */
-export function installedCatalogueIds(
-  origins: readonly CatalogueOrigin[],
-): ReadonlySet<string> {
-  return new Set(origins.map((origin) => origin.catalogueId));
-}
+/** A collection's install state, as the card's action and the state filter both
+ *  read it. */
+export type CollectionInstallState = "installed" | "partial" | "absent";
 
-/** How many of a collection's includes this PC holds. */
-export interface InstalledIncludes {
+export interface CollectionState {
+  /** How many of the collection's includes the register names. */
   readonly installed: number;
+  /** How many listings the collection installs. */
   readonly total: number;
+  readonly state: CollectionInstallState;
 }
 
 /**
- * A collection's partial install, counted over `includes` — the members it
- * actually installs — and never over `members`, which a collection leaves
- * empty. `undefined` when the listing installs no included listing at all, so a
- * plain theme draws no count.
+ * **A collection's state is counted over its includes, which is the only place
+ * it exists.** The host records membership on each member's origin row, so a
+ * collection never has an origin of its own and `installStateOf` — which reads
+ * a copy's own origin — cannot answer for it. Every include in the register is
+ * `installed`, none is `absent`, and anything between is `partial`.
+ *
+ * `undefined` when the listing installs no included listing, so a plain theme
+ * keeps `installStateOf` as its owner.
  */
-export function installedIncludesOf(
+export function collectionStateOf(
   listing: StoreItem,
-  installed: ReadonlySet<string>,
-): InstalledIncludes | undefined {
+  origins: readonly CatalogueOrigin[],
+): CollectionState | undefined {
   const includes = listing.includes;
   if (includes === undefined || includes.length === 0) return undefined;
 
-  let count = 0;
+  const held = new Set(origins.map((origin) => origin.catalogueId));
+  let installed = 0;
   for (const id of includes) {
-    if (installed.has(id)) count += 1;
+    if (held.has(id)) installed += 1;
   }
-  return { installed: count, total: includes.length };
+
+  const total = includes.length;
+  return {
+    installed,
+    total,
+    state:
+      installed === 0
+        ? "absent"
+        : installed === total
+          ? "installed"
+          : "partial",
+  };
 }

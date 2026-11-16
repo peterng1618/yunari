@@ -10,14 +10,24 @@
  * file owns only how each listing becomes cards, so the grid cannot draw a
  * second, differently-derived set of the same copies.
  */
-import { DASHBOARD_THEME_KIND, defaultFacetsFor } from "@yunari/renderer-core";
+import {
+  type CatalogueOrigin,
+  DASHBOARD_THEME_KIND,
+  defaultFacetsFor,
+} from "@yunari/renderer-core";
 import { expect, it } from "vitest";
 import type { StoreItem } from "../store-mode/local-source.js";
-import {
-  cardsOf,
-  installedCatalogueIds,
-  installedIncludesOf,
-} from "./cards.js";
+import { cardsOf, collectionStateOf } from "./cards.js";
+
+/** What the register records for an installed catalogue item. */
+function originOf(catalogueId: string): CatalogueOrigin {
+  return {
+    kind: DASHBOARD_THEME_KIND,
+    catalogueId,
+    version: "1.0.0",
+    installedAt: "2026-10-01T00:00:00.000Z",
+  };
+}
 
 function listing(overrides: Partial<StoreItem> = {}): StoreItem {
   return {
@@ -146,67 +156,43 @@ it("draws each copy in a mixed listing exactly once", () => {
   ]);
 });
 
-it("names the installed catalogue ids from one register read", () => {
-  const installed = installedCatalogueIds([
-    {
-      kind: "dashboard-theme",
-      catalogueId: "11111111-1111-4111-8111-111111111111",
-      version: "1.0.0",
-      installedAt: "2026-10-01T00:00:00.000Z",
-    },
-    {
-      kind: "plugin",
-      catalogueId: "22222222-2222-4222-8222-222222222222",
-      version: "2.0.0",
-      installedAt: "2026-10-02T00:00:00.000Z",
-    },
-  ]);
-
-  expect([...installed].sort()).toEqual([
+it("states a collection from the includes the register names", () => {
+  const includes = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
-  ]);
-});
-
-it("counts a collection's installs against its includes, not its members", () => {
-  const collection = listing({
-    kind: "collection",
-    members: [],
-    includes: [
-      "11111111-1111-4111-8111-111111111111",
-      "22222222-2222-4222-8222-222222222222",
-      "33333333-3333-4333-8333-333333333333",
-      "44444444-4444-4444-8444-444444444444",
-    ],
-  });
-  const installed = installedCatalogueIds([
-    {
-      kind: "dashboard-theme",
-      catalogueId: "11111111-1111-4111-8111-111111111111",
-      version: "1.0.0",
-      installedAt: "2026-10-01T00:00:00.000Z",
-    },
-    {
-      kind: "plugin",
-      catalogueId: "33333333-3333-4333-8333-333333333333",
-      version: "1.0.0",
-      installedAt: "2026-10-01T00:00:00.000Z",
-    },
-  ]);
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+  ] as const;
+  const collection = listing({ kind: "collection", members: [], includes });
+  const held = originOf(includes[0]);
+  const alsoHeld = originOf(includes[2]);
 
   expect(
-    installedIncludesOf(collection, installed),
-    "the count is not the includes the register names",
-  ).toEqual({ installed: 2, total: 4 });
+    collectionStateOf(collection, [held, alsoHeld]),
+    "a partial collection is not counted over its includes",
+  ).toEqual({ installed: 2, total: 4, state: "partial" });
+  expect(
+    collectionStateOf(collection, [
+      held,
+      alsoHeld,
+      originOf(includes[1]),
+      originOf(includes[3]),
+    ]),
+    "a collection whose every include is held is not installed",
+  ).toEqual({ installed: 4, total: 4, state: "installed" });
+  expect(
+    collectionStateOf(collection, []),
+    "a collection with nothing held is not absent",
+  ).toEqual({ installed: 0, total: 4, state: "absent" });
 });
 
-it("answers no includes count for a listing that installs no members", () => {
-  expect(installedIncludesOf(listing(), new Set())).toBeUndefined();
+it("answers no collection state for a listing that installs no includes", () => {
+  expect(collectionStateOf(listing(), [])).toBeUndefined();
   expect(
-    installedIncludesOf(
+    collectionStateOf(
       listing({ kind: "collection", members: [], includes: [] }),
-      new Set(),
+      [],
     ),
-    "an empty include list drew a count of nothing",
+    "an empty include list has a collection state",
   ).toBeUndefined();
 });

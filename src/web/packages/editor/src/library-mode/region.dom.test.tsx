@@ -94,6 +94,7 @@ function entry(
   id: string,
   name: string,
   members: readonly { id: string; kind: string; name: string }[],
+  extra: Readonly<Record<string, unknown>> = {},
 ): unknown {
   return {
     id,
@@ -108,6 +109,7 @@ function entry(
     thumbnail: `catalogue/${id}/thumbnail.png`,
     members,
     facets: FACETS,
+    ...extra,
   };
 }
 
@@ -302,6 +304,71 @@ it("filters the visible rows by the state", async () => {
 
   const available = await mountHarness("widgets", "not-installed");
   await waitForCells(available, ["Catalogue pack"]);
+});
+
+/**
+ * **A collection's state is its includes'**, so the filter reads the register
+ * the card reads. A collection whose every include is installed is *On this
+ * PC*; a partial one is neither fully installed nor *Not installed*, and is
+ * reachable under *All* where it reads its count and Update.
+ */
+it("filters collections by the includes the register names", async () => {
+  const includes = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "44444444-4444-4444-8444-444444444444",
+  ] as const;
+  const originsOf = (held: readonly string[]): Response =>
+    json({
+      origins: held.map((catalogueId) => ({
+        kind: "dashboard-theme",
+        catalogueId,
+        version: "1.0.0",
+        installedAt: "2026-10-01T00:00:00.000Z",
+      })),
+    });
+  const catalogue = () =>
+    indexOf([
+      entry("collection", "ops-collection", "Ops collection", [], { includes }),
+    ]);
+  const serve = (held: readonly string[]): void => {
+    vi.stubGlobal(
+      "fetch",
+      answering([
+        [CATALOGUE, catalogue],
+        ["/api/store/origins", () => originsOf(held)],
+      ]),
+    );
+  };
+
+  serve(includes);
+  const installed = await mountHarness("collections", "on-this-pc");
+  await waitForCells(installed, ["Ops collection"]);
+
+  serve(includes.slice(0, 2));
+  const partialOnThisPc = await mountHarness("collections", "on-this-pc");
+  await vi.waitFor(() =>
+    expect(
+      partialOnThisPc.querySelector("[data-yunari-library-empty]"),
+      "the partial collection was listed as installed",
+    ).not.toBeNull(),
+  );
+
+  const partialNotInstalled = await mountHarness(
+    "collections",
+    "not-installed",
+  );
+  await vi.waitFor(() =>
+    expect(
+      partialNotInstalled.querySelector("[data-yunari-library-empty]"),
+      "the partial collection was listed as not installed",
+    ).not.toBeNull(),
+  );
+
+  serve([]);
+  const absent = await mountHarness("collections", "not-installed");
+  await waitForCells(absent, ["Ops collection"]);
 });
 
 it("draws one row for an installed copy, not a library row beside it", async () => {

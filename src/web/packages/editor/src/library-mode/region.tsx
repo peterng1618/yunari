@@ -19,6 +19,7 @@ import {
   type ThemeLibraryClient,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
+import { collectionStateOf } from "./cards.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
 import { readOrigins } from "./origins.js";
 import {
@@ -112,20 +113,26 @@ interface Row {
  *
  * The rule is one function because the filter and the grid must not disagree
  * about which rows the state admits.
+ *
+ * **A collection's installed state is its includes'**, so the filter reads
+ * `collectionStateOf` rather than the row's own origin, which a collection
+ * never has. A partial collection is neither fully *On this PC* nor *Not
+ * installed*: it is reachable under *All*, where its count and Update are drawn.
  */
 function rowsFor(
   catalogue: readonly StoreItem[],
   library: readonly StoreItem[],
   state: LibraryState,
+  origins: readonly CatalogueOrigin[] | undefined,
 ): readonly Row[] {
-  const origins = new Map<string, CatalogueOrigin>();
+  const byCatalogueId = new Map<string, CatalogueOrigin>();
   for (const item of library) {
     if (item.origin !== undefined) {
-      origins.set(item.origin.catalogueId, item.origin);
+      byCatalogueId.set(item.origin.catalogueId, item.origin);
     }
   }
   const store = withInstalledVersions(catalogue, library).map((item) => {
-    const origin = origins.get(item.id);
+    const origin = byCatalogueId.get(item.id);
     return origin === undefined ? item : { ...item, origin };
   });
   const listed = new Set(store.map((item) => item.id));
@@ -138,14 +145,23 @@ function rowsFor(
   ];
 
   if (state === "all") return rows;
+
+  const collectionOf = (row: Row) =>
+    origins === undefined ? undefined : collectionStateOf(row.item, origins);
+
   if (state === "on-this-pc") {
     return rows.filter(
-      (row) => row.half === "library" || row.item.origin !== undefined,
+      (row) =>
+        row.half === "library" ||
+        row.item.origin !== undefined ||
+        collectionOf(row)?.state === "installed",
     );
   }
-  return rows.filter(
-    (row) => row.half === "store" && row.item.origin === undefined,
-  );
+  return rows.filter((row) => {
+    const collection = collectionOf(row);
+    if (collection !== undefined) return collection.state === "absent";
+    return row.half === "store" && row.item.origin === undefined;
+  });
 }
 
 /** A host answer, refused rather than read as an empty listing: "the host
@@ -342,12 +358,15 @@ function PageListing(props: {
   const [libraryFailed, setLibraryFailed] = useState(false);
   /** The origin register behind each collection's installed count. Read once
    *  per attempt, beside the two listings, because a card never fetches a
-   *  member's package to say how many it holds. */
+   *  member's package to say how many it holds. **Only a page that can draw a
+   *  collection asks for it**, so no other page pays for a read it cannot use
+   *  or prints a failure for it. */
   const [origins, setOrigins] = useState<
     readonly CatalogueOrigin[] | undefined
   >(undefined);
   const [originsFailed, setOriginsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const readsOrigins = sources.catalogue.memberKind === "collection";
   /** The pack cards this page has open. The page owns it because opening one is
    *  a reading of the listing, not of the cell that draws it. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -382,22 +401,24 @@ function PageListing(props: {
         if (live) setLibraryFailed(true);
       },
     );
-    readOrigins().then(
-      (rows) => {
-        if (live) setOrigins(rows);
-      },
-      () => {
-        if (live) setOriginsFailed(true);
-      },
-    );
+    if (readsOrigins) {
+      readOrigins().then(
+        (rows) => {
+          if (live) setOrigins(rows);
+        },
+        () => {
+          if (live) setOriginsFailed(true);
+        },
+      );
+    }
     return () => {
       live = false;
     };
-  }, [sources, attempt]);
+  }, [sources, attempt, readsOrigins]);
 
   const rows = useMemo(
-    () => rowsFor(catalogue ?? [], library ?? [], props.state),
-    [catalogue, library, props.state],
+    () => rowsFor(catalogue ?? [], library ?? [], props.state, origins),
+    [catalogue, library, props.state, origins],
   );
   const visible =
     props.page === "sensor-providers"

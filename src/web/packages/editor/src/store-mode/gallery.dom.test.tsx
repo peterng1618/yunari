@@ -1237,7 +1237,9 @@ function originOf(catalogueId: string): CatalogueOrigin {
   };
 }
 
-/** A collection listing: no members of its own, four includes. */
+/** A collection listing: no members of its own, four includes. Its action is
+ *  the register's answer, never a fabricated `installedVersion` — a collection
+ *  has no origin of its own. */
 function collectionItem(overrides: Partial<StoreItem> = {}): StoreItem {
   return item({
     id: "ops-collection",
@@ -1246,7 +1248,7 @@ function collectionItem(overrides: Partial<StoreItem> = {}): StoreItem {
     members: [],
     includes: [...INCLUDED_IDS],
     version: "1.2.0",
-    catalogue: catalogue({ id: "ops-collection", installedVersion: "1.1.0" }),
+    catalogue: catalogue({ id: "ops-collection" }),
     ...overrides,
   });
 }
@@ -1270,6 +1272,7 @@ it("draws a single-member listing as a member card", async () => {
       items={[
         packItem({
           members: [{ id: "clock", kind: "widget", name: "Clock" }],
+          catalogue: catalogue({ id: "ops-pack", publisher: "acme" }),
         }),
       ]}
       density="comfortable"
@@ -1294,6 +1297,13 @@ it("draws a single-member listing as a member card", async () => {
     ).textContent,
     "the member's kind is not the word for it",
   ).toBe(uiCopy.store.cell.memberKinds.widget);
+  expect(
+    must(
+      cell.querySelector<HTMLElement>("[data-yunari-store-cell-publisher]"),
+      "the member card's publisher",
+    ).textContent,
+    "the member card does not name the listing's publisher",
+  ).toBe("acme");
   expect(
     pictureBox(container).querySelector("img"),
     "the member card lost the listing's picture",
@@ -1336,6 +1346,10 @@ it("draws a multi-member listing as a pack card with its member count", async ()
     "the pack starts expanded or states nothing",
   ).toBe("false");
   expect(
+    twisty.textContent,
+    "the expand control does not name the package it opens",
+  ).toContain("Ops pack");
+  expect(
     must(
       cell.querySelector<HTMLElement>("[data-yunari-store-members]"),
       "panel",
@@ -1350,9 +1364,12 @@ it("draws a multi-member listing as a pack card with its member count", async ()
  * member rows away again.
  */
 it("expands a pack into its member cards and collapses it again", async () => {
+  const onlinePack = packItem({
+    catalogue: catalogue({ id: "ops-pack", publisher: "acme" }),
+  });
   const container = await mount(
     <Gallery
-      items={[packItem()]}
+      items={[onlinePack]}
       density="comfortable"
       onAction={() => undefined}
       onOpenItem={() => undefined}
@@ -1378,7 +1395,7 @@ it("expands a pack into its member cards and collapses it again", async () => {
 
   await rerender(
     <Gallery
-      items={[packItem()]}
+      items={[onlinePack]}
       density="comfortable"
       onAction={() => undefined}
       onOpenItem={() => undefined}
@@ -1412,10 +1429,36 @@ it("expands a pack into its member cards and collapses it again", async () => {
     "Clock",
     "Fan",
   ]);
+  const clockCard = must(
+    container.querySelector<HTMLElement>(
+      '[data-yunari-store-member-card="ops-pack#0:widget/clock"]',
+    ),
+    "the clock's member card",
+  );
+  expect(
+    clockCard.querySelector("[data-yunari-store-picture]"),
+    "a member card drew no picture or ground",
+  ).not.toBeNull();
+  expect(
+    must(
+      clockCard.querySelector<HTMLElement>(
+        "[data-yunari-store-member-publisher]",
+      ),
+      "the member card's publisher",
+    ).textContent,
+    "a member card does not name the listing's publisher",
+  ).toBe("acme");
+  expect(
+    must(
+      clockCard.querySelector<HTMLElement>("[data-yunari-store-member-kind]"),
+      "the member card's kind badge",
+    ).textContent,
+    "a member card does not badge the member's kind",
+  ).toBe(uiCopy.store.cell.memberKinds.widget);
 
   await rerender(
     <Gallery
-      items={[packItem()]}
+      items={[onlinePack]}
       density="comfortable"
       onAction={() => undefined}
       onOpenItem={() => undefined}
@@ -1476,6 +1519,15 @@ it("installs the listing when a member card's Install is pressed", async () => {
   );
   vi.stubGlobal("fetch", pending);
   const container = await mount(<InstallingGallery />);
+
+  // **The pack card is cover, count and expand only**: the two install controls
+  // belong to the two member cards, and none sits on the package's own card.
+  expect(
+    cellOf(container, "ops-pack").querySelectorAll(
+      "[data-yunari-store-cell-install]",
+    ),
+    "the pack card drew an install control of its own",
+  ).toHaveLength(2);
 
   const memberInstall = must(
     container.querySelector<HTMLButtonElement>(
@@ -1554,9 +1606,11 @@ it("shows Installed, Update or Install from the origin version", async () => {
 });
 
 /**
- * **A collection counts the includes this PC already holds**, and the count
- * comes from the origin register rather than from fetching member packages.
- * The card's action word is still `installStateOf`'s answer.
+ * **A collection counts the includes this PC already holds**, and its action
+ * follows that count: partial reads *Update*, every include held reads
+ * *Installed*, none held reads *Install*. The count is the origin register's
+ * answer rather than a fetch of each member's package, and no `installedVersion`
+ * is involved — a collection never has an origin row of its own.
  */
 it("reads a partially installed collection as N of M installed", async () => {
   const fetched = vi.fn(() => new Promise<Response>(() => undefined));
@@ -1587,7 +1641,7 @@ it("reads a partially installed collection as N of M installed", async () => {
       ),
       "the collection's install reading",
     ).textContent,
-    "the collection's action is not the install state's word",
+    "a partial collection's action is not Update",
   ).toBe(uiCopy.store.cell.installStates.update);
   expect(
     fetched,
@@ -1595,9 +1649,72 @@ it("reads a partially installed collection as N of M installed", async () => {
   ).not.toHaveBeenCalled();
 });
 
+/** **Every include held is installed**, and the card draws the mark the online
+ *  half draws for an installed item rather than an install control. */
+it("marks a collection whose every include is installed", async () => {
+  const container = await mount(
+    <Gallery
+      items={[collectionItem()]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+      origins={INCLUDED_IDS.map(originOf)}
+    />,
+  );
+
+  const cell = cellOf(container, "ops-collection");
+  expect(
+    must(
+      cell.querySelector<HTMLElement>("[data-yunari-store-cell-members]"),
+      "the collection's installed count",
+    ).textContent,
+    "a fully installed collection does not read 4 of 4 installed",
+  ).toBe(uiCopy.store.cell.pack.installed(4, 4));
+  const mark = must(
+    cell.querySelector<HTMLElement>(
+      '[data-yunari-store-cell-install="installed"]',
+    ),
+    "the collection's installed mark",
+  );
+  expect(mark.tagName, "an installed collection drew a control").toBe("SPAN");
+  expect(mark.textContent).toBe(uiCopy.store.cell.installStates.installed);
+});
+
+/** **Nothing held is absent**, so the card offers Install and says `0 of 4`. */
+it("offers Install for a collection with no include installed", async () => {
+  const container = await mount(
+    <Gallery
+      items={[collectionItem()]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+      origins={[]}
+    />,
+  );
+
+  const cell = cellOf(container, "ops-collection");
+  expect(
+    must(
+      cell.querySelector<HTMLElement>("[data-yunari-store-cell-members]"),
+      "the collection's installed count",
+    ).textContent,
+  ).toBe(uiCopy.store.cell.pack.installed(0, 4));
+  expect(
+    must(
+      cell.querySelector<HTMLElement>(
+        '[data-yunari-store-cell-install="install"]',
+      ),
+      "the collection's install control",
+    ).textContent,
+    "an absent collection's action is not Install",
+  ).toBe(uiCopy.store.cell.installStates.install);
+});
+
 /** **An unread register states nothing**, rather than drawing every include as
- *  missing: "0 of 4 installed" is a claim the card cannot make before the read
- *  answers, and the surface states the failure beside the grid. */
+ *  missing: "0 of 4 installed" and an action are claims the card cannot make
+ *  before the read answers, and the surface states the failure beside the grid. */
 it("draws no installed count before the origin register answers", async () => {
   const container = await mount(
     <Gallery
@@ -1609,10 +1726,63 @@ it("draws no installed count before the origin register answers", async () => {
     />,
   );
 
+  const cell = cellOf(container, "ops-collection");
   expect(
-    cellOf(container, "ops-collection").querySelector(
-      "[data-yunari-store-cell-members]",
-    ),
+    cell.querySelector("[data-yunari-store-cell-members]"),
     "an unread register was drawn as zero installed",
   ).toBeNull();
+  expect(
+    cell.querySelector("[data-yunari-store-cell-install]"),
+    "an unread register still drew an install action",
+  ).toBeNull();
+});
+
+/** **A count with no way to open the pack is noise**, so a surface that hands
+ *  down no expand handler draws neither the count nor the control. */
+it("states no member count where the surface cannot expand the pack", async () => {
+  const container = await mount(
+    <Gallery
+      items={[packItem()]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+    />,
+  );
+
+  const cell = cellOf(container, "ops-pack");
+  expect(
+    cell.querySelector("[data-yunari-store-cell-members]"),
+    "a count was drawn with no way to open the pack",
+  ).toBeNull();
+  expect(
+    cell.querySelector("[data-yunari-store-cell-expand]"),
+    "an expand control was drawn with no handler",
+  ).toBeNull();
+});
+
+/** **Two packs do not produce two identical controls**: each expand button
+ *  names the listing whose members it opens. */
+it("names each pack's expand control by its listing", async () => {
+  const container = await mount(
+    <Gallery
+      items={[packItem(), packItem({ id: "fan-pack", name: "Fan pack" })]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+      expanded={new Set()}
+      onExpand={() => undefined}
+    />,
+  );
+
+  const names = [
+    ...container.querySelectorAll<HTMLElement>(
+      "[data-yunari-store-cell-expand]",
+    ),
+  ].map((control) => control.textContent);
+  expect(names, "the expand controls do not name their packages").toEqual([
+    `${uiCopy.store.cell.pack.expand}: Ops pack`,
+    `${uiCopy.store.cell.pack.expand}: Fan pack`,
+  ]);
 });

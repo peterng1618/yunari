@@ -241,14 +241,19 @@ row cannot carry: an online item's kind and download count, or an origin pill.
 
 **A package is one card that opens in place.** A listing with several members
 draws the package's picture and name with its member count as readable text —
-never a title attribute — and a twisty button carrying `aria-expanded` that
-opens a panel labeled with the package's own name. The panel lists that
-package's member rows: each names the member and its kind, and installs the
-package through the same control the card draws. A single-member listing draws
-the member's name and kind on the card itself, beside the package it belongs to.
-A collection counts the included listings this PC already holds — *2 of 4
-installed* — from the origin register, so its count is the register's fact
-rather than a fetch per member.
+never a title attribute — and a twisty button carrying `aria-expanded` whose
+name includes both the action and the package, so two packs never present two
+identical controls. The pack card is cover, member count and expand only: it
+draws no install control of its own. Its panel is labeled with the package's
+name and opens the package's **member cards**, each with the listing's picture
+or ground, the member's name and kind, the listing's publisher and the install
+control the member press runs. A single-member listing draws the member's name
+and kind on the card itself, but only where they differ from the package's own
+name and kind — a theme whose one member is itself repeats nothing. A collection
+counts the included listings this PC already holds — *2 of 4 installed* — from
+the origin register and reads *Installed* when every include is held and
+*Update* otherwise, so its state is the register's fact rather than a fetch per
+member.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
