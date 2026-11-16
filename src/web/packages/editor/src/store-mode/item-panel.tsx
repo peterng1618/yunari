@@ -3,12 +3,13 @@ import type * as React from "react";
 import { Fragment } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { CLOSE_GLYPH, Glyph } from "../editor-shell/icons.js";
+import type { StoreCard } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
+import { isCodeKind } from "./cell-actions.js";
 import {
   canShowTrust,
   type DetailPlanState,
   extensionTrustOf,
-  isCodeKind,
   MemberList,
   memberRowsOf,
   PlanStateNote,
@@ -296,9 +297,13 @@ export function PanelBody(props: {
   readonly kind: string;
   readonly vocabulary: readonly string[];
   readonly remixParent: StoreItem | undefined;
-  readonly onOpenItem: ((id: string) => void) | undefined;
+  readonly onOpenItem: ((card: StoreCard) => void) | undefined;
   readonly plan: DetailPlanState | undefined;
+  readonly onRetryPlan: () => void;
   readonly extension: InstalledExtension | undefined;
+  /** The extension listing's read failed. A failure is not "this plugin is not
+   *  installed", so the block states it and offers the read again. */
+  readonly trustFailure: { readonly onRetry: () => void } | undefined;
   readonly collections: readonly StoreItem[];
   readonly onOpenSettings: ((page: "extensions") => void) | undefined;
 }): React.JSX.Element {
@@ -343,7 +348,9 @@ export function PanelBody(props: {
         name={uiCopy.store.pillGroups.style}
         pills={styleReadings(item, props.vocabulary)}
       />
-      {kind === "collection" ? <PlanStateNote plan={plan} /> : null}
+      {kind === "collection" ? (
+        <PlanStateNote plan={plan} onRetry={props.onRetryPlan} />
+      ) : null}
       {!showMembers || rows === undefined ? null : <MemberList rows={rows} />}
       {kind === "collection" &&
       plan?.status === "ready" &&
@@ -379,7 +386,13 @@ export function PanelBody(props: {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onOpenItem(collection.id)}
+                    onClick={() =>
+                      onOpenItem({
+                        key: collection.id,
+                        listing: collection,
+                        member: undefined,
+                      })
+                    }
                     className="underline hover:text-text"
                   >
                     {collection.name}
@@ -392,7 +405,22 @@ export function PanelBody(props: {
       )}
       {showsTrust && canShowTrust(kind, plan) ? (
         <span className="flex flex-col gap-[var(--space-6)]">
-          {trustEntries === undefined || trustEntries.length === 0 ? (
+          {props.trustFailure !== undefined ? (
+            <span
+              data-yunari-store-detail-trust-state="failed"
+              className="flex flex-col items-start gap-[var(--space-4)] text-xs text-warn"
+            >
+              {uiCopy.store.detail.trust.unreadable}
+              <button
+                type="button"
+                data-yunari-store-detail-trust-retry=""
+                onClick={props.trustFailure.onRetry}
+                className="text-xs text-accent underline hover:text-text"
+              >
+                {uiCopy.store.retry}
+              </button>
+            </span>
+          ) : trustEntries === undefined || trustEntries.length === 0 ? (
             <span
               data-yunari-store-detail-trust-state="none"
               className="text-xs text-muted"
@@ -428,7 +456,13 @@ export function PanelBody(props: {
             <button
               type="button"
               data-yunari-store-item-remix=""
-              onClick={() => onOpenItem(remixParent.id)}
+              onClick={() =>
+                onOpenItem({
+                  key: remixParent.id,
+                  listing: remixParent,
+                  member: remixParent.members[0],
+                })
+              }
               className="text-xs text-faint underline hover:text-text"
             >
               {uiCopy.store.item.remixedFrom(remixOf.name)}

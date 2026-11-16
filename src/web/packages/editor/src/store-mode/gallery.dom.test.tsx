@@ -23,6 +23,7 @@ import { DASHBOARD_THEME_KIND, facetRecordOf } from "@yunari/renderer-core";
 import { act, type ReactElement, useMemo } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import type { StoreCard } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
 import { Gallery } from "./gallery.js";
 import type { InstallControl } from "./install-item.js";
@@ -606,12 +607,59 @@ it("draws its four actions and runs all four", async () => {
     await act(async () => button.click());
   }
 
-  expect(onAction.mock.calls, "the four actions did not all report").toEqual([
+  expect(
+    onAction.mock.calls.map(([action, card]) => [
+      action,
+      (card as { readonly listing: { readonly id: string } }).listing.id,
+    ]),
+    "the four actions did not all report",
+  ).toEqual([
     ["assign", "living-room"],
     ["open", "living-room"],
     ["export", "living-room"],
     ["delete", "living-room"],
   ]);
+});
+
+/**
+ * **Opening a one-member listing opens at that member.** The card a person
+ * presses carries the member, so a widget pack with one widget opens the
+ * widget's detail rather than the package's.
+ */
+it("opens a one-member listing as that member", async () => {
+  const opened: StoreCard[] = [];
+  const widget = item({
+    id: "solo-widget",
+    kind: "widget-pack",
+    name: "Solo widget",
+    members: [{ id: "cpu", kind: "widget", name: "CPU gauge" }],
+  });
+  const container = await mount(
+    <Gallery
+      items={[widget]}
+      onAction={() => undefined}
+      onOpenItem={(card) => opened.push(card)}
+      density="comfortable"
+      install={NO_INSTALL}
+    />,
+  );
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "name press",
+    ).click(),
+  );
+
+  expect(opened, "the name press did not open the item").toHaveLength(1);
+  expect(opened[0]?.listing.id, "the press does not name the package").toBe(
+    "solo-widget",
+  );
+  expect(
+    opened[0]?.member?.id,
+    "the press dropped the member the card draws",
+  ).toBe("cpu");
 });
 
 /**
@@ -711,9 +759,12 @@ it("opens the item from the cell's own surface rather than from an action", asyn
   await act(async () => surface.click());
 
   expect(
-    onOpenItem.mock.calls,
-    "the cell's own surface did not open the item",
-  ).toEqual([["living-room"]]);
+    onOpenItem.mock.calls.map(([card]) => [
+      (card as StoreCard).listing.id,
+      (card as StoreCard).member?.id,
+    ]),
+    "the cell's own surface did not open the item and its member",
+  ).toEqual([["living-room", "living-room"]]);
   expect(
     onAction,
     "the cell's own surface ran one of the four actions as well",

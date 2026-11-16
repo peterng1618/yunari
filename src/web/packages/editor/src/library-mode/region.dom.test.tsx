@@ -558,6 +558,63 @@ it("publishes no count when one half failed", async () => {
   );
 });
 
+/**
+ * **A per-type page opens the item's own surface at the member its card draws.**
+ * The listing used to hand every card a no-op open, so a widget, shape, sensor,
+ * asset source, panel driver or collection could open nothing. The modal now
+ * reads the page's catalogue, library and register, and its foot draws the
+ * member kind's own actions.
+ */
+it("opens a member's detail from its card", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [
+        CATALOGUE,
+        () =>
+          indexOf([
+            entry("widget-pack", "pack-uuid", "System pack", [
+              { id: "cpu", kind: "widget", name: "CPU gauge" },
+            ]),
+          ]),
+      ],
+      ["/api/widget-packs", () => json({ packs: [] })],
+    ]),
+  );
+  const container = await mountHarness("widgets");
+  await waitForCells(container, ["System pack"]);
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "cell name press",
+    ).click(),
+  );
+
+  const modal = must(
+    document.body.querySelector<HTMLElement>("[data-yunari-store-item]"),
+    "item modal",
+  );
+  expect(
+    modal.querySelector("[data-yunari-store-item-action]"),
+    "the item modal drew no action for its member kind",
+  ).not.toBeNull();
+  expect(
+    [
+      ...modal.querySelectorAll<HTMLElement>("[data-yunari-store-item-action]"),
+    ].map((action) => action.getAttribute("data-yunari-store-item-action")),
+    "the modal does not draw the widget's actions",
+  ).toEqual(["insert", "remove"]);
+  expect(
+    [
+      ...modal.querySelectorAll<HTMLElement>("[data-yunari-store-item-action]"),
+    ].map((action) => action.textContent?.trim()),
+    "the modal does not name the widget's insert",
+  ).toContain("Insert in canvas");
+});
+
 it("does not claim My submissions is empty while its page is unbuilt", async () => {
   vi.stubGlobal(
     "fetch",

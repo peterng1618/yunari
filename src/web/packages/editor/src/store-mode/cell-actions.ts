@@ -12,7 +12,7 @@ import type { CellAction, StoreItem } from "./local-source.js";
  * A kind this build does not ship answers no actions: the surface prints the
  * identifier and offers nothing it cannot explain.
  */
-const ACTIONS_BY_KIND: Readonly<Record<string, readonly CellAction[]>> = {
+const ACTIONS_BY_KIND = {
   "dashboard-theme": ["open", "assign", "export", "delete"],
   "editor-theme": ["apply", "export", "delete"],
   widget: ["insert", "remove"],
@@ -30,7 +30,44 @@ const ACTIONS_BY_KIND: Readonly<Record<string, readonly CellAction[]>> = {
   // (`collectionStateOf`), drawn in place of the library actions; Remove
   // members is the one action this union carries for it.
   collection: ["remove"],
-};
+} as const satisfies Readonly<Record<string, readonly CellAction[]>>;
+
+/**
+ * The kinds whose card can draw `remove`, derived from the one action table so
+ * a kind that gains the action cannot leave a copy table behind. `uiCopy`'s
+ * removal words are total over this union.
+ */
+export type RemovalKind = {
+  [K in keyof typeof ACTIONS_BY_KIND]: "remove" extends (typeof ACTIONS_BY_KIND)[K][number]
+    ? K
+    : never;
+}[keyof typeof ACTIONS_BY_KIND];
+
+export function isRemovalKind(kind: string): kind is RemovalKind {
+  return (
+    Object.hasOwn(ACTIONS_BY_KIND, kind) &&
+    (
+      ACTIONS_BY_KIND[
+        kind as keyof typeof ACTIONS_BY_KIND
+      ] as readonly CellAction[]
+    ).includes("remove")
+  );
+}
+
+/**
+ * Whether a kind's card is code — a provider, a source or a driver — derived
+ * from the actions only such a kind offers. A second spelling of the set would
+ * let the trust block and the foot disagree about what counts as code.
+ */
+const CODE_ACTIONS: ReadonlySet<CellAction> = new Set([
+  "enable",
+  "configure",
+  "status",
+]);
+
+export function isCodeKind(kind: string): boolean {
+  return actionsFor(kind).some((action) => CODE_ACTIONS.has(action));
+}
 
 const NO_ACTIONS: readonly CellAction[] = [];
 
@@ -39,7 +76,9 @@ const NO_ACTIONS: readonly CellAction[] = [];
  *  the empty set, the rule the facet table follows. */
 export function actionsFor(kind: string): readonly CellAction[] {
   return Object.hasOwn(ACTIONS_BY_KIND, kind)
-    ? (ACTIONS_BY_KIND[kind] as readonly CellAction[])
+    ? ((ACTIONS_BY_KIND as Readonly<Record<string, readonly CellAction[]>>)[
+        kind
+      ] ?? NO_ACTIONS)
     : NO_ACTIONS;
 }
 
@@ -80,8 +119,9 @@ export function collectionsOf(
  * after the host accepts it. **Export reads the stored theme and writes the
  * package the format documents**, so the region owns the download and this map
  * has no disabled action left. The kinds' wider actions are live: each is
- * reported through the same callback, and a surface that has not taken one up
- * yet still reports the press rather than drawing a dead control.
+ * reported through the same callback, and a per-type page whose handler arrives
+ * with the install wiring reports the press as a visible notice
+ * (`uiCopy.library.actionPending`) rather than drawing a dead control.
  */
 export const CELL_ACTION_REASONS: Readonly<
   Record<CellAction, string | undefined>

@@ -1,5 +1,4 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import type { InstalledExtension } from "@yunari/extension-api";
 import type {
   CatalogueOrigin,
   CollectionPlan,
@@ -7,7 +6,8 @@ import type {
 } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useState } from "react";
-import { collectionStateOf } from "../library-mode/cards.js";
+import { collectionStateOf, type StoreCard } from "../library-mode/cards.js";
+import type { ExtensionRow } from "../library-mode/sources.js";
 import { uiCopy } from "../ui-copy.js";
 import { collectionsOf } from "./cell-actions.js";
 import { readCollectionPlan } from "./collection-plan.js";
@@ -67,8 +67,13 @@ export function ItemModal(props: {
    *  item. */
   readonly catalogue?: readonly StoreItem[];
   /** This PC's installed extensions. A code member's trust block reads what is
-   *  actually installed, not what a package would ask for. */
-  readonly extensions?: readonly InstalledExtension[];
+   *  actually installed, not what a package would ask for. Rows carry the
+   *  catalogue id an installed copy recorded, which is how an online plugin's
+   *  listing finds its installed row. */
+  readonly extensions?: readonly ExtensionRow[];
+  /** The extension listing's read failed. Absence from a listing that answered
+   *  and a listing that never answered are different facts. */
+  readonly extensionsFailure?: { readonly onRetry: () => void } | undefined;
   /** This PC's origin register, for a collection's installed count. */
   readonly origins?: readonly CatalogueOrigin[];
   /** The collection plan read. The modal calls it when it opens, never while a
@@ -86,17 +91,19 @@ export function ItemModal(props: {
   readonly onClose: () => void;
   /** The one callback the cell's four actions travel through. The modal draws
    *  the same four, so it reports them the same way rather than owning a second
-   *  answer to "what does this action mean". */
-  readonly onAction: (action: CellAction, id: string) => void;
+   *  answer to "what does this action mean". The card names the listing and,
+   *  where one opened it, the member the press acts on. */
+  readonly onAction: (action: CellAction, card: StoreCard) => void;
   /** The online half's install press, owned by the region because the re-listing
    *  it causes is the listing's fact rather than any surface's. */
   readonly install: InstallControl;
   /** The library half's submission, owned by the region for the same reason:
    *  the sign-in outlives the press that started it. */
   readonly submit: SubmitControl;
-  /** Opens another item's modal — the region's own open state, which is what
-   *  moves the surface from a remix to the parent it credits. */
-  readonly onOpenItem?: (id: string) => void;
+  /** Opens another item's card — the region's own open state, which is what
+   *  moves the surface from a remix to the parent it credits or from an item to
+   *  a collection that includes it. */
+  readonly onOpenItem?: (card: StoreCard) => void;
   /** The parent the listing resolved for this item's credit, when it holds
    *  one. A resolved `StoreItem`, never an id. */
   readonly remixParent?: StoreItem;
@@ -109,6 +116,9 @@ export function ItemModal(props: {
    *  author's listing; this surface only reports the press. */
   readonly onUnpublish?: (id: string) => void;
   readonly onRepublish?: (id: string) => void;
+  /** What the surface said about the last command it could not run. The
+   *  listing's notice sits behind the modal, so the modal carries it too. */
+  readonly actionNotice?: string | undefined;
 }): React.JSX.Element {
   const { item, onClose, onAction, install, submit } = props;
   const kind = props.member?.kind ?? item.kind;
@@ -116,6 +126,9 @@ export function ItemModal(props: {
   const [plan, setPlan] = useState<DetailPlanState | undefined>(
     kind === "collection" ? { status: "loading" } : undefined,
   );
+  /** A failed plan is retryable: changing this re-runs the read without
+   *  reopening the modal. */
+  const [planAttempt, setPlanAttempt] = useState(0);
   // **The plan is read when this surface opens**, which is the only moment a
   // collection's detail exists; a grid render never mounts the modal, so it
   // never pays for a read it cannot show.
@@ -137,19 +150,30 @@ export function ItemModal(props: {
     return () => {
       live = false;
     };
-  }, [kind, item, readPlan]);
+  }, [kind, item, readPlan, planAttempt]);
   const collections = collectionsOf(
     props.catalogue ?? [],
     item.origin?.catalogueId ?? item.id,
   );
+  /** **An installed catalogue copy is keyed by its plugin key, not by the
+   *  catalogue id the listing shows**: the row records the catalogue id it was
+   *  installed from in `origin`, so the join reads that recorded identity on
+   *  both sides. */
+  const pluginIdentity = item.origin?.catalogueId ?? item.id;
   const extension = props.extensions?.find(
-    (candidate) => candidate.key === item.id,
+    (candidate) =>
+      (candidate.origin?.catalogueId ?? candidate.key) === pluginIdentity,
   );
   const collectionState =
     kind === "collection" && props.origins !== undefined
       ? collectionStateOf(item, props.origins)
       : undefined;
   const collectionStateRead = props.origins !== undefined;
+  const card: StoreCard = {
+    key: item.id,
+    listing: item,
+    member: props.member,
+  };
   // The one command a state allows, only where the region wired it.
   const authorAction =
     item.status === "published" && props.onUnpublish !== undefined
@@ -245,12 +269,15 @@ export function ItemModal(props: {
               remixParent={props.remixParent}
               onOpenItem={props.onOpenItem}
               plan={plan}
+              onRetryPlan={() => setPlanAttempt((current) => current + 1)}
               extension={extension}
+              trustFailure={props.extensionsFailure}
               collections={collections}
               onOpenSettings={props.onOpenSettings}
             />
             <PanelFoot
               item={item}
+              card={card}
               kind={kind}
               collectionState={collectionState}
               collectionStateRead={collectionStateRead}
@@ -259,6 +286,7 @@ export function ItemModal(props: {
               onAction={onAction}
               authorAction={authorAction}
               authorPress={authorPress}
+              notice={props.actionNotice}
               {...(props.assign === undefined ? {} : { assign: props.assign })}
             />
           </span>

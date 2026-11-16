@@ -9,17 +9,25 @@ import {
   type GridDensityLevel,
 } from "../editor-shell/grid-density.js";
 import { Glyph } from "../editor-shell/icons.js";
+import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
 import type { InstallControl } from "../store-mode/install-item.js";
 import { withInstalledVersions } from "../store-mode/install-state.js";
-import type { StoreItem } from "../store-mode/local-source.js";
+import { actionLabel } from "../store-mode/item-foot.js";
+import { ItemModal } from "../store-mode/item-modal.js";
+import {
+  type CellAction,
+  type StoreItem,
+  settledTags,
+} from "../store-mode/local-source.js";
 import { Empty, Failure, StoreRegion } from "../store-mode/region.js";
+import type { SubmitControl } from "../store-mode/use-submit.js";
 import {
   createThemeLibraryClient,
   type ThemeLibraryClient,
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import { collectionStateOf } from "./cards.js";
+import { collectionStateOf, type StoreCard } from "./cards.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
 import { readOrigins } from "./origins.js";
 import {
@@ -83,6 +91,14 @@ export function LibraryStateFilter(props: {
     />
   );
 }
+
+/** The pages whose cards can be code, so their detail's trust block reads the
+ *  installed extension listing. A page not named here draws no code kind. */
+const CODE_PAGES: ReadonlySet<LibraryPage> = new Set([
+  "sensor-providers",
+  "asset-sources",
+  "panel-drivers",
+]);
 
 /** The Sensor providers page's two member kinds, in its sub-filter's order. */
 const SENSOR_KINDS = ["sensor-provider", "data-source"] as const;
@@ -325,6 +341,9 @@ export function LibraryRegion(props: {
                 state={props.state}
                 clients={clients}
                 onStatus={props.onStatus}
+                {...(props.onOpenSettings === undefined
+                  ? {}
+                  : { onOpenSettings: props.onOpenSettings })}
               />
             )}
           </Tabs.Panel>
@@ -341,6 +360,7 @@ function PageListing(props: {
   readonly state: LibraryState;
   readonly clients: LibraryClients;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
 }): React.JSX.Element {
   const [density] = useState<GridDensityLevel>(
     () =>
@@ -372,8 +392,21 @@ function PageListing(props: {
     readonly CatalogueOrigin[] | undefined
   >(undefined);
   const [originsFailed, setOriginsFailed] = useState(false);
+  /** The installed extension rows a code member's trust block reads. Read only
+   *  on a page that browses code, for the same reason the register is. */
+  const [extensions, setExtensions] = useState<
+    readonly ExtensionRow[] | undefined
+  >(undefined);
+  const [extensionsFailed, setExtensionsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const readsOrigins = sources.catalogue.memberKind === "collection";
+  const readsExtensions = CODE_PAGES.has(props.page);
+  /** The card whose modal is open. The page owns it because opening a card is a
+   *  reading of the listing, not of the cell that drew it. */
+  const [openCard, setOpenCard] = useState<StoreCard | undefined>(undefined);
+  /** The last cell command this page cannot run yet. Drawn beside the listing
+   *  rather than leaving the press silent. */
+  const [notice, setNotice] = useState<string | undefined>(undefined);
   /** The pack cards this page has open. The page owns it because opening one is
    *  a reading of the listing, not of the cell that draws it. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -382,6 +415,8 @@ function PageListing(props: {
 
   useEffect(() => {
     setExpanded(new Set());
+    setOpenCard(undefined);
+    setNotice(undefined);
   }, [props.page]);
 
   useEffect(() => {
@@ -392,6 +427,8 @@ function PageListing(props: {
     setLibraryFailed(false);
     setOrigins(undefined);
     setOriginsFailed(false);
+    setExtensions(undefined);
+    setExtensionsFailed(false);
     sources.catalogue.list().then(
       (rows) => {
         if (live) setCatalogue(rows);
@@ -418,10 +455,20 @@ function PageListing(props: {
         },
       );
     }
+    if (readsExtensions) {
+      props.clients.extensions().then(
+        (rows) => {
+          if (live) setExtensions(rows);
+        },
+        () => {
+          if (live) setExtensionsFailed(true);
+        },
+      );
+    }
     return () => {
       live = false;
     };
-  }, [sources, attempt, readsOrigins]);
+  }, [sources, attempt, readsOrigins, readsExtensions, props.clients]);
 
   const rows = useMemo(
     () => rowsFor(catalogue ?? [], library ?? [], props.state, origins),
@@ -452,7 +499,8 @@ function PageListing(props: {
   }, [onStatus, count]);
 
   // ponytail: navigation and the state filter are this task's; the cell's
-  // actions and the install press land in Tasks 9–11.
+  // actions and the install press land in Tasks 9–11. Every press still names
+  // itself beside the listing, so a control without a handler is not silent.
   const install = useMemo<InstallControl>(
     () => ({
       onInstall: () => undefined,
@@ -464,6 +512,26 @@ function PageListing(props: {
     }),
     [],
   );
+  const submit = useMemo<SubmitControl>(
+    () => ({
+      onSubmit: () => undefined,
+      itemId: undefined,
+      state: "idle",
+      inFlight: false,
+      url: undefined,
+      version: undefined,
+      refusal: undefined,
+      status: undefined,
+    }),
+    [],
+  );
+  const onAction = (action: CellAction, card: StoreCard): void => {
+    setNotice(
+      uiCopy.library.actionPending(
+        actionLabel(action, card.member?.kind ?? card.listing.kind),
+      ),
+    );
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -505,6 +573,21 @@ function PageListing(props: {
             onRetry={() => setAttempt((current) => current + 1)}
           />
         ) : null}
+        {extensionsFailed ? (
+          <Failure
+            message={uiCopy.store.detail.trust.unreadable}
+            onRetry={() => setAttempt((current) => current + 1)}
+          />
+        ) : null}
+        {notice === undefined ? null : (
+          <p
+            data-yunari-library-action-notice=""
+            role="status"
+            className="text-xs text-warn"
+          >
+            {notice}
+          </p>
+        )}
         {visible.length > 0 ? (
           <Gallery
             items={visible.map((row) => row.item)}
@@ -519,12 +602,8 @@ function PageListing(props: {
                 return next;
               })
             }
-            onAction={(action) => {
-              // Only "open" has a route in this task; the rest are Task 10's.
-              // No per-type page has a document of its own to open yet.
-              void action;
-            }}
-            onOpenItem={() => undefined}
+            onAction={onAction}
+            onOpenItem={setOpenCard}
             install={install}
           />
         ) : answered && !catalogueFailed && !libraryFailed ? (
@@ -535,6 +614,38 @@ function PageListing(props: {
             />
           </div>
         ) : null}
+        {openCard === undefined ? null : (
+          <ItemModal
+            item={openCard.listing}
+            {...(openCard.member === undefined
+              ? {}
+              : { member: openCard.member })}
+            catalogue={catalogue ?? []}
+            {...(extensions === undefined ? {} : { extensions })}
+            {...(extensionsFailed
+              ? {
+                  extensionsFailure: {
+                    onRetry: () => setAttempt((current) => current + 1),
+                  },
+                }
+              : {})}
+            {...(origins === undefined ? {} : { origins })}
+            readPlan={readCollectionPlan}
+            vocabulary={settledTags(
+              [...(catalogue ?? []), ...(library ?? [])],
+              openCard.listing,
+            )}
+            onClose={() => setOpenCard(undefined)}
+            onAction={onAction}
+            actionNotice={notice}
+            install={install}
+            submit={submit}
+            onOpenItem={setOpenCard}
+            {...(props.onOpenSettings === undefined
+              ? {}
+              : { onOpenSettings: props.onOpenSettings })}
+          />
+        )}
       </div>
     </div>
   );

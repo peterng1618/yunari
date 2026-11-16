@@ -19,6 +19,7 @@ import {
 import { BUILTIN_PATH_PRESETS, type VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
+import type { RemovalKind } from "./store-mode/cell-actions.js";
 import type { InstallState } from "./store-mode/install-state.js";
 import type { CellAction, ThemeAction } from "./store-mode/local-source.js";
 
@@ -1534,6 +1535,9 @@ export const uiCopy = {
          *  an empty trust block. */
         unavailable:
           "This item's trust details are not on this PC's extension listing.",
+        /** The extension listing's read failed, which is not the same fact as
+         *  a plugin the listing did not name. The retry sits beside it. */
+        unreadable: "This PC's extension listing could not be read.",
         /** The link into the one surface where consent and provider order
          *  change. */
         settings: "Manage extensions in Settings",
@@ -1548,6 +1552,13 @@ export const uiCopy = {
         configure: "Configure",
         status: "Device status",
       } satisfies Record<Exclude<CellAction, ThemeAction | "remove">, string>,
+      /** A shared action's word where the kind makes it more specific than the
+       *  table above: a widget inserts into the canvas, and a panel driver's
+       *  assign chooses a display rather than a theme. */
+      kindActions: {
+        widget: { insert: "Insert in canvas" },
+        "panel-driver": { assign: "Assign display" },
+      } satisfies Readonly<Record<string, Partial<Record<CellAction, string>>>>,
       remove: {
         widget: "Remove pack",
         shape: "Remove pack",
@@ -1559,8 +1570,7 @@ export const uiCopy = {
         "panel-driver": "Remove plugin",
         plugin: "Remove plugin",
         collection: "Remove members",
-        fallback: "Remove",
-      } as Readonly<Record<string, string>>,
+      } satisfies Record<RemovalKind, string>,
       /** A collection's install state is count over its includes; a register
        *  that has not answered is stated rather than read as "not installed". */
       collectionStateUnavailable:
@@ -1786,6 +1796,11 @@ export const uiCopy = {
      *  instead (`uiCopy.store.unreadable`), and never draws this. */
     empty: "Nothing here yet.",
     emptyHint: "Install an item from the store, or publish your own.",
+    /** A per-type page's cell actions are drawn before their handlers land.
+     *  The press is reported here rather than leaving a dead control; the
+     *  label is the pressed command's own word. */
+    actionPending: (label: string): string =>
+      `${label} is not available on this page yet.`,
     /** My submissions until its page is built. It names that absence rather
      *  than "no submissions", which the dashboard grid's Mine half disproves. */
     submissionsPending: "My submissions is not available yet.",

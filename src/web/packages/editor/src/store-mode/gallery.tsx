@@ -116,10 +116,10 @@ export function Gallery(props: {
   /** The viewer's density level. The header's slider owns it; the grid only
    *  reads it, so the control and the packing cannot disagree. */
   readonly density: GridDensityLevel;
-  readonly onAction: (action: CellAction, id: string) => void;
+  readonly onAction: (action: CellAction, card: StoreCard) => void;
   /** Opens one item's own surface — the modal — which is the cell's own
    *  gesture rather than one of its four actions. */
-  readonly onOpenItem: (id: string) => void;
+  readonly onOpenItem: (card: StoreCard) => void;
   /** The online half's install press, which the region owns because the
    *  re-listing it causes is the listing's fact rather than a cell's. */
   readonly install: InstallControl;
@@ -280,8 +280,8 @@ function Cell(props: {
    *  state are read from these records; absent until the register answers,
    *  which leaves its count and action unstated rather than fabricated. */
   readonly origins: readonly CatalogueOrigin[] | undefined;
-  readonly onAction: (action: CellAction, id: string) => void;
-  readonly onOpenItem: (id: string) => void;
+  readonly onAction: (action: CellAction, card: StoreCard) => void;
+  readonly onOpenItem: (card: StoreCard) => void;
   readonly install: InstallControl;
   readonly submit?: SubmitControl | undefined;
 }): React.JSX.Element {
@@ -373,7 +373,7 @@ function Cell(props: {
       <button
         type="button"
         data-yunari-store-cell-surface=""
-        onClick={() => onOpenItem(item.id)}
+        onClick={() => onOpenItem(card)}
         className="block w-full"
       >
         <Picture item={item} ratio={props.ratio} />
@@ -386,7 +386,7 @@ function Cell(props: {
         <button
           type="button"
           data-yunari-store-cell-name-press=""
-          onClick={() => onOpenItem(item.id)}
+          onClick={() => onOpenItem(card)}
           className="min-w-0 flex-1 text-left"
         >
           <span
@@ -424,7 +424,7 @@ function Cell(props: {
                         : { describedById: `${controlId}-reason` })}
                       destructive={action === "delete"}
                       data={{ "data-yunari-store-cell-action": action }}
-                      onClick={() => onAction(action, item.id)}
+                      onClick={() => onAction(action, card)}
                     >
                       <Glyph icon={CELL_ACTION_GLYPHS[action]} size={14} />
                     </ControlIconButton>

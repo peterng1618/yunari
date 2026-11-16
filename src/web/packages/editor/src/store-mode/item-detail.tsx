@@ -28,18 +28,6 @@ interface TrustEntry {
   readonly devices: readonly string[];
 }
 
-/** The member kinds whose item is code, so its detail must say what it may do. */
-const CODE_KINDS: ReadonlySet<string> = new Set([
-  "sensor-provider",
-  "data-source",
-  "asset-source",
-  "panel-driver",
-]);
-
-export function isCodeKind(kind: string): boolean {
-  return CODE_KINDS.has(kind);
-}
-
 /** One installed plugin's trust facts, as the extension listing serves them. */
 export function extensionTrustOf(extension: InstalledExtension): TrustEntry {
   return {
@@ -185,6 +173,7 @@ export function memberRowsOf(
  *  two announcements of one fact. */
 export function PlanStateNote(props: {
   readonly plan: DetailPlanState | undefined;
+  readonly onRetry: (() => void) | undefined;
 }): React.JSX.Element | null {
   if (props.plan === undefined || props.plan.status === "ready") return null;
   return props.plan.status === "loading" ? (
@@ -195,8 +184,21 @@ export function PlanStateNote(props: {
       {uiCopy.store.detail.plan.loading}
     </span>
   ) : (
-    <span data-yunari-store-detail-plan="failed" className="text-xs text-warn">
+    <span
+      data-yunari-store-detail-plan="failed"
+      className="flex flex-col items-start gap-[var(--space-4)] text-xs text-warn"
+    >
       {uiCopy.store.detail.plan.failed(props.plan.message)}
+      {props.onRetry === undefined ? null : (
+        <button
+          type="button"
+          data-yunari-store-detail-plan-retry=""
+          onClick={props.onRetry}
+          className="text-xs text-accent underline hover:text-text"
+        >
+          {uiCopy.store.retry}
+        </button>
+      )}
     </span>
   );
 }

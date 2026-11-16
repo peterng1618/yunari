@@ -28,6 +28,8 @@ import {
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import type { StoreCard } from "../library-mode/cards.js";
+import type { ExtensionRow } from "../library-mode/sources.js";
 import { uiCopy } from "../ui-copy.js";
 import type { InstallControl } from "./install-item.js";
 import { DARK_GROUND, type FixtureTheme, fixtureItem } from "./item-fixture.js";
@@ -1028,7 +1030,7 @@ it("credits a remix's parent and opens it when the listing holds it", async () =
       onAction={() => {}}
       install={NO_INSTALL}
       submit={NO_SUBMIT}
-      onOpenItem={(id) => opened.push(id)}
+      onOpenItem={(card) => opened.push(card.listing.id)}
       remixParent={fixtureItem({
         id: REMIX_PARENT_ID,
         name: REMIX.name,
@@ -1407,11 +1409,13 @@ function kindItem(kind: string, overrides: Partial<StoreItem> = {}): StoreItem {
 interface DetailOptions {
   readonly member?: MemberRecord;
   readonly catalogue?: readonly StoreItem[];
-  readonly extensions?: readonly InstalledExtension[];
+  readonly extensions?: readonly ExtensionRow[];
+  readonly extensionsFailure?: { readonly onRetry: () => void };
   readonly origins?: readonly CatalogueOrigin[];
   readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
   readonly onOpenSettings?: (page: "extensions") => void;
-  readonly onAction?: (action: CellAction, id: string) => void;
+  readonly onOpenItem?: (card: StoreCard) => void;
+  readonly onAction?: (action: CellAction, card: StoreCard) => void;
 }
 
 /** The item modal over a non-theme item, with the facts each section reads. */
@@ -1861,4 +1865,173 @@ it("states a collection plan's loading and failure instead of an empty trust lis
     document.body.querySelector("[data-yunari-store-detail-capability]"),
     "a failed plan fabricated a capability list",
   ).toBeNull();
+});
+
+/**
+ * **An installed catalogue copy is joined by the id it recorded, not by its
+ * plugin key.** The extension listing keys the row by `publisher/name` and
+ * records the catalogue id it was installed from; the catalogue listing shows
+ * that catalogue id. A key-only join would draw "not on this PC" for a plugin
+ * that is installed.
+ */
+it("joins a catalogue plugin listing to the installed row it came from", async () => {
+  const installed: ExtensionRow = {
+    ...EXTENSION,
+    origin: {
+      kind: "plugin",
+      catalogueId: "plugin-uuid",
+      version: EXTENSION.version,
+      installedAt: "2026-10-14T00:00:00.000Z",
+    },
+  };
+  await mount(
+    detailModal(
+      kindItem("plugin", {
+        id: "plugin-uuid",
+        name: EXTENSION.name,
+        members: [{ id: "hwinfo", kind: "sensor-provider", name: "HWiNFO" }],
+      }),
+      { extensions: [installed] },
+    ),
+  );
+
+  const trust = detailNode(
+    "[data-yunari-store-detail-trust]",
+    "installed catalogue plugin trust block",
+  );
+  expect(
+    trust.textContent,
+    "the catalogue plugin did not find the row it was installed from",
+  ).toContain(EXTENSION.key);
+  expect(trust.textContent, "the execution profile is missing").toContain(
+    EXTENSION.execution,
+  );
+});
+
+/**
+ * **A failed plan is retried from the detail that stated it.** The retry reads
+ * the same collection plan again; a surface that only said "failed" would leave
+ * the person closing and reopening the modal to try again.
+ */
+it("retries a failed collection plan", async () => {
+  let reads = 0;
+  const readPlan = async (): Promise<CollectionPlan> => {
+    reads += 1;
+    if (reads === 1) throw new Error("The host answered 500.");
+    return PLAN;
+  };
+  await mount(detailModal(collectionItem(), { readPlan }));
+  await settle();
+  detailNode('[data-yunari-store-detail-plan="failed"]', "plan failure");
+
+  await act(async () =>
+    detailNode("[data-yunari-store-detail-plan-retry]", "plan retry").click(),
+  );
+  await settle();
+
+  expect(reads, "the retry did not read the plan again").toBe(2);
+  expect(
+    document.body.querySelector('[data-yunari-store-detail-plan="failed"]'),
+    "the retried plan still reads as failed",
+  ).toBeNull();
+  detailNode("[data-yunari-store-detail-trust]", "retried collection trust");
+});
+
+/**
+ * **A failed extension listing is not a plugin that is absent.** The block
+ * states the read failed and offers the read again, and the two states carry
+ * different markers so neither can stand in for the other.
+ */
+it("states an unreadable extension listing and retries it", async () => {
+  const retried: number[] = [];
+  await mount(
+    detailModal(pluginItem(), {
+      member: SENSOR_PROVIDER,
+      extensionsFailure: { onRetry: () => retried.push(1) },
+    }),
+  );
+
+  const failure = detailNode(
+    '[data-yunari-store-detail-trust-state="failed"]',
+    "extension listing failure",
+  );
+  expect(
+    failure.textContent,
+    "a failed extension read is not stated",
+  ).toContain(uiCopy.store.detail.trust.unreadable);
+  expect(
+    document.body.querySelector("[data-yunari-store-detail-trust]"),
+    "a failed extension read fabricated a trust block",
+  ).toBeNull();
+
+  await act(async () =>
+    detailNode(
+      "[data-yunari-store-detail-trust-retry]",
+      "extension listing retry",
+    ).click(),
+  );
+  expect(retried, "the failure's retry did not report the press").toEqual([1]);
+});
+
+/**
+ * **A shared action carries the kind's own word where the kind makes it more
+ * specific**: a widget inserts into the canvas, and a panel driver's assign
+ * chooses a display. The default words stay the table's.
+ */
+it("names a shared action by the kind that offers it", async () => {
+  await mount(detailModal(widgetPack(), { member: WIDGET }));
+  expect(
+    detailNode(
+      '[data-yunari-store-item-action="insert"]',
+      "widget Insert action",
+    ).textContent?.trim(),
+    "a widget's insert does not say where it inserts",
+  ).toBe("Insert in canvas");
+
+  const driver = kindItem("plugin", {
+    id: "acme/panel",
+    name: "Panel bridge",
+    members: [PANEL_DRIVER],
+  });
+  await mount(detailModal(driver, { member: PANEL_DRIVER }));
+  expect(
+    detailNode(
+      '[data-yunari-store-item-action="assign"]',
+      "panel driver Assign action",
+    ).textContent?.trim(),
+    "a panel driver's assign does not say it chooses a display",
+  ).toBe("Assign display");
+});
+
+/**
+ * **A member action names the card it acts on.** The press carries the listing
+ * and the member, so Insert, Configure, Enable, Device status and Remove can
+ * name the member rather than guessing it from the package.
+ */
+it("reports the listing and member a foot action acts on", async () => {
+  const pressed: { action: CellAction; card: StoreCard }[] = [];
+  await mount(
+    detailModal(widgetPack(), {
+      member: WIDGET,
+      onAction: (action, card) => pressed.push({ action, card }),
+    }),
+  );
+
+  await act(async () =>
+    detailNode(
+      '[data-yunari-store-item-action="insert"]',
+      "widget Insert action",
+    ).click(),
+  );
+
+  expect(pressed, "the Insert press did not report").toHaveLength(1);
+  expect(pressed[0]?.action, "the press reports another action").toBe("insert");
+  expect(
+    pressed[0]?.card.listing.id,
+    "the press does not name the package",
+  ).toBe("pack-uuid");
+  expect(
+    pressed[0]?.card.member,
+    "the press does not name the member it acts on",
+  ).toBe(WIDGET);
 });

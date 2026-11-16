@@ -14,9 +14,13 @@ import {
   PENCIL_GLYPH,
   SETTINGS_GLYPH,
 } from "../editor-shell/icons.js";
-import type { CollectionState } from "../library-mode/cards.js";
+import type { CollectionState, StoreCard } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
-import { actionsFor, CELL_ACTION_REASONS } from "./cell-actions.js";
+import {
+  actionsFor,
+  CELL_ACTION_REASONS,
+  isRemovalKind,
+} from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
 import { type InstallState, installStateOf } from "./install-state.js";
 import type { CellAction, StoreItem } from "./local-source.js";
@@ -50,10 +54,20 @@ const DESTRUCTIVE_ACTIONS: ReadonlySet<CellAction> = new Set([
   "remove",
 ]);
 
-/** One action's word for the kind that offers it. The four theme commands keep
- *  the panel's short words; `remove` is per kind because each kind names what
- *  leaves; the wider kinds' words are the detail table's. */
-function actionLabel(action: CellAction, kind: string): string {
+/** One action's word for the kind that offers it. A kind-specific word wins
+ *  where the kind makes the shared action more specific; `remove` is per kind
+ *  because each kind names what leaves; the four theme commands keep the
+ *  panel's short words. */
+export function actionLabel(action: CellAction, kind: string): string {
+  const perKind = (
+    uiCopy.store.detail.kindActions as Readonly<
+      Record<string, Partial<Record<CellAction, string>>>
+    >
+  )[kind]?.[action];
+  if (perKind !== undefined) return perKind;
+  if (action === "remove" && isRemovalKind(kind)) {
+    return uiCopy.store.detail.remove[kind];
+  }
   switch (action) {
     case "open":
     case "assign":
@@ -61,11 +75,9 @@ function actionLabel(action: CellAction, kind: string): string {
     case "delete":
       return uiCopy.store.item.actions[action];
     case "remove":
-      return (
-        uiCopy.store.detail.remove[kind] ??
-        uiCopy.store.detail.remove["fallback"] ??
-        "Remove"
-      );
+      // Unreachable: only a removal kind offers `remove`, and the guard above
+      // answers every one of them.
+      return uiCopy.store.detail.remove.plugin;
     default:
       return uiCopy.store.detail.actions[action];
   }
@@ -220,10 +232,11 @@ function SubmitFooter(props: {
  */
 function CollectionFooter(props: {
   readonly item: StoreItem;
+  readonly card: StoreCard;
   readonly state: CollectionState | undefined;
   readonly stateRead: boolean;
   readonly install: InstallControl;
-  readonly onAction: (action: CellAction, id: string) => void;
+  readonly onAction: (action: CellAction, card: StoreCard) => void;
 }): React.JSX.Element {
   const { item, state, install } = props;
   const busy = install.installingIds.has(item.id);
@@ -288,7 +301,7 @@ function CollectionFooter(props: {
         icon={ACTION_GLYPHS.remove}
         label={actionLabel("remove", "collection")}
         destructive
-        onClick={() => props.onAction("remove", item.id)}
+        onClick={() => props.onAction("remove", props.card)}
       />
     </span>
   );
@@ -304,16 +317,20 @@ function CollectionFooter(props: {
  *  package's install reading when the package has one. */
 export function PanelFoot(props: {
   readonly item: StoreItem;
+  readonly card: StoreCard;
   readonly kind: string;
   readonly collectionState: CollectionState | undefined;
   readonly collectionStateRead: boolean;
   readonly install: InstallControl;
   readonly submit: SubmitControl;
-  readonly onAction: (action: CellAction, id: string) => void;
+  readonly onAction: (action: CellAction, card: StoreCard) => void;
   readonly authorAction: "unpublish" | "republish" | undefined;
   readonly authorPress: ((id: string) => void) | undefined;
   /** The inline display choice, above the actions that opened it. */
   readonly assign?: React.ReactNode;
+  /** What the surface said about the last action it could not run. Drawn here
+   *  because the modal covers the listing's own notice. */
+  readonly notice?: string | undefined;
 }): React.JSX.Element {
   const { item, kind, install, submit, onAction, authorAction, authorPress } =
     props;
@@ -328,6 +345,15 @@ export function PanelFoot(props: {
   const hasCommands = authorAction !== undefined || showSubmit;
   return (
     <span className="flex flex-none flex-col gap-[var(--space-8)] border-t border-edge px-[var(--space-16)] py-[var(--space-12)]">
+      {props.notice === undefined ? null : (
+        <span
+          data-yunari-store-item-action-notice=""
+          role="status"
+          className="text-xs text-warn"
+        >
+          {props.notice}
+        </span>
+      )}{" "}
       {props.assign === undefined ? null : (
         <span
           data-yunari-store-item-assign=""
@@ -339,6 +365,7 @@ export function PanelFoot(props: {
       {isCollection ? (
         <CollectionFooter
           item={item}
+          card={props.card}
           state={props.collectionState}
           stateRead={props.collectionStateRead}
           install={install}
@@ -385,7 +412,7 @@ export function PanelFoot(props: {
                         {...(reason === undefined
                           ? {}
                           : { describedById: `${controlId}-reason` })}
-                        onClick={() => onAction(action, item.id)}
+                        onClick={() => onAction(action, props.card)}
                       />
                     );
                   })}

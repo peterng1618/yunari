@@ -17,6 +17,7 @@ import {
   type GridDensityLevel,
 } from "../editor-shell/grid-density.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
+import type { StoreCard } from "../library-mode/cards.js";
 import { fileNameFor, serializeThemePackage } from "../persist.js";
 import { downloadBytes } from "../persistence-manager/index.js";
 import {
@@ -913,7 +914,8 @@ export function StoreRegion(props: {
    * recycle bin; the host's trash is recoverable, but the confirmation is the
    * one place the author is told that.
    */
-  const onAction = (action: CellAction, id: string): void => {
+  const onAction = (action: CellAction, card: StoreCard): void => {
+    const id = card.listing.id;
     if (action === "open") {
       props.onOpenTheme?.(id);
       return;
@@ -1073,7 +1075,7 @@ export function StoreRegion(props: {
             items={body.items}
             density={level}
             onAction={onAction}
-            onOpenItem={setOpenId}
+            onOpenItem={(card) => setOpenId(card.listing.id)}
             install={install.control}
             submit={submit.control}
           />
@@ -1157,7 +1159,9 @@ export function StoreRegion(props: {
           onAction={onAction}
           install={install.control}
           submit={submit.control}
-          {...(tab === "online" ? { onOpenItem: setOpenId } : {})}
+          {...(tab === "online"
+            ? { onOpenItem: (card: StoreCard) => setOpenId(card.listing.id) }
+            : {})}
           {...(remixParent === undefined ? {} : { remixParent })}
           {...(inlineAssign
             ? {
