@@ -1,3 +1,4 @@
+import { uiCopy } from "../ui-copy.js";
 import type { CellAction, StoreItem } from "./local-source.js";
 
 /**
@@ -96,44 +97,126 @@ export function collectionsOf(
   itemId: string,
 ): readonly StoreItem[] {
   return items.filter(
-    (item) => item.kind === "collection" && item.includes?.includes(itemId),
+    (item) =>
+      item.kind === "collection" &&
+      item.includes?.some((include) => include.id === itemId) === true,
   );
 }
 
 /**
- * Why a cell's action is drawn disabled, or `undefined` for one a build runs.
+ * The actions a kind can run, because a host route exists for them.
  *
- * The surface gives every cell four actions and the item's footer the same four,
- * so all four stay drawn (R164) — and the one **no task in this plan and no
- * phase owns** is disabled where it is drawn, with its reason, rather than
- * answering a press with nothing. One owner for that fact, because the cell and
- * the footer both draw the four and a second list would be a second answer to
- * "does this action run".
- *
- * It is total over `CellAction`, so an action added to the union fails to compile
- * here rather than arriving silently live. A phase that takes one up moves it out
- * of this map in the same change — and the region's `onAction` with it.
- *
- * **Delete runs through the host's own removal route**, which moves the theme's
- * folder to the recycle bin, so the action is live and the region drops the item
- * after the host accepts it. **Export reads the stored theme and writes the
- * package the format documents**, so the region owns the download and this map
- * has no disabled action left. The kinds' wider actions are live: each is
- * reported through the same callback, and a per-type page whose handler arrives
- * with the install wiring reports the press as a visible notice
- * (`uiCopy.library.actionPending`) rather than drawing a dead control.
+ * **R27: a live control is a wired control.** Every other action a surface draws
+ * is disabled and states why, so no press falls to a "not available yet"
+ * notice. The one owner is here, beside the kind table, because the cell and the
+ * foot must not disagree about what runs.
  */
-export const CELL_ACTION_REASONS: Readonly<
-  Record<CellAction, string | undefined>
+const RUNNABLE_ACTIONS: Readonly<
+  Partial<Record<string, ReadonlySet<CellAction>>>
 > = {
-  open: undefined,
-  assign: undefined,
-  export: undefined,
-  delete: undefined,
-  apply: undefined,
-  insert: undefined,
-  enable: undefined,
-  configure: undefined,
-  status: undefined,
-  remove: undefined,
+  "dashboard-theme": new Set(["open", "assign", "export", "delete"]),
+  // An app theme has no write route: the host serves its bytes and nothing
+  // else, so Apply, Export and Delete stay disabled rather than dead controls.
+  "editor-theme": new Set(),
+  // **A removal is not the kind's alone**: it also needs an installed copy and a
+  // route that names that copy, which `actionDisabledReason` reads from the row.
+  // A single widget has no route of its own — its pack does — so a widget
+  // member's Remove stays disabled rather than deleting the package.
+  widget: new Set(),
+  // A pack's preset row is removed with its pack, never alone.
+  shape: new Set(["remove"]),
+  "sensor-provider": new Set(["remove"]),
+  "data-source": new Set(["remove"]),
+  "asset-source": new Set(["remove"]),
+  "panel-driver": new Set(["remove"]),
+  "widget-pack": new Set(["remove"]),
+  "path-preset-pack": new Set(["remove"]),
+  plugin: new Set(["remove"]),
+  // No bulk removal exists, so a collection's `remove` is disabled; the install
+  // sheet's diff names where each member is removed instead.
+  collection: new Set(),
 };
+
+const NO_RUNNABLE: ReadonlySet<CellAction> = new Set();
+
+/** Whether a host route exists for one action on one kind. */
+export function isActionRunnable(action: CellAction, kind: string): boolean {
+  return (
+    Object.hasOwn(RUNNABLE_ACTIONS, kind) &&
+    (RUNNABLE_ACTIONS[kind] ?? NO_RUNNABLE).has(action)
+  );
+}
+
+/** Whether this row holds a copy a removal route could act on. A catalogue row
+ *  that was never installed has nothing to remove. */
+function holdsACopy(item: StoreItem): boolean {
+  return (
+    item.catalogue === undefined ||
+    item.installedId !== undefined ||
+    item.origin !== undefined
+  );
+}
+
+/** Why a control is drawn disabled, or `undefined` for one that runs. `label`
+ *  is the pressed command's own word, so the reason names the control a person
+ *  is looking at. `item` is the row the press would act on: a removal needs both
+ *  a copy and a route that names it. */
+export function actionDisabledReason(
+  action: CellAction,
+  kind: string,
+  label: string,
+  item: StoreItem,
+): string | undefined {
+  if (action === "remove") {
+    if (kind === "collection") {
+      return uiCopy.store.collectionSheet.update.droppedLead;
+    }
+    const route = removalPath(kind, item.installedId ?? item.id);
+    if (route !== undefined && holdsACopy(item)) return undefined;
+    return uiCopy.library.actionUnavailable(label);
+  }
+  if (isActionRunnable(action, kind)) return undefined;
+  return uiCopy.library.actionUnavailable(label);
+}
+
+/**
+ * The host route that removes one kind's copy, or `undefined` when the kind has
+ * none. **The id is the library copy's**, not the catalogue's, so a joined
+ * catalogue row passes `installedId`. A pack's preset row (`pack:…`) is removed
+ * with its pack, never through the single-preset route.
+ */
+export function removalPath(kind: string, id: string): string | undefined {
+  const encoded = encodeURIComponent(id);
+  if (
+    kind === "plugin" ||
+    kind === "sensor-provider" ||
+    kind === "data-source" ||
+    kind === "asset-source" ||
+    kind === "panel-driver"
+  ) {
+    return `/api/extensions/${encoded}`;
+  }
+  if (kind === "widget-pack") return `/api/widget-packs/${encoded}`;
+  if (kind === "shape") {
+    return id.startsWith("pack:") ? undefined : `/api/path-presets/${encoded}`;
+  }
+  if (kind === "path-preset-pack") {
+    return `/api/path-presets/packs/${encoded}`;
+  }
+  return undefined;
+}
+
+/**
+ * The kinds whose package carries a theme document, classified beside the kind
+ * table rather than inferred from a `defaultFacetsFor` record. Only these draw
+ * the Shape group and the stage's size caption; a widget, plugin or collection
+ * has no artboard, and its default record (a 1×1 square) is not a reading.
+ */
+const THEME_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
+  "dashboard-theme",
+  "editor-theme",
+]);
+
+export function carriesThemeDocument(kind: string): boolean {
+  return THEME_DOCUMENT_KINDS.has(kind);
+}

@@ -21,7 +21,13 @@ export type InstallOutcome =
       /** Present for a collection; absent for a single item. */
       readonly members?: readonly CollectionMemberOutcome[];
     }
-  | { readonly ok: false; readonly message: string }
+  /** `members` is present when a collection failed part-way: the host wrote
+   *  some members and refused others, and the sheet names the refused ones. */
+  | {
+      readonly ok: false;
+      readonly message: string;
+      readonly members?: readonly CollectionMemberOutcome[];
+    }
   /** The host read the package, held the update, and wrote nothing. */
   | { readonly ok: false; readonly held: HeldUpdate };
 
@@ -41,7 +47,13 @@ export interface InstallControl {
   /** The last refusal and the item it names; a refusal for another item is not
    *  drawn beside this one. */
   readonly refusal:
-    | { readonly id: string; readonly message: string }
+    | {
+        readonly id: string;
+        readonly message: string;
+        /** A part-way collection failure's per-member outcomes, so the sheet
+         *  can name what the host did not write. */
+        readonly members?: readonly CollectionMemberOutcome[];
+      }
     | undefined;
   /** The update a press was held for, and the item it names. */
   readonly held: { readonly id: string; readonly held: HeldUpdate } | undefined;
@@ -114,25 +126,45 @@ export async function installItem(
   }
 
   if (!response.ok) {
-    const reason = await response.text().catch(() => "");
-    // A held update is an answer, not a refusal: the body names the plugin and
-    // the growth that held it, and the region draws that as a review notice.
-    try {
-      const body = JSON.parse(reason) as { held?: unknown };
-      if (isHeldUpdate(body.held)) return { ok: false, held: body.held };
-    } catch {
-      // Not the held shape: fall through to the host's own sentence.
+    const text = await response.text().catch(() => "");
+    // The host answers a held update or a part-way collection failure as JSON;
+    // both are answers, not opaque refusals. A plain-text refusal falls back to
+    // its body as the host wrote it.
+    const body = parseObject(text);
+    if (body !== undefined && isHeldUpdate(body["held"])) {
+      return { ok: false, held: body["held"] };
     }
+    const message = body?.["message"];
+    const members = body === undefined ? undefined : membersOf(body["members"]);
     return {
       ok: false,
       message:
-        reason.trim() === ""
-          ? uiCopy.store.install.refused(response.status)
-          : reason,
+        typeof message === "string" && message.trim() !== ""
+          ? message
+          : body !== undefined
+            ? uiCopy.store.install.refused(response.status)
+            : text.trim() === ""
+              ? uiCopy.store.install.refused(response.status)
+              : text,
+      ...(members === undefined ? {} : { members }),
     };
   }
 
   return { ok: true, ...(await membersFrom(response)) };
+}
+
+/** The body as a record, or nothing when it is not JSON or not an object. */
+function parseObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** One row of the install's per-member answer, or nothing when the body is not
@@ -146,20 +178,26 @@ async function membersFrom(response: Response): Promise<{
   // sends none must not turn a successful install into a refusal here.
   const body: unknown = await response.json().catch(() => undefined);
   if (typeof body !== "object" || body === null) return {};
-  const value = (body as Record<string, unknown>)["members"];
-  if (!Array.isArray(value)) return {};
+  const members = membersOf((body as Record<string, unknown>)["members"]);
+  return members === undefined ? {} : { members };
+}
+
+function membersOf(
+  value: unknown,
+): readonly CollectionMemberOutcome[] | undefined {
+  if (!Array.isArray(value)) return undefined;
   const rows: CollectionMemberOutcome[] = [];
   for (const row of value) {
-    if (typeof row !== "object" || row === null) return {};
+    if (typeof row !== "object" || row === null) return undefined;
     const record = row as Record<string, unknown>;
     const id = record["id"];
     const ok = record["ok"];
     const reason = record["reason"];
     if (typeof id !== "string" || id === "" || typeof ok !== "boolean") {
-      return {};
+      return undefined;
     }
-    if (reason !== undefined && typeof reason !== "string") return {};
+    if (reason !== undefined && typeof reason !== "string") return undefined;
     rows.push({ id, ok, ...(reason === undefined ? {} : { reason }) });
   }
-  return { members: rows };
+  return rows;
 }

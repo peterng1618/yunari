@@ -54,6 +54,8 @@ export function catalogueItemOf(entry: CatalogueEntry): StoreItem {
     updatedAt: entry.updatedAt,
     thumbnailUrl: catalogueThumbnailUrl(entry.thumbnail),
     members: entry.members,
+    // The wire carries each include's optional default, so this row and the
+    // install sheet's plan read the same fact about what may be skipped.
     ...(entry.includes === undefined ? {} : { includes: entry.includes }),
     // The index carries no artboard paint, and a catalogue item always has a
     // picture, so there is no ground to fill the cell from.

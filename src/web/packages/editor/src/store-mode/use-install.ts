@@ -1,5 +1,5 @@
 import type { CollectionPlan } from "@yunari/renderer-core";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HeldUpdate } from "../components/held-update.js";
 import {
   type CollectionConsentResult,
@@ -51,10 +51,28 @@ export function useInstall(options: {
   /** The same set for the guard, because a second press in one tick reads the
    *  render before the first press committed; the state alone cannot refuse it. */
   const inFlight = useRef<Set<string>>(new Set());
+  /** Whether the mounting surface still exists: a resolve after the region or
+   *  modal unmounted has no control to redraw, so it writes no state and calls
+   *  no listing callback. */
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   /** The host's own reason for a refused install, and the item it names:
    *  another item's refusal is not drawn beside this one's control. */
   const [refusal, setRefusal] = useState<
-    { readonly id: string; readonly message: string } | undefined
+    | {
+        readonly id: string;
+        readonly message: string;
+        readonly members?: readonly {
+          readonly id: string;
+          readonly ok: boolean;
+        }[];
+      }
+    | undefined
   >(undefined);
   /** What the live region says when a press succeeded: the cell redraws as
    *  *Installed*, which a screen reader cannot see. A refusal outranks it. */
@@ -87,6 +105,7 @@ export function useInstall(options: {
     setHeld(undefined);
     void installItem(item, approveUpdate ? { approveUpdate: true } : undefined)
       .then(async (outcome) => {
+        if (!alive.current) return;
         if (!outcome.ok && "held" in outcome) {
           // Nothing was written: keep the item so its approval press can be
           // sent again, and draw the review notice in the region.
@@ -96,6 +115,7 @@ export function useInstall(options: {
         if (outcome.ok) {
           setInstalled(uiCopy.store.install.installed(item.name));
           const listed = await options.source.list().catch(() => undefined);
+          if (!alive.current) return;
           if (listed !== undefined) {
             options.onListed(listed);
           } else {
@@ -105,13 +125,20 @@ export function useInstall(options: {
             });
           }
         } else {
-          setRefusal({ id: item.id, message: outcome.message });
+          setRefusal({
+            id: item.id,
+            message: outcome.message,
+            ...(outcome.members === undefined
+              ? {}
+              : { members: outcome.members }),
+          });
         }
       })
       // A press that rejects rather than answering — the one path that leaves
       // this hook before `installItem`'s own catch — must still release its
       // control: a busy flag nobody clears disables that cell for the session.
       .catch((error: unknown) => {
+        if (!alive.current) return;
         setRefusal({
           id: item.id,
           message: error instanceof Error ? error.message : String(error),
@@ -119,7 +146,7 @@ export function useInstall(options: {
       })
       .finally(() => {
         inFlight.current.delete(item.id);
-        setInstallingIds(new Set(inFlight.current));
+        if (alive.current) setInstallingIds(new Set(inFlight.current));
       });
   };
 
@@ -161,17 +188,25 @@ export function useInstall(options: {
       consent: options.extensions ?? createExtensionClient(),
     })
       .then(async (outcome) => {
+        if (!alive.current) return;
         if (outcome.kind === "replanned") {
           onPlanReplaced(outcome.plan, outcome.change);
           return;
         }
         if (outcome.kind === "refused") {
-          setRefusal({ id: item.id, message: outcome.message });
+          setRefusal({
+            id: item.id,
+            message: outcome.message,
+            ...(outcome.members === undefined
+              ? {}
+              : { members: outcome.members }),
+          });
           return;
         }
         onInstalled(outcome.consent);
         setInstalled(announce(outcome.consent));
         const listed = await options.source.list().catch(() => undefined);
+        if (!alive.current) return;
         if (listed !== undefined) {
           options.onListed(listed);
         } else {
@@ -182,6 +217,7 @@ export function useInstall(options: {
         }
       })
       .catch((error: unknown) => {
+        if (!alive.current) return;
         setRefusal({
           id: item.id,
           message: error instanceof Error ? error.message : String(error),
@@ -189,7 +225,7 @@ export function useInstall(options: {
       })
       .finally(() => {
         inFlight.current.delete(item.id);
-        setInstallingIds(new Set(inFlight.current));
+        if (alive.current) setInstallingIds(new Set(inFlight.current));
       });
   };
   const onApproveUpdate = (): void => {

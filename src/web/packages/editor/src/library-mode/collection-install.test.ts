@@ -73,7 +73,10 @@ function collectionItem(): StoreItem {
     kind: "collection",
     name: "Ops collection",
     members: [],
-    includes: ["wall-theme", "clock-widget", "hwinfo-plugin"],
+    includes: ["wall-theme", "clock-widget", "hwinfo-plugin"].map((id) => ({
+      id,
+      optional: false,
+    })),
     author: "huyng",
     version: "1.0.0",
     updatedAt: undefined,

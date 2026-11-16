@@ -11,7 +11,10 @@ import { hitTargetClasses } from "./control-well.js";
  *
  * The group is its own label (`aria-label`), because the labels inside are the
  * options. The arrow keys are the primitive's roving focus — one Tab stop for
- * the group — and the chosen label takes `--stage`, never an accent fill.
+ * the group — and the chips divide the well equally (`flex: 1; min-width: 0`),
+ * so a longer label wraps inside its share rather than widening the well. The
+ * chosen label takes the rail slot's selected state — accent ink over the
+ * accent's 14% wash — the same selected paint the header's mode switch uses.
  */
 export function BareSegmented<T extends string>(props: {
   readonly id: string;
@@ -39,7 +42,7 @@ export function BareSegmented<T extends string>(props: {
           key={option.id}
           id={`${props.id}-${option.id}`}
           value={option.id}
-          className={`${hitTargetClasses} min-w-0 flex-none whitespace-nowrap rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted data-[pressed]:text-text data-[pressed]:[background:var(--stage)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
+          className={`${hitTargetClasses} min-w-0 flex-1 rounded-sm px-[var(--space-8)] py-[var(--space-4)] text-sm text-muted data-[pressed]:text-accent data-[pressed]:[background:color-mix(in_srgb,var(--accent)_14%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
         >
           {option.name}
         </Toggle>

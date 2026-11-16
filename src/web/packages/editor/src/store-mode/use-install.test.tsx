@@ -72,7 +72,10 @@ function collectionItem(): StoreItem {
     kind: "collection",
     name: "Ops collection",
     members: [],
-    includes: PLAN.members.map((member) => member.id),
+    includes: PLAN.members.map((member) => ({
+      id: member.id,
+      optional: false,
+    })),
     author: "huyng",
     version: "1.0.0",
     updatedAt: undefined,
@@ -124,6 +127,7 @@ interface HarnessOptions {
   readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
   readonly extensions?: Pick<ExtensionClient, "list" | "grant">;
   readonly onPlanReplaced?: (plan: CollectionPlan) => void;
+  readonly onListed?: () => void;
 }
 
 /** A grant the host accepts, typed the way the client answers. */
@@ -137,7 +141,7 @@ let host: HTMLDivElement | undefined;
 function Harness(props: HarnessOptions): null {
   const install = useInstall({
     source: source(props.list ?? (async () => [])),
-    onListed: () => undefined,
+    onListed: () => props.onListed?.(),
     ...(props.readPlan === undefined ? {} : { readPlan: props.readPlan }),
     ...(props.extensions === undefined ? {} : { extensions: props.extensions }),
   });
@@ -323,4 +327,32 @@ it("replaces a moved plan without posting an install", async () => {
   await act(async () => pressWith(harness, ["wall-theme"]));
   await vi.waitFor(() => expect(replaced).toEqual([fresh]));
   expect(fetch).not.toHaveBeenCalled();
+});
+
+/** **A hook that unmounted has no surface to answer.** A resolve after the
+ *  region or modal is gone must not re-list: the callback belongs to a listing
+ *  nobody is drawing, and the write already happened. */
+it("calls no listing callback after unmount", async () => {
+  let release: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    ),
+  );
+  const listed = vi.fn();
+  await mount({ onListed: listed });
+  await act(async () => control?.onInstall(collectionItem()));
+
+  await unmount();
+  await act(async () => release?.(jsonResponse({ ok: true })));
+  await Promise.resolve();
+
+  expect(
+    listed,
+    "an unmounted hook re-listed the library",
+  ).not.toHaveBeenCalled();
 });

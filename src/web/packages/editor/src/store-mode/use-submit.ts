@@ -52,6 +52,10 @@ const VERSION_LEVELS: readonly VersionLevel[] = [
  */
 export interface SubmitControl {
   readonly onSubmit: (item: StoreItem) => void;
+  /** Returns the flow to idle, so a surface that reopens on another item does
+   *  not draw the previous press's answer. A submission still in flight is left
+   *  alone: its own control must stay busy until it answers. */
+  readonly reset: () => void;
   /** The item every other field belongs to. A surface draws this state only
    *  when the id is the item it is showing: another theme's window or refusal is
    *  not this one's answer. */
@@ -525,9 +529,25 @@ export function useSubmit(options: {
           : "";
   const inFlight = state === "submitting" || state === "authorising";
 
+  /** A reopened surface starts idle. The press's own state is the flow's, so a
+   *  reset that meets a running submission returns without clearing it. */
+  const reset = (): void => {
+    if (busy.current) return;
+    clearTimer();
+    closeWindow();
+    setItemId(undefined);
+    setItemLabel(undefined);
+    setState("idle");
+    setUrl(undefined);
+    setVersion(undefined);
+    setRefusal(undefined);
+    setStatus(undefined);
+  };
+
   return {
     control: {
       onSubmit,
+      reset,
       itemId: flow === "theme" ? itemId : undefined,
       state: flow === "theme" ? state : "idle",
       inFlight,

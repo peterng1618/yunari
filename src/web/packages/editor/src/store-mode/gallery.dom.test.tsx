@@ -194,6 +194,7 @@ const NO_INSTALL: InstallControl = {
  *  down: idle, and belonging to no item. */
 const NO_SUBMIT: SubmitControl = {
   onSubmit: () => undefined,
+  reset: () => undefined,
   itemId: undefined,
   state: "idle",
   inFlight: false,
@@ -1297,7 +1298,7 @@ function collectionItem(overrides: Partial<StoreItem> = {}): StoreItem {
     kind: "collection",
     name: "Ops collection",
     members: [],
-    includes: [...INCLUDED_IDS],
+    includes: INCLUDED_IDS.map((id) => ({ id, optional: false })),
     version: "1.2.0",
     catalogue: catalogue({ id: "ops-collection" }),
     ...overrides,

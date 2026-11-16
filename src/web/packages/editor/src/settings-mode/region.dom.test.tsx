@@ -28,6 +28,7 @@ import type {
 import { act, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import type { LibraryPage } from "../library-mode/sources.js";
 import { fixtureEntry } from "../store-mode/item-fixture.js";
 import {
   type ThemedDisplay,
@@ -558,6 +559,8 @@ async function mountHost(
   /** The page the region opens on. A page that is not Displays is the one its
    *  panels are visible on, so a test that touches a control there passes it. */
   page: SettingsPage = "displays",
+  /** The Library door, for the page whose cross-link moves the shell. */
+  onOpenLibrary?: (page: LibraryPage) => void,
 ): Promise<{
   readonly container: HTMLDivElement;
   readonly wrote: Written;
@@ -584,6 +587,7 @@ async function mountHost(
       overrides={{}}
       onOverrides={() => {}}
       releaseVersion={undefined}
+      {...(onOpenLibrary === undefined ? {} : { onOpenLibrary })}
     />,
   );
   return {
@@ -2962,4 +2966,30 @@ it("draws a panel display's connection and asks the host to reconnect it", async
   );
   await act(async () => reconnect.click());
   expect(wrote.reconnects).toEqual(["panel-1"]);
+});
+
+/**
+ * **Appearance's app-themes link reaches the Library's App themes page.** The
+ * page owns no catalogue of its own, so the link is the only route there; this
+ * mounts the region — not the page — so the conditional spread that forwards
+ * the callback is the seam under test.
+ */
+it("opens the Library's app themes from the Appearance link", async () => {
+  const onOpenLibrary = vi.fn();
+  const { container } = await mountHost(
+    {},
+    undefined,
+    "appearance",
+    onOpenLibrary,
+  );
+
+  const link = must(
+    container.querySelector<HTMLButtonElement>(
+      "[data-yunari-browse-app-themes]",
+    ),
+    "the app-themes link",
+  );
+  await act(async () => link.click());
+
+  expect(onOpenLibrary).toHaveBeenCalledWith("app-themes");
 });

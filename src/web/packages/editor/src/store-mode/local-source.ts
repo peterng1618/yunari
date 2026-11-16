@@ -1,6 +1,7 @@
 import {
   type CatalogueOrigin,
   type CatalogueStatus,
+  type CollectionInclude,
   DASHBOARD_THEME_KIND,
   type FacetRecord,
   listingMemberRecords,
@@ -41,9 +42,12 @@ export interface StoreItem {
    *  listing has an answer — a collection's members are `includes`, not parts
    *  of its package. */
   readonly members: readonly MemberRecord[];
-  /** The catalogue ids a collection installs. Present only on a collection
-   *  entry, absent rather than undefined on every other kind. */
-  readonly includes?: readonly string[];
+  /** The listings a collection installs, with the author's required/optional
+   *  flag. Present only on a collection entry, absent rather than undefined on
+   *  every other kind. The public index carries ids only, so a catalogue-built
+   *  row marks an include required unless the source learned otherwise: a
+   *  declined optional must never read as installed. */
+  readonly includes?: readonly CollectionInclude[];
   readonly author: string | undefined;
   /** The document's own version, or `undefined` when it declares none. The
    *  caption line prints it beside the date (`1.4.0 · 2026-10-14`), and it
@@ -62,6 +66,11 @@ export interface StoreItem {
    *  asking whether the key exists, and `exactOptionalPropertyTypes` forbids the
    *  optional spelling this would otherwise take. */
   readonly origin: CatalogueOrigin | undefined;
+  /** The library copy a catalogue row was joined with. The four theme commands
+   *  act on the host's `/api/themes` routes, whose id is the library copy's, not
+   *  the catalogue's — an installed catalogue theme keeps them only through
+   *  this field. Absent on a row with no local copy. */
+  readonly installedId?: string;
   /** The catalogue's own facts about this item, or `undefined` for an item the
    *  library holds and the catalogue does not. `installedVersion` is the one
    *  field a source cannot fill: it is a fact about the library, so the source
@@ -153,9 +162,11 @@ export function libraryThemeItemOf(entry: ThemeLibraryEntry): StoreItem {
     id: entry.id,
     kind: DASHBOARD_THEME_KIND,
     name: entry.name,
-    members: listingMemberRecords(DASHBOARD_THEME_KIND, {
-      theme: { id: entry.id, name: entry.name },
-    }),
+    members: [
+      ...listingMemberRecords(DASHBOARD_THEME_KIND, {
+        theme: { id: entry.id, name: entry.name },
+      }),
+    ],
     author: entry.author,
     version: entry.version,
     ...(entry.remixOf === undefined ? {} : { remixOf: entry.remixOf }),

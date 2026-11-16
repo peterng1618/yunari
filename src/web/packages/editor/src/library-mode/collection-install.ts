@@ -241,7 +241,16 @@ export type CollectionPressOutcome =
       readonly plan: CollectionPlan;
       readonly change: PlanChange;
     }
-  | { readonly kind: "refused"; readonly message: string };
+  /** The host refused the press. `members` is present for a part-way failure:
+   *  the sheet names the members it could not write. */
+  | {
+      readonly kind: "refused";
+      readonly message: string;
+      readonly members?: readonly {
+        readonly id: string;
+        readonly ok: boolean;
+      }[];
+    };
 
 export interface CollectionPressDeps {
   readonly readPlan: (item: StoreItem) => Promise<CollectionPlan>;
@@ -319,6 +328,9 @@ export async function pressCollection(
       kind: "refused",
       message:
         "held" in outcome ? uiCopy.store.collectionSheet.held : outcome.message,
+      ...("members" in outcome && outcome.members !== undefined
+        ? { members: outcome.members }
+        : {}),
     };
   }
 

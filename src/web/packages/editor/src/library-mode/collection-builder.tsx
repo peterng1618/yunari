@@ -1,5 +1,9 @@
-import { type CatalogueRefusal, STORE_ITEM_KINDS } from "@yunari/renderer-core";
-import type { CollectionDraft, CollectionInclude } from "@yunari/theme-package";
+import {
+  type CatalogueRefusal,
+  type CollectionInclude,
+  STORE_ITEM_KINDS,
+} from "@yunari/renderer-core";
+import type { CollectionDraft } from "@yunari/theme-package";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { StoreItem } from "../store-mode/local-source.js";
@@ -372,9 +376,15 @@ export function SubmissionsPage(props: {
     setListingsAttempt((current) => current + 1);
   };
 
-  /** The last author command the store refused, in its own words; the page's
-   *  one live region speaks it. */
-  const [announcement, setAnnouncement] = useState("");
+  /** The last author command the store refused, with the row it names. The
+   *  sentence is drawn beside that row rather than only announced: it says what
+   *  the author has to fix. */
+  const [rowRefusal, setRowRefusal] = useState<
+    { readonly id: string; readonly message: string } | undefined
+  >(undefined);
+  /** The row whose command is in flight, so its button disables rather than
+   *  letting a second press race the first. */
+  const [pending, setPending] = useState<string | undefined>(undefined);
 
   /**
    * Posts one author command, and lets the listing answer it. The Worker's
@@ -384,7 +394,8 @@ export function SubmissionsPage(props: {
    * the row is left untouched.
    */
   const statusChange = (id: string, action: "unpublish" | "publish"): void => {
-    setAnnouncement("");
+    setRowRefusal(undefined);
+    setPending(id);
     void (async () => {
       try {
         const response = await (fetcher ?? fetch)(
@@ -397,16 +408,23 @@ export function SubmissionsPage(props: {
             typeof body === "object" && body !== null
               ? (body as { readonly message?: unknown }).message
               : undefined;
-          setAnnouncement(
-            typeof message === "string" && message.trim() !== ""
-              ? message
-              : uiCopy.store.status.changeRefused(response.status),
-          );
+          setRowRefusal({
+            id,
+            message:
+              typeof message === "string" && message.trim() !== ""
+                ? message
+                : uiCopy.store.status.changeRefused(response.status),
+          });
           return;
         }
         setMineAttempt((current) => current + 1);
       } catch (error) {
-        setAnnouncement(error instanceof Error ? error.message : String(error));
+        setRowRefusal({
+          id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setPending(undefined);
       }
     })();
   };
@@ -440,7 +458,7 @@ export function SubmissionsPage(props: {
               <li
                 key={item.id}
                 data-yunari-submission={item.id}
-                className="flex items-center gap-[var(--space-8)] rounded-[var(--radius-md)] border border-edge bg-panel-2 px-[var(--space-12)] py-[var(--space-6)]"
+                className="flex flex-wrap items-center gap-[var(--space-8)] rounded-[var(--radius-md)] border border-edge bg-panel-2 px-[var(--space-12)] py-[var(--space-6)]"
               >
                 <span className="min-w-0 flex-1 truncate text-sm text-text">
                   {item.name}
@@ -456,6 +474,7 @@ export function SubmissionsPage(props: {
                     data-yunari-submission-action={
                       item.status === "published" ? "unpublish" : "republish"
                     }
+                    disabled={pending === item.id}
                     aria-label={uiCopy.library.submissions.command(
                       item.status === "published"
                         ? uiCopy.store.actions.unpublish
@@ -468,12 +487,41 @@ export function SubmissionsPage(props: {
                         item.status === "published" ? "unpublish" : "publish",
                       )
                     }
-                    className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-text enabled:hover:border-muted"
+                    className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-text enabled:hover:border-muted disabled:text-faint"
                   >
                     {item.status === "published"
                       ? uiCopy.store.actions.unpublish
                       : uiCopy.store.actions.republish}
                   </button>
+                ) : null}
+                {/* **The owner's own reason is a row fact, not a badge's.** A
+                    rejected or removed listing says why in the host's words, so
+                    the author reads it where the row is. */}
+                {item.statusReason === undefined ||
+                item.statusReason === "" ? null : (
+                  <span
+                    data-yunari-submission-reason=""
+                    className="basis-full text-xs text-muted"
+                  >
+                    {item.statusReason}
+                  </span>
+                )}
+                {item.status === "removed" ? (
+                  <span
+                    data-yunari-submission-removed=""
+                    className="basis-full text-xs text-warn"
+                  >
+                    {uiCopy.store.status.removedPermanent}
+                  </span>
+                ) : null}
+                {rowRefusal?.id === item.id ? (
+                  <span
+                    data-yunari-submission-refusal=""
+                    role="status"
+                    className="basis-full text-xs text-warn"
+                  >
+                    {rowRefusal.message}
+                  </span>
                 ) : null}
               </li>
             ))}
@@ -494,14 +542,6 @@ export function SubmissionsPage(props: {
             ))}
           </ul>
         )}
-        <span
-          data-yunari-submissions-announcement=""
-          role="status"
-          aria-live="polite"
-          className="sr-only"
-        >
-          {announcement}
-        </span>
       </section>
 
       {listings.state === "failed" ? (

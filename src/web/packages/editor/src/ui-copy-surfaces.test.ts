@@ -262,6 +262,27 @@ it("reads the Library listing, its toolbar and an item's surface", async () => {
     listingSaid.filter((text) => !owned.has(text) && !isListingName(text)),
   ).toEqual([]);
 
+  // The Shape popover is the only surface that prints the facet's hint and its
+  // group headings, and it portals to `body`, so the region's own read never
+  // reaches it. Opening it is what keeps a hardcoded heading or hint out of the
+  // net.
+  const shapeTrigger = host.querySelector<HTMLButtonElement>(
+    '[data-yunari-facet="shape"]',
+  );
+  if (shapeTrigger === null) throw new Error("the toolbar drew no Shape facet");
+  await act(async () => shapeTrigger.click());
+  const facetPopup = await vi.waitFor(() => {
+    const found = document.body.querySelector<HTMLElement>(
+      '[data-yunari-facet-popup="shape"]',
+    );
+    if (found === null) throw new Error("the Shape facet opened no popover");
+    return found;
+  });
+  const facetSaid = saidIn(facetPopup);
+  expect(facetSaid, "the Shape popover said nothing").not.toEqual([]);
+  expect(facetSaid.filter((text) => !owned.has(text))).toEqual([]);
+  await act(async () => shapeTrigger.click());
+
   await act(async () =>
     (
       host.querySelector(
@@ -282,6 +303,36 @@ it("reads the Library listing, its toolbar and an item's surface", async () => {
 
   await act(async () => root.unmount());
   document.body.replaceChildren();
+
+  // A successful read that holds nothing is the other surface whose words the
+  // retired store walk owned: the empty listing's two sentences are paragraphs,
+  // so only `saidIn` reaches them.
+  vi.stubGlobal("fetch", listingServing([]));
+  const emptyHost = document.createElement("div");
+  document.body.append(emptyHost);
+  const emptyRoot = createRoot(emptyHost);
+  await act(async () =>
+    emptyRoot.render(
+      createElement(LibraryRegion, {
+        page: "dashboard-themes",
+        onPage: () => undefined,
+        state: "all",
+        onState: () => undefined,
+      }),
+    ),
+  );
+  const empty = await vi.waitFor(() => {
+    const found = emptyHost.querySelector("[data-yunari-library-empty]");
+    if (found === null)
+      throw new Error("the empty listing drew no empty state");
+    return found;
+  });
+  const emptySaid = saidIn(empty);
+  expect(emptySaid, "the empty state said nothing").not.toEqual([]);
+  expect(emptySaid.filter((text) => !owned.has(text))).toEqual([]);
+
+  await act(async () => emptyRoot.unmount());
+  document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
 
@@ -294,8 +345,10 @@ function isListingName(text: string): boolean {
 }
 
 /** A catalogue of one dashboard theme plus the host's empty listings, so the
- *  Library's two halves both answer. */
-function listingServing(): typeof fetch {
+ *  Library's two halves both answer. `entries` replaces the one-theme catalogue
+ *  with the caller's rows — an empty list is how the walk reaches the empty
+ *  state's own sentences. */
+function listingServing(entries?: readonly unknown[]): typeof fetch {
   const theme = {
     id: "11111111-1111-4111-8111-111111111111",
     kind: "dashboard-theme",
@@ -323,7 +376,7 @@ function listingServing(): typeof fetch {
     if (url.includes("/index.json")) {
       return answer({
         generatedAt: "2026-10-21T00:00:00.000Z",
-        entries: [theme],
+        entries: entries ?? [theme],
       });
     }
     if (url.startsWith("/api/themes")) return answer({ themes: [] });

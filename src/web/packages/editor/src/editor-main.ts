@@ -367,7 +367,7 @@ async function start(): Promise<void> {
       onFindFontPicker: () => layout.showFinder("font"),
       // The Add pane's browse links move the shell's mode and page together
       // through its one door, so the Library lands on the page the press named.
-      onOpenLibrary: (page: LibraryPage) => layout.openLibrary(page),
+      onOpenLibrary: (page: LibraryPage) => layout.openLibraryPage(page),
       // The header's own chord, routed to the control it is printed beside:
       // both open the surface, and the switch inside it is the one owner of
       // whether the host is serving.

@@ -104,7 +104,15 @@ it("no longer words the retired store surface", () => {
   expect(uiCopy.store.facets.label).toBeTypeOf("string");
   expect(uiCopy.store.sort.name).toBeTypeOf("string");
   expect(uiCopy.store.density.label).toBeTypeOf("string");
-  expect(uiCopy.store.catalogueRefused("future-thing", 2)).toContain("2");
+  // The sentence names the kind and inflects the noun, so a rewrite that keeps
+  // only the count would fail: the person reading it has to know what could not
+  // be read and how many.
+  expect(uiCopy.store.catalogueRefused("widget-preset", 1)).toBe(
+    "1 entry of kind widget-preset could not be read.",
+  );
+  expect(uiCopy.store.catalogueRefused("widget-preset", 2)).toBe(
+    "2 entries of kind widget-preset could not be read.",
+  );
   expect(uiCopy.store.deleteConfirm.confirm).toBeTypeOf("string");
   expect(uiCopy.store.deleteUnavailable).toBeTypeOf("string");
   expect(uiCopy.store.exportFailed("why")).toContain("why");
@@ -321,3 +329,11 @@ function isSentenceCase(row: string): boolean {
   if (/^[^A-Za-z]*[a-z]/.test(first)) return false;
   return rest.every((word) => !/^[A-Z][a-z]/.test(word));
 }
+
+/** **One word for one kind.** The Settings heading and the Library's badge name
+ *  the same package, so a person who saves an "App theme" finds it under that
+ *  word in the Library rather than hunting for an "Editor theme". */
+it("names an editor theme an app theme in every surface", () => {
+  expect(uiCopy.settings.editorThemeHeading).toBe("App theme");
+  expect(uiCopy.store.cell.memberKinds["editor-theme"]).toBe("App theme");
+});

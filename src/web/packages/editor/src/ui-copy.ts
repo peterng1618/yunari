@@ -301,7 +301,7 @@ export const uiCopy = {
      *  package. Its own section rather than a second palette picker — choosing
      *  a palette replaces an applied theme, so the two cannot both be "in
      *  force". */
-    editorThemeHeading: "Editor theme",
+    editorThemeHeading: "App theme",
     editorThemeHint:
       "Save the shell palette in force, with any applied overrides, as a package. Choosing a palette above clears an imported theme.",
     editorThemeName: "Theme name",
@@ -1244,9 +1244,9 @@ export const uiCopy = {
       changeRefused: (status: number): string =>
         `The store refused the change (${status}).`,
     },
-    /** The author's own two commands, drawn in the item's modal only: they act
-     *  on the author's store row, where the cell's four actions act on the
-     *  library copy, so they are not `cell.actions` entries. */
+    /** The author's own two commands, drawn beside the author's row on My
+     *  submissions: they act on the author's store row, where the cell's four
+     *  actions act on the library copy, so they are not `cell.actions` entries. */
     actions: {
       unpublish: "Unpublish",
       republish: "Republish",
@@ -1421,6 +1421,13 @@ export const uiCopy = {
         `${uiCopy.store.collectionSheet.unavailableLead} ${ids.join(", ")}.`,
       requiredMissing: (ids: readonly string[]): string =>
         `Required members are missing from this install: ${ids.join(", ")}.`,
+      /** Every member unticked, which writes nothing. The press is blocked with
+       *  the reason rather than posting an empty set. */
+      noneChosen: "Choose at least one member to install.",
+      /** A part-way failure names the members the host could not write, so the
+       *  sheet says which ones and the refusal sentence stays the host's own. */
+      failedMembers: (names: readonly string[]): string =>
+        `These members were not installed: ${names.join(", ")}.`,
       /** The code half. The labels themselves are `store.detail.trust`'s, so
        *  the detail modal and this sheet cannot word one fact twice. */
       consent: {
@@ -1702,6 +1709,10 @@ export const uiCopy = {
     /** A client that cannot delete is offered no deletion; the cell still
      *  reports the press rather than failing at the moment it is made. */
     deleteUnavailable: "This host cannot delete themes.",
+    /** A removal of any other kind the host refused, named by its status when
+     *  the host gave no sentence of its own. */
+    removeRefused: (status: number): string =>
+      `The Host refused to remove that item (${status}).`,
     /** The confirmation a removal asks for: the host's trash is recoverable,
      *  and the sentence is how the author knows where the theme went. */
     deleteConfirm: {
@@ -1861,6 +1872,9 @@ export const uiCopy = {
      *  instead (`uiCopy.store.unreadable`), and never draws this. */
     empty: "Nothing here yet.",
     emptyHint: "Install an item from the store, or publish your own.",
+    /** The page toolbar's query field. It narrows the drawn rows by the name and
+     *  author the cards already print. */
+    search: "Search listings",
     /** The cross-links out of the editor's own surfaces. Each name says where
      *  the press goes, so a screen reader reaching it alone knows the
      *  destination rather than only the verb. */
@@ -1869,11 +1883,11 @@ export const uiCopy = {
       browseShapes: "Browse shapes in the Library",
       browseAppThemes: "Browse app themes in the Library",
     },
-    /** A per-type page's cell actions are drawn before their handlers land.
-     *  The press is reported here rather than leaving a dead control; the
-     *  label is the pressed command's own word. */
-    actionPending: (label: string): string =>
-      `${label} is not available on this page yet.`,
+    /** An action this kind has no host route for is drawn disabled, and this is
+     *  the reason its `aria-describedby` names. R27: every live control has a
+     *  route; the rest state why they do not. */
+    actionUnavailable: (label: string): string =>
+      `${label} is not available for this kind yet.`,
     /** My submissions: the author's own rows whatever their kind. A failed
      *  read is stated rather than drawn as "nothing submitted"; the empty
      *  sentence is the page's own below. */

@@ -314,12 +314,13 @@ it("filters the visible rows by the state", async () => {
  * installed*.
  */
 it("filters collections by the includes the register names", async () => {
-  const includes = [
+  const includeIds = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
     "33333333-3333-4333-8333-333333333333",
     "44444444-4444-4444-8444-444444444444",
   ] as const;
+  const includes = includeIds.map((id) => ({ id, optional: false }));
   const originsOf = (held: readonly string[]): Response =>
     json({
       origins: held.map((catalogueId) => ({
@@ -343,11 +344,11 @@ it("filters collections by the includes the register names", async () => {
     );
   };
 
-  serve(includes);
+  serve(includeIds);
   const installed = await mountHarness("collections", "on-this-pc");
   await waitForCells(installed, ["Ops collection"]);
 
-  serve(includes.slice(0, 2));
+  serve(includeIds.slice(0, 2));
   const partialOnThisPc = await mountHarness("collections", "on-this-pc");
   await waitForCells(partialOnThisPc, ["Ops collection"]);
 
@@ -636,7 +637,14 @@ it("lists a collection an item belongs to from another page", async () => {
               "22222222-2222-4222-8222-222222222222",
               "Starter kit",
               [],
-              { includes: ["11111111-1111-4111-8111-111111111111"] },
+              {
+                includes: [
+                  {
+                    id: "11111111-1111-4111-8111-111111111111",
+                    optional: false,
+                  },
+                ],
+              },
             ),
           ]),
       ],
@@ -686,7 +694,14 @@ it("reads the register for a collection opened from another page", async () => {
               "22222222-2222-4222-8222-222222222222",
               "Starter kit",
               [],
-              { includes: ["11111111-1111-4111-8111-111111111111"] },
+              {
+                includes: [
+                  {
+                    id: "11111111-1111-4111-8111-111111111111",
+                    optional: false,
+                  },
+                ],
+              },
             ),
           ]),
       ],

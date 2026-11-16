@@ -176,12 +176,20 @@ function DiffSection(props: {
   const originById = new Map(
     props.origins.map((origin) => [origin.catalogueId, origin]),
   );
+  // The section's own name names what it actually draws, so a diff showing only
+  // missing members is not labelled "No longer in this collection".
+  const label =
+    diff.dropped.length === 0
+      ? uiCopy.store.collectionSheet.update.missing
+      : diff.missing.length === 0
+        ? uiCopy.store.collectionSheet.update.dropped
+        : `${uiCopy.store.collectionSheet.update.missing}${uiCopy.store.readingSeparator}${uiCopy.store.collectionSheet.update.dropped}`;
 
   return (
     <section
       data-yunari-collection-diff=""
       className="flex flex-col gap-[var(--space-6)]"
-      aria-label={uiCopy.store.collectionSheet.update.dropped}
+      aria-label={label}
     >
       {diff.missing.length === 0 ? null : (
         <div className="flex flex-col gap-[var(--space-4)]">
@@ -293,8 +301,23 @@ export function CollectionSheet(props: {
           )
         : choice !== undefined && choice.missingRequired.length > 0
           ? uiCopy.store.collectionSheet.requiredMissing(choice.missingRequired)
-          : undefined;
+          : choice !== undefined && choice.chosen.size === 0
+            ? uiCopy.store.collectionSheet.noneChosen
+            : undefined;
   const collectionId = props.item.catalogue?.id ?? props.item.id;
+  /** The members a part-way failure could not write, by the plan's own names. */
+  const failedMembers =
+    props.install.refusal?.id === props.item.id &&
+    props.install.refusal.members !== undefined &&
+    shown !== undefined
+      ? props.install.refusal.members
+          .filter((member) => !member.ok)
+          .map(
+            (member) =>
+              shown.members.find((planned) => planned.id === member.id)?.name ??
+              member.id,
+          )
+      : [];
   const totalBytes =
     shown === undefined
       ? 0
@@ -511,6 +534,16 @@ export function CollectionSheet(props: {
                 className="text-xs text-warn"
               >
                 {refusal}
+              </p>
+            )}
+
+            {failedMembers.length === 0 ? null : (
+              <p
+                data-yunari-collection-sheet-failed=""
+                role="status"
+                className="text-xs text-warn"
+              >
+                {uiCopy.store.collectionSheet.failedMembers(failedMembers)}
               </p>
             )}
 

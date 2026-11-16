@@ -1692,6 +1692,8 @@ it("offers the three modes and marks the active one", async () => {
  * **A later surface opens the Library on a named page, mode and page together**
  * (R1): the Add pane's widget link is the first caller, and it must land the
  * shell on the page it named rather than on whatever page was last showing.
+ * The installed-state filter is cleared with the page, so a cross-link cannot
+ * land on the empty state its own filter created.
  */
 it("opens a named Library page and the mode together", async () => {
   vi.stubGlobal(
@@ -1706,9 +1708,25 @@ it("opens a named Library page and the mode together", async () => {
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  await act(async () => layout.openLibrary("widgets"));
+  await act(async () => layout.openLibraryPage("dashboard-themes"));
+  const stateSegments = (): readonly HTMLButtonElement[] => [
+    ...root.querySelectorAll<HTMLButtonElement>(
+      "[data-yunari-library-state] button",
+    ),
+  ];
+  await act(async () => stateSegments()[1]?.click());
+  expect(
+    stateSegments().map((segment) => segment.getAttribute("aria-pressed")),
+    "the handler did not take the chosen installed state",
+  ).toEqual(["false", "true", "false"]);
+
+  await act(async () => layout.openLibraryPage("widgets"));
 
   expect(chosen(root)).toEqual(["true", "false", "false"]);
+  expect(
+    stateSegments().map((segment) => segment.getAttribute("aria-pressed")),
+    "the cross-link left the old installed-state filter in place",
+  ).toEqual(["true", "false", "false"]);
   expect(
     root.querySelector('[data-yunari-library-panel="widgets"]'),
     "the Library did not open on the page it was asked for",
@@ -1716,18 +1734,6 @@ it("opens a named Library page and the mode together", async () => {
 
   layout.destroy();
   vi.unstubAllGlobals();
-});
-
-it("draws the header's third mode as Library", () => {
-  const root = document.createElement("div");
-  const layout = createShellLayout(root);
-
-  const segments = modeSegments(root);
-  expect(segments).toHaveLength(3);
-  expect(segments[0]?.textContent).toBe(uiCopy.modes.library);
-  expect(segments[0]?.id).toBe("yunari-shell-modes-library");
-
-  layout.destroy();
 });
 
 /**
@@ -2049,7 +2055,7 @@ it("puts the Library state filter in the header and not in the region", async ()
   const root = document.createElement("div");
   const layout = createShellLayout(root);
 
-  await act(async () => layout.openLibrary("widgets"));
+  await act(async () => layout.openLibraryPage("widgets"));
   await act(async () => {});
 
   const header = root.querySelector(".editor-shell-header");

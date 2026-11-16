@@ -246,8 +246,14 @@ export interface ShellLayout {
   /** Opens the Library on one of its pages. A later surface — the Add pane's
    *  widget link, the preset library, the appearance section — moves the mode
    *  and the page together through this one door (R1), so it lands on the page
-   *  it named rather than on whichever page was last showing. */
-  openLibrary(page: LibraryPage): void;
+   *  it named rather than on whichever page was last showing. It also clears
+   *  the installed-state filter: a page a link named must not land under a
+   *  filter the last surface left, which can hide the rows the link promised.
+   *
+   *  Named `openLibraryPage` rather than `openLibrary`, which the session
+   *  already owns for its "Open" chooser: two doors with one name is a caller
+   *  reading the wrong one. */
+  openLibraryPage(page: LibraryPage): void;
   /** Opens the asset finder. The chord and the menu row reach the same store
    *  the modal is bound to; a caller may name the category it opens on, which
    *  is how the font field arrives at Fonts. */
@@ -954,10 +960,7 @@ export function createShellLayout(
               overrides={overrides}
               onOverrides={applyOverrides}
               releaseVersion={releaseVersion}
-              onOpenLibrary={(page) => {
-                onLibraryPage(page);
-                onModeChange("library");
-              }}
+              onOpenLibrary={(page) => libraryNavigation.open(page)}
             />
           </section>
         )}
@@ -1002,8 +1005,11 @@ export function createShellLayout(
     );
   }
 
-  /** The door `openLibrary` reaches; `ShellRoot` assigns it every render, so it
-   *  holds the live setters and the same mode-change report the switch uses. */
+  /** The door `openLibraryPage` reaches; `ShellRoot` assigns it every render, so
+   *  it holds the live setters and the same mode-change report the switch uses.
+   *  The Settings region's cross-link reads it too, so both callers land the
+   *  same way — page, mode and a cleared state filter — rather than one of them
+   *  re-spelling the move. */
   const libraryNavigation = {
     open: (_page: LibraryPage): void => undefined,
   };
@@ -1044,9 +1050,12 @@ export function createShellLayout(
       options.onModeChange?.(next);
     };
     // Reassigned every render, so the door below holds this render's setters and
-    // goes through the same mode-change report the switch does.
+    // goes through the same mode-change report the switch does. The filter is
+    // cleared with the page: "Browse widgets" after an "On this PC" visit must
+    // not land on a widget page filtered to rows the link did not promise.
     libraryNavigation.open = (page) => {
       setLibraryPage(page);
+      setLibraryState("all");
       requestMode("library");
     };
     return (
@@ -1107,7 +1116,7 @@ export function createShellLayout(
       // subscription re-renders; `flushSync` settles it before this returns.
       flushSync(() => sheet.set(true));
     },
-    openLibrary(page) {
+    openLibraryPage(page) {
       // Same shape as the two doors below: the request arrives outside React,
       // and `flushSync` settles the mode and page before this returns.
       flushSync(() => libraryNavigation.open(page));

@@ -27,9 +27,14 @@ import {
 } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
 import { Picture } from "./card-picture.js";
-import { CELL_ACTION_REASONS } from "./cell-actions.js";
+import {
+  actionDisabledReason,
+  actionsFor,
+  carriesThemeDocument,
+} from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
 import { type InstallState, installStateOf } from "./install-state.js";
+import { actionLabel } from "./item-foot.js";
 import { justifiedRows } from "./justified-rows.js";
 import type { CellAction, StoreItem, ThemeAction } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
@@ -138,6 +143,10 @@ export function Gallery(props: {
    *  member's package to say how many it holds. Absent until the read answers,
    *  because an unread register must not draw as "0 installed". */
   readonly origins?: readonly CatalogueOrigin[] | undefined;
+  /** Opens a collection's install sheet from its card's Install or Update.
+   *  **A collection is never installed from its card**: the sheet owns the
+   *  chosen set and the members' consent, so the card's press only asks for it. */
+  readonly onOpenSheet?: ((card: StoreCard) => void) | undefined;
 }): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -239,6 +248,9 @@ export function Gallery(props: {
                   onOpenItem={props.onOpenItem}
                   install={props.install}
                   submit={props.submit}
+                  {...(props.onOpenSheet === undefined
+                    ? {}
+                    : { onOpenSheet: props.onOpenSheet })}
                 />
               );
             })}
@@ -283,6 +295,7 @@ function Cell(props: {
   readonly onOpenItem: (card: StoreCard) => void;
   readonly install: InstallControl;
   readonly submit?: SubmitControl | undefined;
+  readonly onOpenSheet?: ((card: StoreCard) => void) | undefined;
 }): React.JSX.Element {
   const { card, members, onAction, onOpenItem, install, submit } = props;
   const item = card.listing;
@@ -311,6 +324,28 @@ function Cell(props: {
             ? "update"
             : "install";
   const expandable = members.length > 0 && props.onExpand !== undefined;
+  /** **A catalogue theme this PC installed keeps the four theme commands.** Its
+   *  library copy is the row the host's `/api/themes` routes act on, and
+   *  `installedId` is how the join named it; without them the only reading left
+   *  would be the mark, and the copy could not be opened or removed. */
+  const themeCommands =
+    item.kind === "dashboard-theme" && item.installedId !== undefined;
+  /** A reason names the member's own kind where the card draws one, so a
+   *  widget's card does not say a theme command is unavailable. */
+  const actionKind = member?.kind ?? item.kind;
+  /** **The command set is the kind's own four theme commands.** A cell never
+   *  draws one the kind's table does not offer: an app theme has no Open or
+   *  Assign, and a package's actions belong to the item's own surface. */
+  const cellActions = CELL_ACTIONS.filter((action) =>
+    actionsFor(actionKind).includes(action),
+  );
+  /** The command set is the library's four; the install reading is the online
+   *  half's. A collection draws neither — its action is its install press — and
+   *  a non-theme kind keeps its commands in the item's own surface. */
+  const showThemeActions =
+    item.includes === undefined &&
+    carriesThemeDocument(actionKind) &&
+    (installState === "none" || themeCommands);
   /** **A package's count is stated only where it can be opened**, so a grid with
    *  no expand handler does not advertise members nothing can show. A
    *  collection's count has no such dependency: it is its state. */
@@ -406,10 +441,15 @@ function Cell(props: {
           data-yunari-store-cell-actions=""
           className="pointer-events-none absolute right-[var(--space-10)] top-[var(--space-8)] flex items-center gap-[var(--space-6)] opacity-0 transition-opacity group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
         >
-          {installState === "none" ? (
+          {showThemeActions ? (
             <>
-              {CELL_ACTIONS.map((action) => {
-                const reason = CELL_ACTION_REASONS[action];
+              {cellActions.map((action) => {
+                const reason = actionDisabledReason(
+                  action,
+                  actionKind,
+                  actionLabel(action, actionKind),
+                  item,
+                );
                 const controlId = cellActionId(item.id, action);
                 return (
                   <Fragment key={action}>
@@ -446,7 +486,14 @@ function Cell(props: {
           // leaves the hidden member cards unreachable. A collection's
           // action waits for the register rather than guessing "Install".
           null : (
-            <InstallAction item={item} state={actionState} install={install} />
+            <InstallAction
+              item={item}
+              state={actionState}
+              install={install}
+              {...(item.includes === undefined
+                ? {}
+                : { onPress: () => props.onOpenSheet?.(card) })}
+            />
           )}
         </div>
       </div>
@@ -696,6 +743,9 @@ function InstallAction(props: {
   /** The card the control belongs to. Several member rows install the same
    *  listing, so the item id alone would draw duplicate DOM ids. */
   readonly controlKey?: string;
+  /** What the press does instead of posting an install. A collection's press
+   *  opens its sheet; posting here would install every include with no consent. */
+  readonly onPress?: (() => void) | undefined;
 }): React.JSX.Element {
   const { item, state, install } = props;
   const controlKey = props.controlKey ?? item.id;
@@ -724,7 +774,7 @@ function InstallAction(props: {
       data-yunari-store-cell-install={state}
       disabled={busy}
       aria-busy={busy}
-      onClick={() => install.onInstall(item)}
+      onClick={props.onPress ?? (() => install.onInstall(item))}
       className="inline-flex flex-none items-center gap-[var(--space-6)] rounded-md border border-edge bg-panel px-[var(--space-10)] py-[var(--space-4)] text-xs text-text disabled:text-faint"
     >
       <Glyph

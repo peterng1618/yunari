@@ -8,6 +8,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { uiCopy } from "../../ui-copy.js";
+import { BareSegmented } from "./bare-segmented.js";
 import { ControlChoiceRow } from "./control-choice-row.js";
 import { ControlIconButton } from "./control-icon-button.js";
 import { ControlNumber } from "./control-number.js";
@@ -146,6 +147,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   [
     "library-mode/facet-row.tsx",
     "the facet popover's search field filters values already read; nothing is authored to commit or cancel",
+  ],
+  [
+    "library-mode/listing-toolbar.tsx",
+    "the listing's search field filters the rows as they are typed; nothing is authored to commit or cancel",
   ],
   [
     "library-mode/density-slider.tsx",
@@ -735,6 +740,56 @@ it("gives every segmented chip an equal share of the group", async () => {
       chip.classList.contains("min-w-0"),
       `${chip.textContent} can widen past its share`,
     ).toBe(true);
+  }
+});
+
+/**
+ * **The bare form shares the labelled row's split and takes the rail's chosen
+ * paint.** The design's `Segmented` rule gives every chip `flex: 1` with
+ * `min-width: 0`, so a longer label wraps inside its share rather than widening
+ * the well; the chosen member is the shell's one selected state — accent ink
+ * over the accent's 14% wash — not the `--stage` lift the labelled row uses.
+ * jsdom paints nothing, so the class names are the only paint claim it can
+ * read; the mode switch's rule in `editor-shell.css` is the same state.
+ */
+it("gives every bare segmented chip an equal share and the rail's chosen paint", async () => {
+  await mount(
+    <BareSegmented
+      id="probe-bare-segmented"
+      label="Probe"
+      value="first"
+      options={[
+        { id: "first", name: "First" },
+        { id: "second", name: "Second" },
+      ]}
+      onChange={() => {}}
+    />,
+  );
+  const group = document.getElementById("probe-bare-segmented");
+  if (group === null) throw new Error("the bare segmented drew no group");
+  expect(
+    group.classList.contains("flex"),
+    "the group is not the flex container",
+  ).toBe(true);
+  const chips = Array.from(group.querySelectorAll<HTMLElement>("button"));
+  expect(chips).toHaveLength(2);
+  for (const chip of chips) {
+    expect(
+      chip.classList.contains("flex-1"),
+      `${chip.textContent} does not take an equal share`,
+    ).toBe(true);
+    expect(
+      chip.classList.contains("min-w-0"),
+      `${chip.textContent} can widen past its share`,
+    ).toBe(true);
+    expect(
+      chip.classList.contains("whitespace-nowrap"),
+      `${chip.textContent} cannot wrap inside its share`,
+    ).toBe(false);
+    expect(chip.className).toContain("data-[pressed]:text-accent");
+    expect(chip.className).toContain(
+      "data-[pressed]:[background:color-mix(in_srgb,var(--accent)_14%,transparent)]",
+    );
   }
 });
 

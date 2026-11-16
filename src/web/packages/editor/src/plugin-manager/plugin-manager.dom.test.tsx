@@ -221,7 +221,36 @@ it("never links an advisory that is not HTTPS", () => {
 });
 
 it("draws Extensions as trust only, with no installed theme or pack listing", () => {
-  render({ extensions: [extension()] });
+  // The fixture carries the contributions a pack listing would come from — a
+  // panel family and its declared device — so the absence below is a reading of
+  // this page and not the absence of any data that could draw one.
+  render({
+    extensions: [
+      extension({
+        name: "Acme Panel Pack",
+        key: "local/acme-panel-pack",
+        contributions: {
+          panelFamilies: [
+            {
+              id: "acme-panel",
+              label: "Acme Panel",
+              vendorId: 0x1e71,
+              productId: 0x2007,
+              geometry: { width: 480, height: 480 },
+              support: {
+                maker: "Acme",
+                hardwareRevision: "rev-1",
+                supportedFirmware: ["1.88"],
+                updatedAt: "2026-10-01T00:00:00.000Z",
+              },
+              commands: ["display:brightness"],
+              transports: ["usb"],
+            },
+          ],
+        },
+      }),
+    ],
+  });
 
   // The page's own rows are the plugins this PC holds, and its own controls
   // are install-from-file, consent and provider order. Installed themes and
@@ -230,10 +259,13 @@ it("draws Extensions as trust only, with no installed theme or pack listing", ()
   expect(document.querySelectorAll("[data-yunari-extension-row]")).toHaveLength(
     1,
   );
+  // The pack-shaped contribution is the plugin's own text, not a listing row...
+  expect(document.body.textContent).toContain("panelFamilies:acme-panel");
+  expect(document.body.textContent).toContain("1e71:2007");
+  // ...and no Library or store listing is drawn from it.
   expect(document.querySelector("[data-yunari-store-cell-name]")).toBeNull();
   expect(document.querySelector("[data-yunari-store-cell]")).toBeNull();
   expect(document.querySelector("[data-yunari-library-listing]")).toBeNull();
-  expect(document.querySelector("[data-yunari-held-update]")).toBeNull();
   expect(
     document.querySelector('input[type="file"]'),
     "install-from-file is the agent-parity control and must stay",

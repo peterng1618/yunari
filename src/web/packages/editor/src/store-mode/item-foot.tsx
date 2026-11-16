@@ -1,5 +1,6 @@
 import type * as React from "react";
 import { Fragment } from "react";
+import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { ACTION_BUTTON, ActionBox } from "../components/ui/dialog.js";
 import {
   ADD_GLYPH,
@@ -17,8 +18,8 @@ import {
 import type { CollectionState, StoreCard } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
 import {
+  actionDisabledReason,
   actionsFor,
-  CELL_ACTION_REASONS,
   isRemovalKind,
 } from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
@@ -120,8 +121,23 @@ function InstallFooter(props: {
   const busy = install.installingIds.has(item.id);
   const refusal =
     install.refusal?.id === item.id ? install.refusal.message : undefined;
+  /** **The modal is the press surface for this item**, so a hold the host
+   *  answered from here must be drawn here: the page's notice is behind the
+   *  modal. Another item's hold is not this one's answer. */
+  const held = install.held?.id === item.id ? install.held.held : undefined;
   return (
     <Fragment>
+      {held === undefined ? null : (
+        <HeldUpdateNotice
+          held={held}
+          heading={uiCopy.store.install.reviewHeading}
+          reasonsLabel={uiCopy.store.install.reviewReasons}
+          approveLabel={uiCopy.store.install.reviewApprove}
+          dismissLabel={uiCopy.store.install.reviewDismiss}
+          onApprove={install.onApproveUpdate}
+          onDismiss={install.onDismissUpdate}
+        />
+      )}
       <button
         type="button"
         id="yunari-store-item-install"
@@ -232,7 +248,6 @@ function SubmitFooter(props: {
  */
 function CollectionFooter(props: {
   readonly item: StoreItem;
-  readonly card: StoreCard;
   readonly state: CollectionState | undefined;
   readonly stateRead: boolean;
   readonly originsFailure:
@@ -240,19 +255,14 @@ function CollectionFooter(props: {
     | undefined;
   readonly originsLoading: boolean;
   readonly install: InstallControl;
-  readonly onAction: (action: CellAction, card: StoreCard) => void;
-  /** Opens the install sheet. A control with no collection press (a fixture,
-   *  or a surface that never wired one) keeps the direct install press. */
+  /** Opens the install sheet, which owns the chosen set and each member's own
+   *  removal. */
   readonly onOpenSheet: () => void;
 }): React.JSX.Element {
   const { item, state, install } = props;
   const busy = install.installingIds.has(item.id);
   const refusal =
     install.refusal?.id === item.id ? install.refusal.message : undefined;
-  const press =
-    install.onInstallCollection === undefined
-      ? () => install.onInstall(item)
-      : props.onOpenSheet;
 
   return (
     <span className="flex flex-col gap-[var(--space-8)]">
@@ -289,7 +299,7 @@ function CollectionFooter(props: {
             data-yunari-store-collection-install="install"
             disabled={busy}
             aria-busy={busy}
-            onClick={press}
+            onClick={props.onOpenSheet}
             className={FOOTER_BUTTON}
           >
             {uiCopy.store.cell.installStates.install}
@@ -309,7 +319,7 @@ function CollectionFooter(props: {
               data-yunari-store-collection-install="update"
               disabled={busy}
               aria-busy={busy}
-              onClick={press}
+              onClick={props.onOpenSheet}
               className={FOOTER_BUTTON}
             >
               {uiCopy.store.cell.installStates.update}
@@ -331,7 +341,7 @@ function CollectionFooter(props: {
         icon={ACTION_GLYPHS.remove}
         label={actionLabel("remove", "collection")}
         destructive
-        onClick={() => props.onAction("remove", props.card)}
+        onClick={props.onOpenSheet}
       />
     </span>
   );
@@ -360,25 +370,27 @@ export function PanelFoot(props: {
   readonly onAction: (action: CellAction, card: StoreCard) => void;
   /** Opens the collection install sheet from the foot's Install press. */
   readonly onOpenSheet: () => void;
-  readonly authorAction: "unpublish" | "republish" | undefined;
-  readonly authorPress: ((id: string) => void) | undefined;
   /** The inline display choice, above the actions that opened it. */
   readonly assign?: React.ReactNode;
   /** What the surface said about the last action it could not run. Drawn here
    *  because the modal covers the listing's own notice. */
   readonly notice?: string | undefined;
 }): React.JSX.Element {
-  const { item, kind, install, submit, onAction, authorAction, authorPress } =
-    props;
+  const { item, kind, install, submit, onAction } = props;
   const installState = installStateOf(item);
   const actions = actionsFor(kind);
   const isCollection = kind === "collection";
+  /** **An installed dashboard theme keeps its four commands**: the library copy
+   *  the join named (`installedId`) is what the host's theme routes act on. An
+   *  app theme has no write route, so it keeps the online reading alone. */
+  const installedThemeCommands =
+    kind === "dashboard-theme" && item.installedId !== undefined;
   const onlineThemeInstall =
     !isCollection &&
     (kind === "dashboard-theme" || kind === "editor-theme") &&
-    installState !== "none";
+    installState !== "none" &&
+    !installedThemeCommands;
   const showSubmit = kind === "dashboard-theme" && installState === "none";
-  const hasCommands = authorAction !== undefined || showSubmit;
   return (
     <span className="flex flex-none flex-col gap-[var(--space-8)] border-t border-edge px-[var(--space-16)] py-[var(--space-12)]">
       {props.notice === undefined ? null : (
@@ -401,31 +413,18 @@ export function PanelFoot(props: {
       {isCollection ? (
         <CollectionFooter
           item={item}
-          card={props.card}
           state={props.collectionState}
           stateRead={props.collectionStateRead}
           originsFailure={props.originsFailure}
           originsLoading={props.originsLoading}
           install={install}
-          onAction={onAction}
           onOpenSheet={props.onOpenSheet}
         />
       ) : (
         <>
-          {hasCommands ? (
+          {showSubmit ? (
             <span className="flex flex-wrap items-center gap-[var(--space-8)]">
-              {authorAction === undefined ? null : (
-                <button
-                  type="button"
-                  id={`yunari-store-item-${authorAction}`}
-                  data-yunari-store-item-status-action={authorAction}
-                  onClick={() => authorPress?.(item.id)}
-                  className={FOOTER_BUTTON}
-                >
-                  {uiCopy.store.actions[authorAction]}
-                </button>
-              )}
-              {showSubmit ? <SubmitFooter item={item} submit={submit} /> : null}
+              <SubmitFooter item={item} submit={submit} />
             </span>
           ) : null}
           {onlineThemeInstall ? (
@@ -435,7 +434,12 @@ export function PanelFoot(props: {
               {actions.length === 0 ? null : (
                 <span className="flex flex-wrap gap-[var(--space-6)]">
                   {actions.map((action) => {
-                    const reason = CELL_ACTION_REASONS[action];
+                    const reason = actionDisabledReason(
+                      action,
+                      kind,
+                      actionLabel(action, kind),
+                      item,
+                    );
                     const controlId = `yunari-store-item-${action}`;
                     return (
                       <ActionBox
@@ -458,7 +462,12 @@ export function PanelFoot(props: {
                 </span>
               )}
               {actions.map((action) => {
-                const reason = CELL_ACTION_REASONS[action];
+                const reason = actionDisabledReason(
+                  action,
+                  kind,
+                  actionLabel(action, kind),
+                  item,
+                );
                 return reason === undefined ? null : (
                   <span
                     key={action}

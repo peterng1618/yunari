@@ -1,19 +1,25 @@
-import type { CatalogueOrigin, CatalogueRefusal } from "@yunari/renderer-core";
+import type {
+  CatalogueOrigin,
+  CatalogueRefusal,
+  MemberKind,
+} from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { BareSegmented } from "../components/ui/bare-segmented.js";
 import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import { AssignChoice, AssignDisplay } from "../store-mode/assign-display.js";
+import { removalPath } from "../store-mode/cell-actions.js";
 import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
 import { withInstalledVersions } from "../store-mode/install-state.js";
-import { actionLabel } from "../store-mode/item-foot.js";
 import { ItemModal } from "../store-mode/item-modal.js";
 import {
   type CellAction,
   type FacetSelection,
   matchesFacets,
+  matchesQuery,
   type StoreItem,
   settledTags,
 } from "../store-mode/local-source.js";
@@ -58,15 +64,17 @@ const CODE_PAGES: ReadonlySet<LibraryPage> = new Set([
   "panel-drivers",
 ]);
 
-/** The Sensor providers page's two member kinds, in its sub-filter's order. */
-const SENSOR_KINDS = ["sensor-provider", "data-source"] as const;
-
-type SensorKind = (typeof SENSOR_KINDS)[number];
-
-const SENSOR_NAMES: Record<SensorKind, string> = {
+/** The Sensor providers page's two member-kind words. The kinds themselves are
+ *  `PAGE_RULES["sensor-providers"].memberKinds`, read through the source. */
+const SENSOR_NAMES: Readonly<Partial<Record<MemberKind, string>>> = {
   "sensor-provider": uiCopy.library.sensors.sensors,
   "data-source": uiCopy.library.sensors.dataSources,
 };
+
+/** How many rows the grid draws before the sentinel asks for another batch.
+ *  `DESIGN.md` states the grid loads near the end, and the catalogue can be
+ *  large; the scroller stays responsive without mounting everything at once. */
+const LOAD_BATCH = 24;
 
 /** One row, tagged with the half it was read from. The tag is what keeps a
  *  library row in "On this PC" whatever its origin says. */
@@ -123,15 +131,22 @@ function rowsFor(
 
   const collectionOf = (row: Row) =>
     origins === undefined ? undefined : collectionStateOf(row.item, origins);
+  /** **A collection is neither side until the register answers.** Its state is
+   *  counted over the register, so an unread register would draw an installed
+   *  collection as "Not installed" and hide it from "On this PC". */
+  const unclassified = (row: Row): boolean =>
+    origins === undefined && row.item.includes !== undefined;
 
   if (state === "on-this-pc") {
     return rows.filter((row) => {
+      if (unclassified(row)) return false;
       if (row.half === "library" || row.item.origin !== undefined) return true;
       const collection = collectionOf(row);
       return collection !== undefined && collection.state !== "absent";
     });
   }
   return rows.filter((row) => {
+    if (unclassified(row)) return false;
     const collection = collectionOf(row);
     if (collection !== undefined) return collection.state === "absent";
     return row.half === "store" && row.item.origin === undefined;
@@ -159,7 +174,6 @@ export function PageListing(props: {
   const density = useGridDensity();
   const [sort, setSort] = useState<string>(readLibrarySort);
   const [chosen, setChosen] = useState<FacetSelection>(readLibraryFacets);
-  const [sensorKind, setSensorKind] = useState<SensorKind>("sensor-provider");
   const sources = useMemo(
     () => ({
       catalogue: catalogueSourceFor(props.page),
@@ -167,6 +181,17 @@ export function PageListing(props: {
     }),
     [props.page, props.clients],
   );
+  /** The Sensor providers sub-filter, built from the page rule's own member
+   *  kinds: the options and the filter read one list, so a second spelling
+   *  here cannot drift from what the page browses. */
+  const sensorKinds = sources.catalogue.memberKinds;
+  const [sensorKind, setSensorKind] = useState<MemberKind>(
+    () => sensorKinds[0] ?? "sensor-provider",
+  );
+  const [query, setQuery] = useState("");
+  /** The stored facet choice is pruned once, after the listing answers: a
+   *  prune over the first render's empty rows would erase it. */
+  const pruned = useRef(false);
   const [catalogue, setCatalogue] = useState<readonly StoreItem[] | undefined>(
     undefined,
   );
@@ -188,6 +213,10 @@ export function PageListing(props: {
   const readsOrigins = sources.catalogue.memberKind === "collection";
   const readsExtensions = CODE_PAGES.has(props.page);
   const [openCard, setOpenCard] = useState<StoreCard | undefined>(undefined);
+  /** Whether the card that just opened asks for the collection sheet directly:
+   *  a collection card's Install press is a request for the sheet, never an
+   *  install with the card's own (missing) choices. */
+  const [openSheetInitially, setOpenSheetInitially] = useState(false);
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -219,9 +248,13 @@ export function PageListing(props: {
   useEffect(() => {
     setExpanded(new Set());
     setOpenCard(undefined);
+    setOpenSheetInitially(false);
     setNotice(undefined);
     setAssignId(undefined);
-  }, [props.page]);
+    setQuery("");
+    setSensorKind(sensorKinds[0] ?? "sensor-provider");
+    pruned.current = false;
+  }, [props.page, sensorKinds]);
 
   useEffect(() => {
     let live = true;
@@ -281,30 +314,73 @@ export function PageListing(props: {
     () => rowsFor(catalogue ?? [], library ?? [], props.state, origins),
     [catalogue, library, props.state, origins],
   );
-  const visible =
-    props.page === "sensor-providers"
-      ? rows.filter((row) =>
-          row.item.members.some((member) => member.kind === sensorKind),
-        )
-      : rows;
+  const visible = useMemo(
+    () =>
+      props.page === "sensor-providers"
+        ? rows.filter((row) =>
+            row.item.members.some((member) => member.kind === sensorKind),
+          )
+        : rows,
+    [rows, props.page, sensorKind],
+  );
   const items = useMemo(() => visible.map((row) => row.item), [visible]);
   const facets = useMemo(() => listingFacets(items), [items]);
+  /** **A prune waits for the listing.** The restored choice is the person's, and
+   *  the first render holds no rows yet; pruning then would erase it. The
+   *  one-shot flag keeps a later prune of the same listing from eating a facet
+   *  they just chose. */
+  const listingsSettled =
+    (catalogue !== undefined || catalogueFailed) &&
+    (library !== undefined || libraryFailed);
   useEffect(() => {
-    const pruned = pruneLibraryFacets(chosen, facets);
-    if (pruned !== chosen) {
-      setChosen(pruned);
-      rememberLibraryFacets(pruned);
+    if (pruned.current || !listingsSettled) return;
+    pruned.current = true;
+    const next = pruneLibraryFacets(chosen, facets);
+    if (next !== chosen) {
+      setChosen(next);
+      rememberLibraryFacets(next);
     }
-  }, [chosen, facets]);
+  }, [chosen, facets, listingsSettled]);
   const matched = useMemo(
-    () => items.filter((item) => matchesFacets(item, chosen)),
-    [items, chosen],
+    () =>
+      items.filter(
+        (item) => matchesQuery(item, query) && matchesFacets(item, chosen),
+      ),
+    [items, chosen, query],
   );
   const shown = useMemo(
     () => [...matched].sort(SORT_ORDERS[sort] ?? (() => 0)),
     [matched, sort],
   );
   const answered = catalogue !== undefined || library !== undefined;
+  /** The grid draws one batch and the sentinel asks for the next, as the store
+   *  region did: the catalogue can be large and the scroller stays responsive. */
+  const [shownCount, setShownCount] = useState(LOAD_BATCH);
+  const paged = shown.slice(0, shownCount);
+  const more = shown.length > paged.length;
+  useEffect(() => {
+    setShownCount(LOAD_BATCH);
+  }, [props.page, props.state, sort, chosen, query]);
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!more) return undefined;
+    const node = sentinel.current;
+    if (node === null || typeof IntersectionObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShownCount((current) =>
+            Math.min(shown.length, current + LOAD_BATCH),
+          );
+        }
+      },
+      { rootMargin: "0px 0px 50% 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [more, shown.length]);
 
   // The strip is the shell's; this region owns the count. **A count is
   // published only when both halves answered**: a failed read is not an empty
@@ -321,6 +397,66 @@ export function PageListing(props: {
     return () => onStatus?.(undefined);
   }, [onStatus, count]);
 
+  /** Resolves the open card's listing against the rows a refresh joined, so the
+   *  modal's foot reads the state the listing now reports rather than the
+   *  snapshot it opened with. */
+  const refreshOpenCard = (joined: readonly Row[]): void => {
+    setOpenCard((current) => {
+      if (current === undefined) return current;
+      const row = joined.find(
+        (candidate) => candidate.item.id === current.listing.id,
+      );
+      return row === undefined ? current : { ...current, listing: row.item };
+    });
+  };
+
+  /**
+   * Re-reads what a write changed: both halves, the register and the extension
+   * listing, then the open card from their join.
+   *
+   * **The join is built from the halves this read answered**, never from one
+   * fresh half beside a stale one: `installedId` and a collection's count come
+   * from the pair. A refusal the re-list answered is set with its rows, so a
+   * cleared list cannot let a refused entry read as absent.
+   */
+  const relist = async (): Promise<void> => {
+    let nextCatalogue = catalogue;
+    let nextLibrary = library;
+    let nextOrigins = origins;
+    try {
+      const read = await sources.catalogue.list();
+      nextCatalogue = read.rows;
+      setCatalogue(read.rows);
+      setRefused(read.refused);
+    } catch {
+      setCatalogueFailed(true);
+    }
+    try {
+      const read = await sources.library.list();
+      nextLibrary = read.rows;
+      setLibrary(read.rows);
+    } catch {
+      setLibraryFailed(true);
+    }
+    if (readsOrigins) {
+      try {
+        nextOrigins = await readOrigins();
+        setOrigins(nextOrigins);
+      } catch {
+        setOriginsFailed(true);
+      }
+    }
+    if (readsExtensions) {
+      props.clients.extensions().then(
+        (rows) => setExtensions(rows),
+        () => setExtensionsFailed(true),
+      );
+    }
+    refreshOpenCard(
+      rowsFor(nextCatalogue ?? [], nextLibrary ?? [], "all", nextOrigins),
+    );
+  };
+
   const installSource = useMemo(
     () => ({
       kind: sources.catalogue.memberKind,
@@ -330,27 +466,8 @@ export function PageListing(props: {
   );
   const install = useInstall({
     source: installSource,
-    onListed: (listed) => {
-      setCatalogue(listed);
-      // The install re-listed the catalogue itself, so the refusals the mount
-      // read no longer describe what is drawn: they are cleared with the rows.
-      setRefused([]);
-      sources.library.list().then(
-        (read) => setLibrary(read.rows),
-        () => setLibraryFailed(true),
-      );
-      if (readsOrigins) {
-        readOrigins().then(
-          (rows) => setOrigins(rows),
-          () => setOriginsFailed(true),
-        );
-      }
-      if (readsExtensions) {
-        props.clients.extensions().then(
-          (rows) => setExtensions(rows),
-          () => setExtensionsFailed(true),
-        );
-      }
+    onListed: () => {
+      void relist();
     },
   });
   /** **A submission is this page's own flow.** The Library replaced the old
@@ -363,34 +480,10 @@ export function PageListing(props: {
   >(undefined);
   const submit = useSubmit({
     // A landed submission re-reads both halves, so the card draws the version
-    // the host just wrote rather than the one this page read at mount. An open
-    // item's surface is replaced from the same read: the modal keeps drawing
-    // the item it opened, and that item's version is the listing's fact.
+    // the host just wrote rather than the one this page read at mount; the
+    // modal's foot is refreshed from the same join (`relist`).
     onSubmitted: () => {
-      const refreshOpenCard = (rows: readonly StoreItem[]): void => {
-        setOpenCard((current) => {
-          if (current === undefined) return current;
-          const listed = rows.find((item) => item.id === current.listing.id);
-          return listed === undefined
-            ? current
-            : { ...current, listing: listed };
-        });
-      };
-      void sources.catalogue.list().then(
-        (read) => {
-          setCatalogue(read.rows);
-          setRefused(read.refused);
-          refreshOpenCard(read.rows);
-        },
-        () => setCatalogueFailed(true),
-      );
-      void sources.library.list().then(
-        (read) => {
-          setLibrary(read.rows);
-          refreshOpenCard(read.rows);
-        },
-        () => setLibraryFailed(true),
-      );
+      void relist();
     },
     beforeSubmit: async (id) => {
       try {
@@ -448,35 +541,63 @@ export function PageListing(props: {
 
   const openCardAt = (card: StoreCard): void => {
     props.onDetailOpen();
+    setOpenSheetInitially(false);
     setOpenCard(card);
   };
 
-  /**
-   * Whether this page and this row own one of the stored-theme commands.
-   *
-   * **Only Dashboard themes owns the four**, and only for a dashboard theme:
-   * `open` needs the document's route, and Delete, Export and Assign act on the
-   * host's `/api/themes` routes, which hold editor themes nowhere and drivers
-   * never. A page that draws the gallery's shared action row for another kind
-   * reports the press as pending rather than calling a route for the wrong
-   * store.
-   */
-  const ownsThemeCommand = (card: StoreCard): boolean =>
-    props.page === "dashboard-themes" &&
-    card.listing.kind === "dashboard-theme";
+  /** A collection card's Install or Update: the sheet owns the chosen set and
+   *  the members' consent, so the card only asks for it. */
+  const openSheetAt = (card: StoreCard): void => {
+    props.onDetailOpen();
+    setOpenSheetInitially(true);
+    setOpenCard(card);
+  };
+
+  /** Removes one installed copy through the route its kind owns. The re-list
+   *  that follows is the listing's fact: the row disappears because the host no
+   *  longer lists it, not because this surface hid it. */
+  const remove = async (path: string): Promise<void> => {
+    try {
+      const response = await fetch(path, { method: "DELETE" });
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => undefined);
+        const message =
+          typeof body === "object" && body !== null
+            ? (body as { readonly message?: unknown }).message
+            : undefined;
+        setNotice(
+          typeof message === "string" && message.trim() !== ""
+            ? message
+            : uiCopy.store.removeRefused(response.status),
+        );
+        return;
+      }
+      setNotice(undefined);
+      await relist();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   /**
-   * The one callback a cell's actions and the modal's footer share.
+   * The one callback a cell's actions and the modal's foot share.
    *
-   * Every command this page does not own keeps the pending sentence, so a
-   * control stays drawn (R164) and its press says what is not wired rather than
-   * acting on the wrong kind. Assign from the item's own surface is drawn inline
-   * and stays inside the page it was opened from; from a cell there is no page
-   * to keep, so it opens as the dialog it is.
+   * **R27: every live control runs through its route.** A command this build
+   * cannot run is drawn disabled with its reason (`actionDisabledReason`), so no
+   * press reaches this callback for a sentence instead of an action. A theme's
+   * four commands act on the library copy the join named (`installedId`), a
+   * removal on the route `removalPath` owns, and a collection's Remove opens the
+   * sheet that names each member's own removal.
    */
   const onAction = (action: CellAction, card: StoreCard): void => {
-    const id = card.listing.id;
-    if (ownsThemeCommand(card)) {
+    const item = card.listing;
+    const kind = card.member?.kind ?? item.kind;
+    const id = item.installedId ?? item.id;
+    if (kind === "collection" && action === "remove") {
+      openSheetAt({ ...card });
+      return;
+    }
+    if (kind === "dashboard-theme") {
       if (action === "open" && props.onOpenTheme !== undefined) {
         props.onOpenTheme(id);
         return;
@@ -498,11 +619,10 @@ export function PageListing(props: {
         return;
       }
     }
-    setNotice(
-      uiCopy.library.actionPending(
-        actionLabel(action, card.member?.kind ?? card.listing.kind),
-      ),
-    );
+    if (action === "remove") {
+      const path = removalPath(kind, id);
+      if (path !== undefined) void remove(path);
+    }
   };
 
   const assignItem =
@@ -532,16 +652,22 @@ export function PageListing(props: {
             data={{ "data-yunari-library-sensors": "" }}
             label={uiCopy.library.sensors.label}
             value={sensorKind}
-            options={SENSOR_KINDS.map((kind) => ({
+            options={sensorKinds.map((kind) => ({
               id: kind,
-              name: SENSOR_NAMES[kind],
+              name: SENSOR_NAMES[kind] ?? kind,
             }))}
-            onChange={(kind) => setSensorKind(kind as SensorKind)}
+            onChange={(kind) => {
+              if (sensorKinds.some((option) => option === kind)) {
+                setSensorKind(kind as MemberKind);
+              }
+            }}
           />
         </div>
       ) : null}
 
       <ListingToolbar
+        query={query}
+        onQuery={setQuery}
         facets={facets}
         chosen={chosen}
         onToggle={(facetId, optionId) => {
@@ -586,6 +712,24 @@ export function PageListing(props: {
             onRetry={() => setAttempt((current) => current + 1)}
           />
         ) : null}
+        {/* **A held update is never a silent no-op.** The host read the
+            package, refused to write it, and named the growth that held it;
+            the notice says which listing, what grew and what the approval
+            press grants. It sits beside the listing it did not change, as the
+            retired store region drew it. */}
+        {install.control.held === undefined ? null : (
+          <div className="flex-none">
+            <HeldUpdateNotice
+              held={install.control.held.held}
+              heading={uiCopy.store.install.reviewHeading}
+              reasonsLabel={uiCopy.store.install.reviewReasons}
+              approveLabel={uiCopy.store.install.reviewApprove}
+              dismissLabel={uiCopy.store.install.reviewDismiss}
+              onApprove={install.control.onApproveUpdate}
+              onDismiss={install.control.onDismissUpdate}
+            />
+          </div>
+        )}
         {notice === undefined ? null : (
           <p
             data-yunari-library-action-notice=""
@@ -611,9 +755,9 @@ export function PageListing(props: {
             {actions.exportRefusal}
           </p>
         )}
-        {shown.length > 0 ? (
+        {paged.length > 0 ? (
           <Gallery
-            items={shown}
+            items={paged}
             density={density.level}
             origins={origins}
             expanded={expanded}
@@ -627,7 +771,9 @@ export function PageListing(props: {
             }
             onAction={onAction}
             onOpenItem={openCardAt}
+            onOpenSheet={openSheetAt}
             install={install.control}
+            submit={submit.control}
           />
         ) : answered && !catalogueFailed && !libraryFailed ? (
           <div data-yunari-library-empty="">
@@ -636,6 +782,17 @@ export function PageListing(props: {
               hint={uiCopy.library.emptyHint}
             />
           </div>
+        ) : null}
+        {/* **The sentinel asks for the next batch near the end.** It is drawn
+            only while rows remain, so a page that has drawn its whole listing
+            unmounts the observer rather than observing nothing. */}
+        {more ? (
+          <div
+            ref={sentinel}
+            data-yunari-library-sentinel=""
+            aria-hidden="true"
+            className="h-px flex-none"
+          />
         ) : null}
         {refused.length > 0 ? (
           <ul
@@ -706,6 +863,7 @@ export function PageListing(props: {
             actionNotice={notice}
             install={install.control}
             submit={submit.control}
+            openSheetInitially={openSheetInitially}
             onOpenItem={openCardAt}
             onOpenCollection={openCardAt}
             {...(remixParent === undefined ? {} : { remixParent })}
@@ -752,7 +910,10 @@ export function PageListing(props: {
         aria-live="polite"
         className="sr-only"
       >
-        {actions.deleteRefusal || actions.exportRefusal || install.announcement}
+        {actions.deleteRefusal ||
+          actions.exportRefusal ||
+          install.announcement ||
+          submit.announcement}
       </span>
     </div>
   );

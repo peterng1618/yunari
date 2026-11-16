@@ -5,12 +5,12 @@ import type {
   MemberRecord,
 } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { collectionStateOf, type StoreCard } from "../library-mode/cards.js";
 import { CollectionSheet } from "../library-mode/collection-sheet.js";
 import type { ExtensionRow } from "../library-mode/sources.js";
 import { uiCopy } from "../ui-copy.js";
-import { collectionsOf } from "./cell-actions.js";
+import { carriesThemeDocument, collectionsOf } from "./cell-actions.js";
 import { readCollectionPlan } from "./collection-plan.js";
 import type { InstallControl } from "./install-item.js";
 import type { DetailPlanState } from "./item-detail.js";
@@ -131,14 +131,12 @@ export function ItemModal(props: {
    *  then happens without the page being left, and the choice confirms beside
    *  itself (`assign-display.tsx`). Absent where no assignment was started. */
   readonly assign?: React.ReactNode;
-  /** The author's own commands on the store row, drawn only for the state that
-   *  allows each (`status-badge.tsx`). The region posts and re-reads the
-   *  author's listing; this surface only reports the press. */
-  readonly onUnpublish?: (id: string) => void;
-  readonly onRepublish?: (id: string) => void;
   /** What the surface said about the last command it could not run. The
    *  listing's notice sits behind the modal, so the modal carries it too. */
   readonly actionNotice?: string | undefined;
+  /** Opens the collection sheet with the modal: a collection's card press asks
+   *  for the chosen set, so its Install is never a bare install. */
+  readonly openSheetInitially?: boolean | undefined;
 }): React.JSX.Element {
   const { item, onClose, onAction, install, submit } = props;
   const kind = props.member?.kind ?? item.kind;
@@ -151,10 +149,16 @@ export function ItemModal(props: {
   const [planAttempt, setPlanAttempt] = useState(0);
   /** The collection install sheet, opened by the foot's Install or Update. The
    *  sheet is the modal's because the plan and the register are already here. */
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(props.openSheetInitially === true);
   useEffect(() => {
-    setSheetOpen(false);
-  }, [item]);
+    setSheetOpen(props.openSheetInitially === true);
+  }, [item, props.openSheetInitially]);
+  // **A reopened modal starts a fresh submission**, so a landed press on the
+  // item seen last time does not keep this one's Submit disabled.
+  const resetSubmit = useRef(submit.reset);
+  useEffect(() => {
+    resetSubmit.current();
+  }, [item.id]);
   // **The plan is read when this surface opens**, which is the only moment a
   // collection's detail exists; a grid render never mounts the modal, so it
   // never pays for a read it cannot show.
@@ -200,20 +204,12 @@ export function ItemModal(props: {
     listing: item,
     member: props.member,
   };
-  // The one command a state allows, only where the region wired it.
-  const authorAction =
-    item.status === "published" && props.onUnpublish !== undefined
-      ? ("unpublish" as const)
-      : item.status === "unpublished" && props.onRepublish !== undefined
-        ? ("republish" as const)
-        : undefined;
-  const authorPress =
-    authorAction === "unpublish"
-      ? props.onUnpublish
-      : authorAction === "republish"
-        ? props.onRepublish
-        : undefined;
-  const reading = stageReading(item);
+  // **Only a package carrying a theme document has a size to caption.** A
+  // widget, plugin or collection carries `defaultFacetsFor`'s placeholder
+  // record, whose 1×1 square is a fabrication rather than a reading.
+  const reading = carriesThemeDocument(item.kind)
+    ? stageReading(item)
+    : undefined;
   // A 0 × 0 record has no ratio to draw: the same guard the caption reads is
   // repeated here, so the picture takes the stage's box rather than a `calc`
   // that is invalid at computed-value time and collapses it.
@@ -316,8 +312,6 @@ export function ItemModal(props: {
               submit={submit}
               onAction={onAction}
               onOpenSheet={() => setSheetOpen(true)}
-              authorAction={authorAction}
-              authorPress={authorPress}
               notice={props.actionNotice}
               {...(props.assign === undefined ? {} : { assign: props.assign })}
             />

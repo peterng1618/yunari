@@ -303,7 +303,7 @@ it("lists a submitted collection under My submissions", async () => {
   const collection = listing(SECOND_ID, "Acme Kit", {
     kind: "collection",
     members: [],
-    includes: [FIRST_ID],
+    includes: [{ id: FIRST_ID, optional: false }],
   });
   const entry = {
     id: collection.id,
@@ -317,7 +317,7 @@ it("lists a submitted collection under My submissions", async () => {
     packageUrl: `https://store.test/catalogue/${collection.id}/1.0.0.zip`,
     thumbnail: `catalogue/${collection.id}/thumbnail.png`,
     members: [],
-    includes: [FIRST_ID],
+    includes: [{ id: FIRST_ID, optional: false }],
     facets: FACETS,
     status: "published",
   };
@@ -471,4 +471,125 @@ it("states a failed read instead of claiming nothing was submitted", async () =>
   expect(document.body.textContent).not.toContain(
     uiCopy.library.submissions.empty,
   );
+});
+
+/** The owner's sentence and the removed-permanently fact belong to the row the
+ *  author reads: My submissions opens no modal, so a badge alone would leave the
+ *  reason unreachable. */
+it("draws the host's status reason on an author row", async () => {
+  const reason = "The thumbnail must be the theme itself.";
+  const entry = {
+    id: FIRST_ID,
+    kind: "dashboard-theme",
+    name: FIRST.name,
+    version: "1.0.0",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    downloads: 0,
+    favorites: 0,
+    packageUrl: `https://store.test/catalogue/${FIRST_ID}/1.0.0.zip`,
+    thumbnail: `catalogue/${FIRST_ID}/thumbnail.png`,
+    members: [{ id: FIRST_ID, kind: "dashboard-theme", name: FIRST.name }],
+    facets: FACETS,
+    status: "removed",
+    statusReason: reason,
+  };
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).includes("/api/store/mine")) {
+      return json({ entries: [entry] });
+    }
+    return json({ generatedAt: "2026-11-16T00:00:00.000Z", entries: [] });
+  });
+
+  await mount(
+    createElement(SubmissionsPage, {
+      fetch: fetch as unknown as typeof fetch,
+    }),
+  );
+  await flush();
+
+  const row = must(
+    document.body.querySelector<HTMLElement>(
+      `[data-yunari-submission="${FIRST_ID}"]`,
+    ),
+    "submission row",
+  );
+  expect(row.textContent, "the owner's reason is not drawn").toContain(reason);
+  expect(
+    row.textContent,
+    "a removed item does not say it cannot come back",
+  ).toContain(uiCopy.store.status.removedPermanent);
+});
+
+/** **A refused author command is drawn beside its row**, not only announced,
+ *  and the button disables while the post is in flight so a second press cannot
+ *  race the first. */
+it("states a refused unpublish beside the row and disables the press", async () => {
+  const entry = {
+    id: FIRST_ID,
+    kind: "dashboard-theme",
+    name: FIRST.name,
+    version: "1.0.0",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    downloads: 0,
+    favorites: 0,
+    packageUrl: `https://store.test/catalogue/${FIRST_ID}/1.0.0.zip`,
+    thumbnail: `catalogue/${FIRST_ID}/thumbnail.png`,
+    members: [{ id: FIRST_ID, kind: "dashboard-theme", name: FIRST.name }],
+    facets: FACETS,
+    status: "published",
+  };
+  let release: ((response: Response) => void) | undefined;
+  const pending = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/store/mine")) return json({ entries: [entry] });
+    if (url.includes("/api/store/items/")) return pending;
+    return json({ generatedAt: "2026-11-16T00:00:00.000Z", entries: [] });
+  });
+
+  await mount(
+    createElement(SubmissionsPage, {
+      fetch: fetch as unknown as typeof fetch,
+    }),
+  );
+  await flush();
+
+  const control = must(
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-yunari-submission-action="unpublish"]',
+    ),
+    "unpublish control",
+  );
+  await press(control);
+
+  expect(
+    control.disabled,
+    "the press stays live while its post is in flight",
+  ).toBe(true);
+
+  const refusal = "The owner has locked this listing.";
+  await act(async () =>
+    release?.(
+      new Response(JSON.stringify({ message: refusal }), { status: 403 }),
+    ),
+  );
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector<HTMLElement>(
+        "[data-yunari-submission-refusal]",
+      )?.textContent,
+      "the host's refusal was not drawn beside the row",
+    ).toBe(refusal),
+  );
+  expect(
+    document.body
+      .querySelector<HTMLElement>("[data-yunari-submission-refusal]")
+      ?.getAttribute("role"),
+    "the refusal is not announced",
+  ).toBe("status");
 });

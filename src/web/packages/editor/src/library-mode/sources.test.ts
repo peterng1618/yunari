@@ -105,7 +105,7 @@ describe("the catalogue's page source", () => {
           kind: "collection",
           name: "Bundle",
           members: [],
-          includes: [CATALOGUE_ID],
+          includes: [{ id: CATALOGUE_ID, optional: true }],
         }),
       ]),
     });
@@ -118,7 +118,11 @@ describe("the catalogue's page source", () => {
     ]);
     expect(theme?.includes).toBeUndefined();
     expect(collection?.members).toEqual([]);
-    expect(collection?.includes).toEqual([CATALOGUE_ID]);
+    // The row keeps the wire's optional flag: a declined optional member must
+    // not be counted as required by `collectionStateOf`.
+    expect(collection?.includes).toEqual([
+      { id: CATALOGUE_ID, optional: true },
+    ]);
   });
 
   it("keeps an unknown member kind in the listing", async () => {
@@ -179,7 +183,12 @@ describe("the catalogue's page source", () => {
     });
     const collections = catalogueSourceFor("collections", {
       fetch: catalogueServing([
-        entry({ id: "bundle", kind: "collection", members: [] }),
+        entry({
+          id: "bundle",
+          kind: "collection",
+          members: [],
+          includes: [{ id: CATALOGUE_ID, optional: true }],
+        }),
         entry({
           id: "packed",
           members: [{ id: "card", kind: "widget", name: "Card" }],
@@ -430,4 +439,47 @@ describe("the library's page source", () => {
     expect(source.page).toBe("widgets");
     expect(source.memberKind).toBe("widget");
   });
+});
+
+/** The Sensor providers sub-filter is the page rule's own list, so the options
+ *  and the filter cannot drift from what the page browses. */
+it("exposes the member kinds each page browses", () => {
+  expect(catalogueSourceFor("sensor-providers").memberKinds).toEqual([
+    "sensor-provider",
+    "data-source",
+  ]);
+  expect(
+    librarySourceFor("sensor-providers", {
+      themes: async () => [],
+      editorThemes: async () => [],
+      widgetPacks: async () => [],
+      pathPresets: async () => [],
+      extensions: async () => [],
+    }).memberKinds,
+  ).toEqual(["sensor-provider", "data-source"]);
+});
+
+/** **A member list that could not be read is refused, not drawn empty.** An
+ *  empty list is the fact that a listing carries none; a host row that names
+ *  members the reader could not parse is a different fact, and the page states
+ *  it like the catalogue's own refusals. */
+it("refuses a host row whose member list could not be read", async () => {
+  const broken = {
+    id: OTHER_ID,
+    name: "Broken pack",
+    version: "1.0.0",
+    units: "not a list",
+  } as unknown as WidgetPackRow;
+  const read = await librarySourceFor("widgets", {
+    themes: async () => [],
+    editorThemes: async () => [],
+    widgetPacks: async () => [broken],
+    pathPresets: async () => [],
+    extensions: async () => [],
+  }).list();
+
+  expect(read.rows, "an unreadable pack was drawn as an empty one").toEqual([]);
+  expect(read.refused).toEqual([
+    { kind: "widget-pack", reason: "malformed", count: 1 },
+  ]);
 });

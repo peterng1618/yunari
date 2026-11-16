@@ -81,6 +81,52 @@ it("carries the host's refusal out unchanged", async () => {
   });
 });
 
+/** A part-way collection failure is JSON, not a sentence: the host wrote some
+ *  members and refused others, and the sheet names which. Reading the whole
+ *  body as the message would print the JSON at a person and lose every
+ *  per-member answer. */
+it("reads a part-way failure's sentence and its per-member outcomes", async () => {
+  const outcome = await installItem(ITEM, {
+    fetch: (async () =>
+      new Response(
+        JSON.stringify({
+          ok: false,
+          message: "Two members could not be written.",
+          members: [
+            { id: "wall", ok: true },
+            { id: "widget", ok: false, reason: "The package was refused." },
+          ],
+        }),
+        { status: 502 },
+      )) as unknown as typeof fetch,
+  });
+
+  expect(outcome).toEqual({
+    ok: false,
+    message: "Two members could not be written.",
+    members: [
+      { id: "wall", ok: true },
+      { id: "widget", ok: false, reason: "The package was refused." },
+    ],
+  });
+});
+
+/** A JSON refusal with no sentence of its own still names the status rather
+ *  than printing `{"ok":false}` at a person. */
+it("answers a JSON refusal that gave no sentence with the status", async () => {
+  const outcome = await installItem(ITEM, {
+    fetch: (async () =>
+      new Response(JSON.stringify({ ok: false }), {
+        status: 500,
+      })) as unknown as typeof fetch,
+  });
+
+  expect(outcome).toEqual({
+    ok: false,
+    message: uiCopy.store.install.refused(500),
+  });
+});
+
 /** A library item has no catalogue facts, so there is no package to name. The
  *  controls never draw for one; this is the guard's own answer, and it must not
  *  reach the host at all. */

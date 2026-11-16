@@ -58,6 +58,8 @@ const SORT_ID = "yunari-library-sort";
  * drift from the list it filters.
  */
 export function ListingToolbar(props: {
+  readonly query: string;
+  readonly onQuery: (query: string) => void;
   readonly facets: readonly Facet[];
   readonly chosen: FacetSelection;
   readonly onToggle: (facetId: string, optionId: string) => void;
@@ -71,6 +73,17 @@ export function ListingToolbar(props: {
       data-yunari-library-toolbar=""
       className="flex flex-none flex-wrap items-center gap-[var(--space-12)] px-[var(--space-16)] pt-[var(--space-12)] pb-[var(--space-8)]"
     >
+      <span className="flex min-w-[10rem] flex-1 items-center rounded-[var(--radius-md)] border border-edge bg-panel-2 px-[var(--space-8)] py-[var(--space-6)]">
+        <input
+          type="search"
+          data-yunari-library-search=""
+          aria-label={uiCopy.library.search}
+          placeholder={uiCopy.library.search}
+          value={props.query}
+          onChange={(event) => props.onQuery(event.target.value)}
+          className="h-full w-full bg-transparent text-sm text-text outline-none"
+        />
+      </span>
       <FacetRow
         facets={props.facets}
         chosen={props.chosen}

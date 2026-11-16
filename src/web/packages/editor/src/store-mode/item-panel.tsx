@@ -5,7 +5,7 @@ import { ControlIconButton } from "../components/ui/control-icon-button.js";
 import { CLOSE_GLYPH, Glyph } from "../editor-shell/icons.js";
 import type { StoreCard } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
-import { isCodeKind } from "./cell-actions.js";
+import { carriesThemeDocument, isCodeKind } from "./cell-actions.js";
 import {
   canShowTrust,
   type DetailPlanState,
@@ -342,11 +342,16 @@ export function PanelBody(props: {
           proposed: false,
         }))}
       />
-      <PillGroup
-        id="shape"
-        name={uiCopy.store.pillGroups.shape}
-        pills={shapeReadings(item)}
-      />
+      {/* **Only a package carrying a theme document has a Shape.** A widget,
+          plugin or collection reads `defaultFacetsFor`'s placeholder record — a
+          1×1 square — and drawing it would state an artboard nobody authored. */}
+      {carriesThemeDocument(item.kind) ? (
+        <PillGroup
+          id="shape"
+          name={uiCopy.store.pillGroups.shape}
+          pills={shapeReadings(item)}
+        />
+      ) : null}
       {/* `PillGroup` draws no heading over no pills, so an untagged theme draws
           two groups rather than an empty third. */}
       <PillGroup

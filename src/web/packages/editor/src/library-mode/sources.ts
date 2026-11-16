@@ -3,6 +3,7 @@ import {
   type CatalogueOrigin,
   type CatalogueRefusal,
   defaultFacetsFor,
+  type ListingMembers,
   listingMemberRecords,
   type MemberKind,
   type MemberRecord,
@@ -72,6 +73,10 @@ export interface LibraryPageSource {
   readonly page: LibraryPage;
   /** Listings that carry at least one member of this page's kind. */
   readonly memberKind: MemberKind | "collection" | "listing";
+  /** Every member kind the page browses, in its sub-filter's order. A page that
+   *  browses one kind answers a one-entry list; `sensor-providers` answers both
+   *  of its kinds. The page's sub-filter is built from this, never re-spelled. */
+  readonly memberKinds: readonly MemberKind[];
   list(): Promise<LibraryPageRows>;
 }
 
@@ -158,6 +163,7 @@ export function catalogueSourceFor(
   return {
     page,
     memberKind: rule.memberKind,
+    memberKinds: rule.memberKinds,
     async list(): Promise<LibraryPageRows> {
       const parsed = await readCatalogueListing(options, STORE_ITEM_KINDS);
       return {
@@ -241,90 +247,120 @@ export interface OriginsRead {
 /** One listing row as the item the gallery draws. A non-theme listing has no
  *  document to derive a record from, so it takes the store's own record for the
  *  kind rather than a second spelling here. */
-function editorThemeItemOf(row: EditorThemeRow): StoreItem {
-  return {
-    id: row.id,
-    kind: "editor-theme",
-    name: row.name,
-    members: listingMemberRecords("editor-theme", {
-      editorThemeName: row.name,
-    }),
-    author: undefined,
-    version: undefined,
-    updatedAt: undefined,
-    thumbnailUrl: undefined,
-    ground: undefined,
-    origin: row.origin,
-    catalogue: undefined,
-    facets: defaultFacetsFor("editor-theme"),
-  };
+/** One local row, with whether its member list could be read. The flag comes
+ *  off `listingMemberRecords`' own arm and is spent here: `StoreItem.members`
+ *  is a plain array, so a consumer comparing two rows never compares a tag. */
+interface Listed {
+  readonly item: StoreItem;
+  readonly unreadable: boolean;
 }
 
-function widgetPackItemOf(row: WidgetPackRow): StoreItem {
-  return {
-    id: row.id,
-    kind: "widget-pack",
-    name: row.name,
-    members: listingMemberRecords("widget-pack", { named: row.units }),
-    author: undefined,
-    version: row.version,
-    updatedAt: undefined,
-    thumbnailUrl: undefined,
-    ground: undefined,
-    origin: row.origin,
-    catalogue: undefined,
-    facets: defaultFacetsFor("widget-pack"),
-  };
+function listed(item: StoreItem, members: ListingMembers): Listed {
+  return { item, unreadable: members.unreadable };
+}
+
+function editorThemeItemOf(row: EditorThemeRow): Listed {
+  const members = listingMemberRecords("editor-theme", {
+    editorThemeName: row.name,
+  });
+  return listed(
+    {
+      id: row.id,
+      kind: "editor-theme",
+      name: row.name,
+      members: [...members],
+      author: undefined,
+      version: undefined,
+      updatedAt: undefined,
+      thumbnailUrl: undefined,
+      ground: undefined,
+      origin: row.origin,
+      catalogue: undefined,
+      facets: defaultFacetsFor("editor-theme"),
+    },
+    members,
+  );
+}
+
+function widgetPackItemOf(row: WidgetPackRow): Listed {
+  const members = listingMemberRecords("widget-pack", { named: row.units });
+  return listed(
+    {
+      id: row.id,
+      kind: "widget-pack",
+      name: row.name,
+      members: [...members],
+      author: undefined,
+      version: row.version,
+      updatedAt: undefined,
+      thumbnailUrl: undefined,
+      ground: undefined,
+      origin: row.origin,
+      catalogue: undefined,
+      facets: defaultFacetsFor("widget-pack"),
+    },
+    members,
+  );
 }
 
 /** One stored shape preset as its own single-member row. A pack's preset row
  *  carries that pack's origin from the host; a user preset carries none. */
-function pathPresetItemOf(row: PathPresetRow): StoreItem {
-  return {
-    id: row.id,
-    kind: "shape",
-    name: row.label,
-    members: listingMemberRecords("path-preset-pack", { named: [row] }),
-    author: undefined,
-    version: undefined,
-    updatedAt: undefined,
-    thumbnailUrl: undefined,
-    ground: undefined,
-    origin: row.origin,
-    catalogue: undefined,
-    facets: defaultFacetsFor("shape"),
-  };
+function pathPresetItemOf(row: PathPresetRow): Listed {
+  const members = listingMemberRecords("path-preset-pack", { named: [row] });
+  return listed(
+    {
+      id: row.id,
+      kind: "shape",
+      name: row.label,
+      members: [...members],
+      author: undefined,
+      version: undefined,
+      updatedAt: undefined,
+      thumbnailUrl: undefined,
+      ground: undefined,
+      origin: row.origin,
+      catalogue: undefined,
+      facets: defaultFacetsFor("shape"),
+    },
+    members,
+  );
 }
 
-function extensionItemOf(row: ExtensionRow): StoreItem {
-  return {
-    id: row.key,
-    kind: "plugin",
-    name: row.name,
-    members: listingMemberRecords("plugin", {
-      contributions: row.contributions,
-    }),
-    author: row.publisher,
-    version: row.version,
-    updatedAt: undefined,
-    thumbnailUrl: undefined,
-    ground: undefined,
-    origin: row.origin,
-    catalogue: undefined,
-    facets: defaultFacetsFor("plugin"),
-  };
+function extensionItemOf(row: ExtensionRow): Listed {
+  const members = listingMemberRecords("plugin", {
+    contributions: row.contributions,
+  });
+  return listed(
+    {
+      id: row.key,
+      kind: "plugin",
+      name: row.name,
+      members: [...members],
+      author: row.publisher,
+      version: row.version,
+      updatedAt: undefined,
+      thumbnailUrl: undefined,
+      ground: undefined,
+      origin: row.origin,
+      catalogue: undefined,
+      facets: defaultFacetsFor("plugin"),
+    },
+    members,
+  );
 }
 
 /** One reader per page. `collections` reads none: a collection leaves
  *  provenance on the members it installed, never a library row of its own. */
 const LIBRARY_READERS: Partial<
-  Record<
-    LibraryPage,
-    (clients: LibraryClients) => Promise<readonly StoreItem[]>
-  >
+  Record<LibraryPage, (clients: LibraryClients) => Promise<readonly Listed[]>>
 > = {
+  // The dashboard theme names itself as its one member, so the record cannot be
+  // unreadable: the listing row already carries both the id and the name.
   "dashboard-themes": async (clients) =>
-    (await clients.themes()).map(libraryThemeItemOf),
+    (await clients.themes()).map((entry) => ({
+      item: libraryThemeItemOf(entry),
+      unreadable: false,
+    })),
   "app-themes": async (clients) =>
     (await clients.editorThemes()).map(editorThemeItemOf),
   widgets: async (clients) =>
@@ -341,8 +377,18 @@ const LIBRARY_READERS: Partial<
  *  each browses. */
 async function installedExtensions(
   clients: LibraryClients,
-): Promise<readonly StoreItem[]> {
+): Promise<readonly Listed[]> {
   return (await clients.extensions()).map(extensionItemOf);
+}
+
+/**
+ * Whether a row's member list could not be read. The refusal arm
+ * `listingMemberRecords` answers is spent when the row is built, because
+ * `StoreItem.members` is a plain array: a tag travelling on it would be
+ * compared by every reader that compares two listings.
+ */
+function membersUnreadable(row: Listed): boolean {
+  return row.unreadable;
 }
 
 /**
@@ -353,6 +399,11 @@ async function installedExtensions(
  * which is what keeps the local half and the catalogue half agreeing. A failed
  * reader rejects rather than answering an empty listing, as the catalogue half
  * does.
+ *
+ * **A listing whose members could not be read is refused, not drawn empty**: an
+ * empty member list is the fact that a listing carries none, and a host row
+ * that named a member the reader could not parse is a different fact the page
+ * states like any other refusal.
  */
 export function librarySourceFor(
   page: LibraryPage,
@@ -369,11 +420,25 @@ export function librarySourceFor(
   return {
     page,
     memberKind: rule.memberKind,
+    memberKinds: rule.memberKinds,
     async list(): Promise<LibraryPageRows> {
-      const items = await reader(clients);
+      const listedRows = await reader(clients);
+      const readable: StoreItem[] = [];
+      const refusedByKind = new Map<string, number>();
+      for (const row of listedRows) {
+        if (membersUnreadable(row)) {
+          const kind = row.item.kind;
+          refusedByKind.set(kind, (refusedByKind.get(kind) ?? 0) + 1);
+        } else {
+          readable.push(row.item);
+        }
+      }
+      const refused: CatalogueRefusal[] = [...refusedByKind].map(
+        ([kind, count]) => ({ kind, reason: "malformed", count }),
+      );
       return {
-        rows: items.filter((item) => keeps(rule, item)),
-        refused: [],
+        rows: readable.filter((item) => keeps(rule, item)),
+        refused,
       };
     },
   };

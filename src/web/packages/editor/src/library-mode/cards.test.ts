@@ -122,8 +122,8 @@ it("draws an empty-member listing once, as its own card", () => {
     name: "Ops collection",
     members: [],
     includes: [
-      "11111111-1111-4111-8111-111111111111",
-      "22222222-2222-4222-8222-222222222222",
+      { id: "11111111-1111-4111-8111-111111111111", optional: false },
+      { id: "22222222-2222-4222-8222-222222222222", optional: false },
     ],
   });
 
@@ -157,15 +157,16 @@ it("draws each copy in a mixed listing exactly once", () => {
 });
 
 it("states a collection from the includes the register names", () => {
-  const includes = [
+  const ids = [
     "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
     "33333333-3333-4333-8333-333333333333",
     "44444444-4444-4444-8444-444444444444",
   ] as const;
+  const includes = ids.map((id) => ({ id, optional: false }));
   const collection = listing({ kind: "collection", members: [], includes });
-  const held = originOf(includes[0]);
-  const alsoHeld = originOf(includes[2]);
+  const held = originOf(ids[0]);
+  const alsoHeld = originOf(ids[2]);
 
   expect(
     collectionStateOf(collection, [held, alsoHeld]),
@@ -175,8 +176,8 @@ it("states a collection from the includes the register names", () => {
     collectionStateOf(collection, [
       held,
       alsoHeld,
-      originOf(includes[1]),
-      originOf(includes[3]),
+      originOf(ids[1]),
+      originOf(ids[3]),
     ]),
     "a collection whose every include is held is not installed",
   ).toEqual({ installed: 4, total: 4, state: "installed" });
@@ -195,4 +196,25 @@ it("answers no collection state for a listing that installs no includes", () => 
     ),
     "an empty include list has a collection state",
   ).toBeUndefined();
+});
+
+/** **A declined optional member is not part of the count.** The spec reads "On
+ *  this PC" when every required include is installed, so an unticked optional
+ *  can never leave the collection permanently partial and re-offer Update. */
+it("counts only the required includes", () => {
+  const required = "11111111-1111-4111-8111-111111111111";
+  const optional = "22222222-2222-4222-8222-222222222222";
+  const collection = listing({
+    kind: "collection",
+    members: [],
+    includes: [
+      { id: required, optional: false },
+      { id: optional, optional: true },
+    ],
+  });
+
+  expect(
+    collectionStateOf(collection, [originOf(required)]),
+    "a declined optional include left the collection partial",
+  ).toEqual({ installed: 1, total: 1, state: "installed" });
 });

@@ -210,7 +210,7 @@ describe("the author's own source", () => {
           kind: "collection",
           name: "Acme Kit",
           members: [],
-          includes: [ITEM_ID],
+          includes: [{ id: ITEM_ID, optional: false }],
         },
       ]),
     });
@@ -221,7 +221,7 @@ describe("the author's own source", () => {
       [ITEM_ID, DASHBOARD_THEME_KIND],
       [collectionId, "collection"],
     ]);
-    expect(items[1]?.includes).toEqual([ITEM_ID]);
+    expect(items[1]?.includes).toEqual([{ id: ITEM_ID, optional: false }]);
   });
 
   /** **A kind its caller does not draw is absent, not unreadable**: the author's

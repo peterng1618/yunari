@@ -67,13 +67,16 @@ export interface CollectionState {
 }
 
 /**
- * **A collection's state is counted over its includes, which is the only place
- * it exists.** The host records membership on each member's origin row, so a
- * collection never has an origin of its own and `installStateOf` — which reads
- * a copy's own origin — cannot answer for it. Every include in the register is
+ * **A collection's state is counted over its required includes, which is the
+ * only place it exists.** The host records membership on each member's origin
+ * row, so a collection never has an origin of its own and `installStateOf` —
+ * which reads a copy's own origin — cannot answer for it. A **declined optional
+ * include is not part of the count**: the spec reads "On this PC" when every
+ * required include is installed, so an unticked optional can never leave the
+ * collection permanently `partial`. Every required include in the register is
  * `installed`, none is `absent`, and anything between is `partial`.
  *
- * `undefined` when the listing installs no included listing, so a plain theme
+ * `undefined` when the listing installs no required listing, so a plain theme
  * keeps `installStateOf` as its owner.
  */
 export function collectionStateOf(
@@ -81,15 +84,17 @@ export function collectionStateOf(
   origins: readonly CatalogueOrigin[],
 ): CollectionState | undefined {
   const includes = listing.includes;
-  if (includes === undefined || includes.length === 0) return undefined;
+  if (includes === undefined) return undefined;
+  const required = includes.filter((include) => include.optional !== true);
+  if (required.length === 0) return undefined;
 
   const held = new Set(origins.map((origin) => origin.catalogueId));
   let installed = 0;
-  for (const id of includes) {
-    if (held.has(id)) installed += 1;
+  for (const include of required) {
+    if (held.has(include.id)) installed += 1;
   }
 
-  const total = includes.length;
+  const total = required.length;
   return {
     installed,
     total,

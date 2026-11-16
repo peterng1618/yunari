@@ -225,12 +225,15 @@ export function LibraryRegion(props: {
       !sessionOriginsFailed,
     retry: readSessionOrigins,
   };
+  /** **The register is re-read on every detail open**, not once per region: an
+   *  install made since the last open would otherwise leave a collection
+   *  classified against a stale register. The collection entries are static
+   *  catalogue data, so they are read once. */
   const ensureDetailReads = useCallback(() => {
     ensureCollections();
-    if (originsReadRequested) return;
     setOriginsReadRequested(true);
     readSessionOrigins();
-  }, [ensureCollections, originsReadRequested, readSessionOrigins]);
+  }, [ensureCollections, readSessionOrigins]);
 
   return (
     <div data-yunari-library-region="" className="flex min-h-0 flex-1 flex-col">

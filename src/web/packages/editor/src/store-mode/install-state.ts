@@ -81,26 +81,35 @@ export function installStateOf(item: StoreItem): InstallState {
  * second one would be the two owners this file exists to prevent.
  *
  * No local match, or no local listing at all, leaves `installedVersion` absent:
- * `undefined` is the truth this PC installed nothing.
+ * `undefined` is the truth this PC installed nothing. **The joined row also
+ * carries the local copy's own id**, because the four theme commands act on the
+ * library copy while the catalogue row is keyed by the catalogue's id.
  */
 export function withInstalledVersions(
   online: readonly StoreItem[],
   local: readonly StoreItem[] | undefined,
 ): readonly StoreItem[] {
-  const installed = new Map<string, string>();
+  const installed = new Map<
+    string,
+    { readonly version: string; readonly id: string }
+  >();
   for (const item of local ?? []) {
     const origin = item.origin;
-    if (origin !== undefined) installed.set(origin.catalogueId, origin.version);
+    if (origin !== undefined) {
+      installed.set(origin.catalogueId, {
+        version: origin.version,
+        id: item.id,
+      });
+    }
   }
 
   return online.map((item) => {
-    const installedVersion = installed.get(item.id);
-    if (installedVersion === undefined || item.catalogue === undefined) {
-      return item;
-    }
+    const held = installed.get(item.id);
+    if (held === undefined || item.catalogue === undefined) return item;
     return {
       ...item,
-      catalogue: { ...item.catalogue, installedVersion },
+      installedId: held.id,
+      catalogue: { ...item.catalogue, installedVersion: held.version },
     };
   });
 }

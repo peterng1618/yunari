@@ -154,10 +154,6 @@ function modalFor(
   vocabulary: readonly string[] = [],
   install: InstallControl = NO_INSTALL,
   submit: SubmitControl = NO_SUBMIT,
-  author: {
-    readonly onUnpublish?: (id: string) => void;
-    readonly onRepublish?: (id: string) => void;
-  } = {},
 ): ReactElement {
   return (
     <ItemModal
@@ -167,7 +163,6 @@ function modalFor(
       onAction={() => {}}
       install={install}
       submit={submit}
-      {...author}
     />
   );
 }
@@ -187,6 +182,7 @@ const NO_INSTALL: InstallControl = {
  *  with nothing asked for and nothing answered. */
 const NO_SUBMIT: SubmitControl = {
   onSubmit: () => undefined,
+  reset: () => undefined,
   itemId: undefined,
   state: "idle",
   inFlight: false,
@@ -1188,91 +1184,6 @@ function authorButton(label: string): HTMLButtonElement | null {
 function statusBadge(): HTMLElement | null {
   return document.body.querySelector<HTMLElement>("[data-yunari-store-status]");
 }
-
-/**
- * **A published Mine item offers one author command: Unpublish.** The word is
- * the badge's counterpart — the surface states the state and the one act that
- * changes it — and the press reports the item it belongs to rather than
- * deciding anything here.
- */
-it("offers Unpublish on a published item and reports the press", async () => {
-  const onUnpublish = vi.fn();
-  const onRepublish = vi.fn();
-  const item = onlineItem();
-  await mount(
-    modalFor({ ...item, status: "published" }, [], NO_INSTALL, NO_SUBMIT, {
-      onUnpublish,
-      onRepublish,
-    }),
-  );
-
-  expect(
-    statusBadge(),
-    "a published item drew a state badge the public listing already gives it",
-  ).toBeNull();
-  expect(
-    authorButton(uiCopy.store.actions.republish),
-    "a published item offers Republish",
-  ).toBeNull();
-
-  await act(async () =>
-    must(
-      authorButton(uiCopy.store.actions.unpublish),
-      "Unpublish control",
-    ).click(),
-  );
-  expect(
-    onUnpublish.mock.calls.map(([id]) => id),
-    "the press did not report the item it was drawn for",
-  ).toEqual([item.id]);
-  expect(
-    onRepublish,
-    "a published item reported Republish",
-  ).not.toHaveBeenCalled();
-});
-
-/**
- * **An unpublished Mine item says so and offers Republish.** The badge is read
- * as a word, not as a colour, and Unpublish is replaced rather than drawn
- * beside it — an item cannot be withdrawn twice.
- */
-it("badges an unpublished item and offers Republish instead of Unpublish", async () => {
-  const onUnpublish = vi.fn();
-  const onRepublish = vi.fn();
-  const item = onlineItem();
-  await mount(
-    modalFor({ ...item, status: "unpublished" }, [], NO_INSTALL, NO_SUBMIT, {
-      onUnpublish,
-      onRepublish,
-    }),
-  );
-
-  const badge = must(statusBadge(), "status badge");
-  expect(
-    badge.getAttribute("data-yunari-store-status"),
-    "the badge does not name the state it draws",
-  ).toBe("unpublished");
-  expect(
-    badge.textContent,
-    "the badge does not carry the copy's own word",
-  ).toBe(uiCopy.store.status.unpublished);
-  expect(
-    authorButton(uiCopy.store.actions.unpublish),
-    "an unpublished item still offers Unpublish",
-  ).toBeNull();
-
-  await act(async () =>
-    must(
-      authorButton(uiCopy.store.actions.republish),
-      "Republish control",
-    ).click(),
-  );
-  expect(
-    onRepublish.mock.calls.map(([id]) => id),
-    "the press did not report the item it was drawn for",
-  ).toEqual([item.id]);
-});
-
 /**
  * **A pending item waits, and says what for.** Neither command is drawn —
  * there is nothing the author can do until the owner has read it — and the
@@ -1281,10 +1192,7 @@ it("badges an unpublished item and offers Republish instead of Unpublish", async
 it("draws no author command for a pending item but says what it waits for", async () => {
   const item = onlineItem();
   await mount(
-    modalFor({ ...item, status: "pending" }, [], NO_INSTALL, NO_SUBMIT, {
-      onUnpublish: () => {},
-      onRepublish: () => {},
-    }),
+    modalFor({ ...item, status: "pending" }, [], NO_INSTALL, NO_SUBMIT),
   );
 
   expect(
@@ -1318,7 +1226,6 @@ it("states the owner's reason on a rejected item", async () => {
       [],
       NO_INSTALL,
       NO_SUBMIT,
-      { onUnpublish: () => {}, onRepublish: () => {} },
     ),
   );
 
@@ -1354,7 +1261,6 @@ it("adds that a removed item cannot be republished", async () => {
       [],
       NO_INSTALL,
       NO_SUBMIT,
-      { onUnpublish: () => {}, onRepublish: () => {} },
     ),
   );
 
@@ -1382,12 +1288,7 @@ it("adds that a removed item cannot be republished", async () => {
  * exactly the four library actions a public item always drew.
  */
 it("draws no status at all for an item the listing gives no state", async () => {
-  await mount(
-    modalFor(fixtureItem(LANDSCAPE), [], NO_INSTALL, NO_SUBMIT, {
-      onUnpublish: () => {},
-      onRepublish: () => {},
-    }),
-  );
+  await mount(modalFor(fixtureItem(LANDSCAPE), [], NO_INSTALL, NO_SUBMIT));
 
   expect(statusBadge(), "an item with no state drew a badge").toBeNull();
   expect(
@@ -1413,10 +1314,7 @@ it("draws no status at all for an item the listing gives no state", async () => 
 it("states a removed item's permanence even when the store gave no reason", async () => {
   const item = onlineItem();
   await mount(
-    modalFor({ ...item, status: "removed" }, [], NO_INSTALL, NO_SUBMIT, {
-      onUnpublish: () => {},
-      onRepublish: () => {},
-    }),
+    modalFor({ ...item, status: "removed" }, [], NO_INSTALL, NO_SUBMIT),
   );
 
   expect(
@@ -1572,7 +1470,10 @@ function collectionItem(overrides: Partial<StoreItem> = {}): StoreItem {
     id: "collection-uuid",
     name: "Starter kit",
     members: [],
-    includes: ["theme-uuid", "plugin-uuid"],
+    includes: ["theme-uuid", "plugin-uuid"].map((id) => ({
+      id,
+      optional: false,
+    })),
     author: "huyng",
     catalogue: catalogueFacts({
       id: "collection-uuid",
@@ -1700,7 +1601,7 @@ it("lists the collections an item belongs to", async () => {
     id: "collection-uuid",
     name: "Starter kit",
     members: [],
-    includes: ["item-uuid"],
+    includes: [{ id: "item-uuid", optional: false }],
   });
   await mount(
     detailModal(
@@ -1728,7 +1629,7 @@ it("draws a collection as text where the surface cannot open it", async () => {
     id: "collection-uuid",
     name: "Starter kit",
     members: [],
-    includes: ["item-uuid"],
+    includes: [{ id: "item-uuid", optional: false }],
   });
   await mount(
     detailModal(
@@ -1798,31 +1699,32 @@ it("states a failed collections read instead of drawing no membership", async ()
  * `memberCardKey`, so a later handler could not tell two members apart.
  */
 it("reports the card it was opened with", async () => {
+  const listing = pluginItem();
   const card: StoreCard = {
-    key: "pack-uuid#0:widget/cpu",
-    listing: widgetPack(),
-    member: WIDGET,
+    key: "plugin-card-key",
+    listing,
+    member: SENSOR_PROVIDER,
   };
   const pressed: StoreCard[] = [];
   await mount(
-    detailModal(widgetPack(), {
+    detailModal(listing, {
       card,
-      member: WIDGET,
+      member: SENSOR_PROVIDER,
       onAction: (_action, reported) => pressed.push(reported),
     }),
   );
 
   await act(async () =>
     detailNode(
-      '[data-yunari-store-item-action="insert"]',
-      "widget Insert action",
+      '[data-yunari-store-item-action="remove"]',
+      "plugin Remove action",
     ).click(),
   );
 
   expect(
     pressed[0]?.key,
     "the modal rebuilt the card and lost its member key",
-  ).toBe("pack-uuid#0:widget/cpu");
+  ).toBe("plugin-card-key");
 });
 
 /**
@@ -2153,29 +2055,83 @@ it("names a shared action by the kind that offers it", async () => {
  * name the member rather than guessing it from the package.
  */
 it("reports the listing and member a foot action acts on", async () => {
+  const listing = pluginItem();
   const pressed: { action: CellAction; card: StoreCard }[] = [];
   await mount(
-    detailModal(widgetPack(), {
-      member: WIDGET,
+    detailModal(listing, {
+      member: SENSOR_PROVIDER,
       onAction: (action, card) => pressed.push({ action, card }),
     }),
   );
 
   await act(async () =>
     detailNode(
-      '[data-yunari-store-item-action="insert"]',
-      "widget Insert action",
+      '[data-yunari-store-item-action="remove"]',
+      "plugin Remove action",
     ).click(),
   );
 
-  expect(pressed, "the Insert press did not report").toHaveLength(1);
-  expect(pressed[0]?.action, "the press reports another action").toBe("insert");
+  expect(pressed, "the Remove press did not report").toHaveLength(1);
+  expect(pressed[0]?.action, "the press reports another action").toBe("remove");
   expect(
     pressed[0]?.card.listing.id,
     "the press does not name the package",
-  ).toBe("pack-uuid");
+  ).toBe(EXTENSION.key);
   expect(
     pressed[0]?.card.member,
     "the press does not name the member it acts on",
-  ).toBe(WIDGET);
+  ).toBe(SENSOR_PROVIDER);
+});
+
+/** **Only a package that carries a theme document has an artboard.** A widget
+ *  pack's record is `defaultFacetsFor`'s placeholder — a 1×1 square — so a
+ *  caption or a Shape group built from it would state a measurement nobody
+ *  took. */
+it("draws no stage caption or Shape group for a kind without a theme document", async () => {
+  const pack = kindItem("widget-pack", {
+    id: "pack-uuid",
+    name: "Starter Cards",
+    members: [WIDGET],
+  });
+  await mount(modalFor(pack));
+
+  expect(
+    stageCaption(),
+    "a widget pack drew a stage caption from a placeholder record",
+  ).toBeNull();
+  expect(
+    document.body.querySelector('[data-yunari-store-item-group="shape"]'),
+    "a widget pack drew the Shape group",
+  ).toBeNull();
+
+  // The guard is the kind's, not the presence of a size: the very same record
+  // fields on a dashboard theme still draw both.
+  await mount(modal(LANDSCAPE));
+  expect(
+    must(stageCaption(), "stage caption").textContent?.trim(),
+    "a theme lost the caption its own document earns",
+  ).not.toBe("");
+  expect(
+    document.body.querySelector('[data-yunari-store-item-group="shape"]'),
+    "a theme lost the Shape group",
+  ).not.toBeNull();
+});
+
+/** **A widget member's Remove would delete its whole pack**, because the only
+ *  route names the package. R27 draws it disabled with the reason instead of
+ *  wiring it to the wrong route. */
+it("disables a widget member's Remove, which has no route of its own", async () => {
+  await mount(detailModal(widgetPack(), { member: WIDGET }));
+
+  const remove = must(
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-yunari-store-item-action="remove"]',
+    ),
+    "widget Remove",
+  );
+  expect(remove.disabled, "a widget member's Remove is live").toBe(true);
+  expect(
+    document.body.querySelector(`#${remove.id}-reason`)?.textContent?.trim(),
+    "the disabled Remove states no reason",
+  ).not.toBe("");
 });

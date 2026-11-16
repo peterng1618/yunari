@@ -144,7 +144,10 @@ function collectionItem(): StoreItem {
     kind: "collection",
     name: "Ops collection",
     members: [],
-    includes: PLAN.members.map((member) => member.id),
+    includes: PLAN.members.map((member) => ({
+      id: member.id,
+      optional: false,
+    })),
     author: "huyng",
     version: "1.0.0",
     updatedAt: undefined,
@@ -601,4 +604,100 @@ it("traps focus in a named dialog", async () => {
   );
   expect(dialog.getAttribute("aria-label")).toContain("Ops collection");
   expect(dialog.textContent).toContain(uiCopy.store.detail.plan.loading);
+});
+
+/** **A part-way failure names the members it did not write**, by the plan's own
+ *  names rather than by a raw id: the host's `members` answer carries ids, and
+ *  the sheet is the surface that knows what those ids are called. */
+it("names the members a part-way failure could not write", async () => {
+  await mount(
+    sheet(PLAN, {
+      install: {
+        ...NO_INSTALL,
+        refusal: {
+          id: COLLECTION_ID,
+          message: "Two members could not be written.",
+          members: [
+            { id: "wall-theme", ok: true },
+            { id: "hwinfo-plugin", ok: false, reason: "Refused." },
+          ],
+        },
+      },
+    }),
+  );
+
+  const failed = must(
+    document.querySelector<HTMLElement>(
+      "[data-yunari-collection-sheet-failed]",
+    ),
+    "failed member sentence",
+  );
+  expect(failed.textContent, "the refused member is not named").toContain(
+    "HWiNFO bridge",
+  );
+  expect(
+    failed.textContent,
+    "a member the host wrote is named as failed",
+  ).not.toContain("Office wall");
+  expect(failed.getAttribute("role"), "the news is not announced").toBe(
+    "status",
+  );
+});
+
+/** **An empty chosen set is blocked with a reason.** Unticking every optional
+ *  member would post a collection that writes nothing and then settles on
+ *  "Installed". */
+it("blocks a press that chose no member", async () => {
+  const plan: CollectionPlan = {
+    members: [
+      {
+        id: "clock-widget",
+        kind: "widget-pack",
+        name: "Clock",
+        version: "2.0.0",
+        bytes: 2048,
+        publisher: "acme",
+        optional: true,
+      },
+    ],
+    missing: [],
+    totalBytes: 2048,
+  };
+  await mount(sheet(plan));
+
+  const choice = must(
+    document.querySelector<HTMLButtonElement>(
+      "[data-yunari-collection-choice]",
+    ),
+    "member choice",
+  );
+  await act(async () => choice.click());
+
+  expect(
+    installButton(document).disabled,
+    "a press with nothing chosen is still live",
+  ).toBe(true);
+  expect(
+    must(
+      document.querySelector<HTMLElement>(
+        "[data-yunari-collection-sheet-blocked]",
+      ),
+      "blocked reason",
+    ).textContent,
+    "an empty chosen set states no reason",
+  ).toBe(uiCopy.store.collectionSheet.noneChosen);
+});
+
+/** The diff's own name names what it draws: a section showing only the members
+ *  this PC lacks must not be announced as "No longer in this collection". */
+it("labels the update diff by the branch it draws", async () => {
+  await mount(sheet(PLAN, { origins: [origin("wall-theme")] }));
+
+  expect(
+    must(
+      document.querySelector<HTMLElement>("[data-yunari-collection-diff]"),
+      "update diff",
+    ).getAttribute("aria-label"),
+    "the diff is labelled for a branch it does not draw",
+  ).toBe(uiCopy.store.collectionSheet.update.missing);
 });
