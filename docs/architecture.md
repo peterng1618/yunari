@@ -424,9 +424,11 @@ catalogue and the copy cannot disagree about an id or name.
 
 A collection is data: a bounded JSON manifest
 (`format: "yunari-collection-package"`, `version: 1`) naming catalogue ids,
-validated and hashed like every other package and never executed. Finalize and
-publish both refuse an unknown, unpublished, duplicate or self include and any
-nested collection, so collections are one level deep. Membership is read only
+validated and hashed like every other package and never executed. Finalize
+refuses an unknown, unpublished, duplicate or self include and any nested
+collection, so collections are one level deep. Publish re-reads the stored
+package and applies the same rule to it, so an include unpublished since the
+listing cannot return to the index. Membership is read only
 from collection entries: "Part of" is a view over the index, not a reverse
 field on each member listing. The host packages a collection itself for
 publishing, revalidating the includes and building the manifest with the shared

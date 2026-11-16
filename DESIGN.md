@@ -245,12 +245,10 @@ foot, because the publisher is part of every card a person shops from.
 draws the package's picture and name with its member count as readable text —
 never a title attribute — and a twisty button carrying `aria-expanded` whose
 name includes both the action and the package, so two packs never present two
-identical controls. Where the surface can open the pack, the pack card is cover,
-member count and expand only: it draws no install control of its own. Where it
-cannot — the store halves mount the grid without an expand handler — the count
-and the twisty are suppressed, and the pack card keeps its own install because
-the member cards are unreachable. Its panel is labeled with the package's
-name and opens the package's **member cards**, each with the listing's picture
+identical controls. The Library's one grid opens every pack in place, so the
+pack card is cover, member count and expand only: it draws no install control of
+its own. Its panel is labeled with the package's name and opens the package's
+**member cards**, each with the listing's picture
 or ground, the member's name and kind, the listing's publisher and the install
 control the member press runs. A single-member listing draws the member's name
 and kind on the card itself, but only where they differ from the package's own

@@ -18,6 +18,7 @@ import { isDesktopSurface } from "./surface.js";
 const EDITOR = "http://127.0.0.1:4174/?mode=editor";
 
 const THEME_ID = "11111111-1111-4111-8111-111111111111";
+const TALL_THEME_ID = "77777777-7777-4777-8777-777777777777";
 const EDITOR_THEME_ID = "22222222-2222-4222-8222-222222222222";
 const PACK_ID = "33333333-3333-4333-8333-333333333333";
 const PRESET_ID = "44444444-4444-4444-8444-444444444444";
@@ -34,17 +35,18 @@ const EMPTY_PICTURE_PNG = Buffer.from(
 );
 
 /** Every entry's facets: the eight fields the parser holds for presence. A
- *  listing's own picture is a path under the store's origin. */
-function facets(author: string) {
+ *  listing's own picture is a path under the store's origin, and the stage
+ *  draws the picture at the record's ratio, so a case states that ratio here. */
+function facets(author: string, width = 1920, height = 1080) {
   return {
     author,
     colourMode: "dark",
     sensors: [],
     tags: [],
-    orientation: "landscape",
-    aspect: "16:9",
-    width: 1920,
-    height: 1080,
+    orientation: width >= height ? "landscape" : "portrait",
+    aspect: width >= height ? "16:9" : "9:16",
+    width,
+    height,
   };
 }
 
@@ -54,8 +56,13 @@ function entry(options: {
   readonly name: string;
   readonly members: readonly { id: string; kind: string; name: string }[];
   readonly author: string;
-  readonly includes?: readonly string[];
+  readonly includes?: readonly {
+    readonly id: string;
+    readonly optional: boolean;
+  }[];
   readonly digest?: boolean;
+  readonly width?: number;
+  readonly height?: number;
 }): Record<string, unknown> {
   return {
     id: options.id,
@@ -70,7 +77,7 @@ function entry(options: {
     thumbnail: `catalogue/${options.id}/thumbnail.png`,
     members: options.members,
     ...(options.includes === undefined ? {} : { includes: options.includes }),
-    facets: facets(options.author),
+    facets: facets(options.author, options.width, options.height),
     // Only a collection's plan read needs the digest; every other kind is
     // listed and never fetched here.
     ...(options.digest === true
@@ -92,6 +99,17 @@ const ENTRIES: readonly Record<string, unknown>[] = [
     name: "Aurora Glass",
     author: "mira-k",
     members: [{ id: "aurora", kind: "dashboard-theme", name: "Aurora Glass" }],
+  }),
+  entry({
+    id: TALL_THEME_ID,
+    kind: "dashboard-theme",
+    name: "Aurora Tall",
+    author: "mira-k",
+    members: [
+      { id: "aurora-tall", kind: "dashboard-theme", name: "Aurora Tall" },
+    ],
+    width: 1080,
+    height: 1920,
   }),
   entry({
     id: EDITOR_THEME_ID,
@@ -138,7 +156,10 @@ const ENTRIES: readonly Record<string, unknown>[] = [
     name: COLLECTION_NAME,
     author: "mira-k",
     members: [],
-    includes: [THEME_ID, PACK_ID],
+    includes: [
+      { id: THEME_ID, optional: false },
+      { id: PACK_ID, optional: true },
+    ],
     digest: true,
   }),
 ];
@@ -285,6 +306,102 @@ test("every Library page opens on the catalogue", async ({
     region.locator("[data-yunari-submissions-page]"),
     "My submissions did not open",
   ).toBeVisible();
+});
+
+test("the item surface holds the box, one stage height and each picture ratio", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await routeHost(page);
+  const region = await openLibrary(page);
+  await region
+    .locator('[data-yunari-library-nav-item="dashboard-themes"]')
+    .click();
+
+  /**
+   * The box, the stage and the picture for one item, opened from its cell and
+   * closed again. **Measured, because the numbers are design language**:
+   * `DESIGN.md` fixes the modal at 960 × 760 and one stage height for every
+   * item, and the stage draws the picture at the record's own ratio, so a case
+   * asserting only that two stages were equal would pass a 100px stage.
+   */
+  const drawn = async (id: string) => {
+    await region
+      .locator(`[data-yunari-store-cell="${id}"]`)
+      .locator("[data-yunari-store-cell-surface]")
+      .click();
+    const detail = page.locator("[data-yunari-store-item]");
+    const stage = detail.locator("[data-yunari-store-item-stage]");
+    const picture = detail.locator("[data-yunari-store-item-picture]");
+    await expect(stage, "a cell opens no item surface").toBeVisible();
+
+    const box = await detail.boundingBox();
+    const stageBox = await stage.boundingBox();
+    const pictureBox = await picture.boundingBox();
+
+    await detail.locator("[data-yunari-store-item-close]").click();
+    await expect(detail, "the item's surface does not close").toBeHidden();
+
+    if (box === null || stageBox === null || pictureBox === null) {
+      throw new Error(`the item's surface drew no box for ${id}`);
+    }
+    return {
+      width: box.width,
+      height: box.height,
+      stage: stageBox.height,
+      picture: { width: pictureBox.width, height: pictureBox.height },
+    };
+  };
+
+  // Read the box at a viewport tall enough for its own height, then restore the
+  // project's 720px viewport for the `90vh` cap, which a taller read cannot
+  // exercise: any declaration at or above 648 would satisfy it.
+  const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
+  await page.setViewportSize({ width: projectViewport.width, height: 1000 });
+  const landscape = await drawn(THEME_ID);
+  const portrait = await drawn(TALL_THEME_ID);
+  await page.setViewportSize(projectViewport);
+  const capped = await drawn(THEME_ID);
+
+  const reading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; capped ${capped.width}x${capped.height} stage ${capped.stage}`;
+  testInfo.annotations.push({ type: "store-item", description: reading });
+
+  expect(landscape.height, `the modal is not 760px (${reading})`).toBe(760);
+  expect(
+    landscape.width,
+    `the modal is not the 960px DESIGN.md fixes (${reading})`,
+  ).toBe(960);
+  // The stage is the box's content height: 760 less the 1px border twice.
+  expect(
+    landscape.stage,
+    `the stage is not the box's own content height (${reading})`,
+  ).toBe(760 - 2);
+  expect(
+    portrait.stage,
+    `the stage follows the item instead of holding one height (${reading})`,
+  ).toBe(landscape.stage);
+  // At the project's 720px viewport `90vh` is 648, so the box caps there.
+  expect(
+    capped.height,
+    `the modal does not cap itself to 90vh on a short viewport (${reading})`,
+  ).toBe(648);
+  expect(
+    capped.stage,
+    `the stage is not the capped box's content height (${reading})`,
+  ).toBe(648 - 2);
+
+  expect(
+    Math.abs(landscape.picture.width / landscape.picture.height - 16 / 9),
+    `the landscape theme is not drawn at its own ratio (${reading})`,
+  ).toBeLessThan(0.02);
+  expect(
+    Math.abs(portrait.picture.width / portrait.picture.height - 9 / 16),
+    `the portrait theme is not drawn at its own ratio (${reading})`,
+  ).toBeLessThan(0.02);
+  expect(
+    portrait.picture.height,
+    `the picture is not contained in the stage's height (${reading})`,
+  ).toBeLessThan(portrait.stage);
 });
 
 test("a pack expands into its members and opens its detail", async ({

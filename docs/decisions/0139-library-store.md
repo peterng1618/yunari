@@ -15,7 +15,6 @@
   `src/web/packages/store-worker/src/routes/public.ts`
   `src/web/packages/host/src/store/install.ts`
   `src/web/packages/host/src/settings/catalogue-origins.ts`
-  `src/web/packages/host/src/settings/theme-origins.ts`
   `src/web/packages/host/src/presets/path-presets.ts`
   `src/web/packages/host/src/themes/install.ts`
   `src/web/packages/host/src/extensions/install.ts`
@@ -24,7 +23,7 @@
   `src/web/packages/host/src/server/themes-routes.ts`
   `src/web/packages/host/src/server/extension-routes.ts`
   `src/web/packages/host/src/catalogue/build-index.ts`
-  `src/web/packages/editor/src/store-mode/region.tsx`
+  `src/web/packages/theme-package/src/collection-package.ts`
   `src/web/packages/editor/src/store-mode/local-source.ts`
   `src/web/packages/editor/src/store-mode/online-source.ts`
   `src/web/packages/editor/src/store-mode/mine-source.ts`
@@ -219,8 +218,8 @@ Extend the existing catalogue rather than build a second one:
   (`CollectionPlan`, `CollectionPlanMember`); it is types only and derives
   nothing, so the host and the install sheet read one shape.
 - `store-worker/src/catalogue/kinds.ts` gains the `collection` package
-  (`yunari-collection`, version 1) as bounded JSON, and finalize derives members
-  from each kind's own reader. Unknown, unpublished, duplicate, self and nested
+  (`yunari-collection-package`, version 1) as bounded JSON, and finalize derives
+  members from each kind's own reader. Unknown, unpublished, duplicate, self and nested
   ids are refused before an `item_version` row exists. `catalogue/entry.ts`
   emits `members` and `includes`; no new table or column.
 - `host/src/store/install.ts` gains a collection case that resolves included
@@ -229,7 +228,7 @@ Extend the existing catalogue rather than build a second one:
   consent, and only then installs each member through its per-kind path. A
   refused member refuses the collection and writes nothing; a mid-way failure
   reports which members installed and which did not.
-- `host/src/settings/theme-origins.ts` becomes a kind-keyed register
+- `host/src/settings/catalogue-origins.ts` is the kind-keyed register
   (`<kind>:<id>`, with `kind`, `catalogueId`, `version`, `installedAt`,
   `collections?`), reading legacy bare-id theme rows as `dashboard-theme`
   additively. The listing routes expose that one fact, including the `origin`
