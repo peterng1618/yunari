@@ -389,6 +389,9 @@ export function createThemeWrites(
         sendJson(response, 409, {
           ok: false,
           ...(installed.held === undefined ? {} : { held: installed.held }),
+          ...(installed.memberId === undefined
+            ? {}
+            : { memberId: installed.memberId }),
           ...(installed.members === undefined
             ? {}
             : { members: installed.members }),

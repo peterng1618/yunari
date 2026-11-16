@@ -76,8 +76,13 @@ export interface CatalogueInstallRequest {
   readonly bytes: number;
   readonly publisher: string;
   readonly executionProfile?: ExecutionProfile;
-  /** The approval press for an update the update policy held. */
+  /** The approval press for an update the update policy held. A single item's
+   *  press names it here; a collection's press names the member instead. */
   readonly approveUpdate?: boolean;
+  /** The one collection include whose held update this press approves. Every
+   *  other chosen member is written without approval, so a growth the person
+   *  never saw cannot ride another member's press. */
+  readonly approveMember?: string;
   /** A collection's chosen includes. Absent means every include; present must
    *  name every required include and may omit optional ones. */
   readonly items?: readonly string[];
@@ -113,6 +118,9 @@ export type CatalogueInstallResult =
         | "review";
       /** Present only for the `review` stage. */
       readonly held?: HeldUpdate;
+      /** The collection include whose write stopped the install. Present for a
+       *  collection; the review notice's approval press names this member. */
+      readonly memberId?: string;
       /** Present for a collection that started applying members. */
       readonly members?: readonly CollectionMemberOutcome[];
     };
@@ -355,6 +363,19 @@ async function installCollection(
   const selection = selectIncludes(parsed.package.includes, request.items);
   if (!selection.ok) return refuse("package", selection.message);
 
+  // An approval names one member with a notice the person saw. A set that
+  // dropped it would approve a member this press is not installing, and an id
+  // the collection never carried would approve nothing at all.
+  if (
+    request.approveMember !== undefined &&
+    !selection.includes.some((include) => include.id === request.approveMember)
+  ) {
+    return refuse(
+      "package",
+      `This press does not install the collection member "${request.approveMember}".`,
+    );
+  }
+
   // The register is read before any listing. A member with a row is installed,
   // whatever version it records: the collection's own version is unrelated to
   // the member's, and drift is the update path's question. A retry therefore
@@ -448,7 +469,7 @@ async function installCollection(
     }
 
     const installed = await installByKind(
-      memberRequest(member, request.approveUpdate),
+      memberRequest(member, request.approveMember),
       member.bytes,
       options,
       request.catalogueId,
@@ -1100,12 +1121,13 @@ async function mergeCollection(
   });
 }
 
-/** The request a member's bytes are installed under. The collection's own
- *  approval press rides every member: a held plugin update is approved by the
- *  same request that carried it, not a second one the browser cannot make. */
+/** The request a member's bytes are installed under. **Only the named member's
+ *  update is approved**: a person's approval answers the one notice they saw,
+ *  and a second member whose consent also grew stays held until its own notice
+ *  is approved. */
 function memberRequest(
   member: ResolvedMember,
-  approveUpdate: boolean | undefined,
+  approveMember: string | undefined,
 ): CatalogueInstallRequest {
   return {
     packageUrl: member.listing.packageUrl,
@@ -1120,7 +1142,7 @@ function memberRequest(
       : {
           executionProfile: member.listing.executionProfile as ExecutionProfile,
         }),
-    ...(approveUpdate === true ? { approveUpdate: true } : {}),
+    ...(member.id === approveMember ? { approveUpdate: true } : {}),
   };
 }
 
@@ -1135,6 +1157,7 @@ function stopped(
     ok: false,
     stage,
     message: `Collection member "${id}": ${message}`,
+    memberId: id,
     members,
     ...(held === undefined ? {} : { held }),
   };
@@ -1169,6 +1192,7 @@ export function parseCatalogueInstallRequest(
   const publisher = body["publisher"];
   const executionProfile = body["executionProfile"];
   const approveUpdate = body["approveUpdate"];
+  const approveMember = body["approveMember"];
   const items = readItems(body["items"]);
 
   if (
@@ -1187,7 +1211,9 @@ export function parseCatalogueInstallRequest(
     items === null ||
     (publisher !== undefined && typeof publisher !== "string") ||
     (executionProfile !== undefined && typeof executionProfile !== "string") ||
-    (approveUpdate !== undefined && typeof approveUpdate !== "boolean")
+    (approveUpdate !== undefined && typeof approveUpdate !== "boolean") ||
+    (approveMember !== undefined &&
+      (typeof approveMember !== "string" || !isCatalogueId(approveMember)))
   ) {
     return undefined;
   }
@@ -1205,6 +1231,7 @@ export function parseCatalogueInstallRequest(
       ? {}
       : { executionProfile: executionProfile as ExecutionProfile }),
     ...(approveUpdate === undefined ? {} : { approveUpdate }),
+    ...(approveMember === undefined ? {} : { approveMember }),
   };
 }
 

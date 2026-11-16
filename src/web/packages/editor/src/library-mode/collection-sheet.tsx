@@ -293,10 +293,15 @@ export function CollectionSheet(props: {
       ? props.install.refusal.message
       : undefined;
   /** **A held member is approved here**, not in Settings: the sheet is where
-   *  the chosen set was made, and the approval re-posts exactly that set. */
+   *  the chosen set was made, and the approval re-posts exactly that set naming
+   *  the one member whose notice was shown. */
   const held =
     props.install.refusal?.id === props.item.id
       ? props.install.refusal.held
+      : undefined;
+  const heldMemberId =
+    props.install.refusal?.id === props.item.id
+      ? props.install.refusal.memberId
       : undefined;
   const choice = shown === undefined ? undefined : choiceOf(shown, chosen);
   const blockedReason =
@@ -332,7 +337,7 @@ export function CollectionSheet(props: {
           .filter((member) => chosen.has(member.id))
           .reduce((sum, member) => sum + member.bytes, 0);
 
-  const press = (approveUpdate = false): void => {
+  const press = (approveMember?: string): void => {
     if (shown === undefined || blockedReason !== undefined || busy) return;
     if (props.install.onInstallCollection === undefined) return;
     // A fresh press answers the change the last one reported: the notice must
@@ -349,7 +354,7 @@ export function CollectionSheet(props: {
         setSettled(undefined);
       },
       (consent) => setSettled(consent),
-      approveUpdate,
+      approveMember,
     );
   };
 
@@ -474,7 +479,9 @@ export function CollectionSheet(props: {
                     member={member}
                     checked={chosen.has(member.id)}
                     locked={!member.optional}
-                    disabled={busy || settled !== undefined}
+                    disabled={
+                      busy || settled !== undefined || held !== undefined
+                    }
                     onToggle={() =>
                       setChosen(toggleChoice(shown, chosen, member.id).chosen)
                     }
@@ -511,8 +518,8 @@ export function CollectionSheet(props: {
                 reasonsLabel={uiCopy.store.install.reviewReasons}
                 approveLabel={uiCopy.store.install.reviewApprove}
                 dismissLabel={uiCopy.store.install.reviewDismiss}
-                disabled={busy}
-                onApprove={() => press(true)}
+                disabled={busy || heldMemberId === undefined}
+                onApprove={() => press(heldMemberId)}
                 onDismiss={props.install.onDismissUpdate}
               />
             )}

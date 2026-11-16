@@ -2,14 +2,16 @@ import { pathPresetGeometry } from "@yunari/scene-fabric";
 import {
   BUILTIN_PATH_PRESETS,
   type PathPreset,
+  type PathPresetPackRowId,
   type PathPresetPaint,
   type PathPresetState,
+  pathPresetPackIdOf,
 } from "@yunari/theme-package";
 
 export type { PathPresetPaint } from "@yunari/theme-package";
 
 /** A stored row is either the author's or an installed pack's. */
-export type StoredPathPresetId = `user:${string}` | `pack:${string}`;
+export type StoredPathPresetId = `user:${string}` | PathPresetPackRowId;
 
 /** A custom shape the author added in Settings, or one an installed pack
  *  carries. Built-in presets are data in `new-object-defaults`; this is the
@@ -279,7 +281,9 @@ function isPresetRow(value: unknown): value is PathPreset {
 
 /** A row the live list holds: the built-ins stay in their own catalogue. */
 function isStoredPreset(preset: PathPreset): preset is UserPathPreset {
-  return preset.id.startsWith("user:") || preset.id.startsWith("pack:");
+  return (
+    preset.id.startsWith("user:") || pathPresetPackIdOf(preset.id) !== undefined
+  );
 }
 
 /** The host's answer, refused rather than read as an empty list: "the host

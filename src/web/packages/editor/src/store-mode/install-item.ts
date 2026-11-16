@@ -28,8 +28,15 @@ export type InstallOutcome =
       readonly message: string;
       readonly members?: readonly CollectionMemberOutcome[];
     }
-  /** The host read the package, held the update, and wrote nothing. */
-  | { readonly ok: false; readonly held: HeldUpdate };
+  /** The host read the package, held the update, and wrote nothing. `memberId`
+   *  names the collection include whose notice the person saw, and `members`
+   *  reports what earlier members already landed. */
+  | {
+      readonly ok: false;
+      readonly held: HeldUpdate;
+      readonly memberId?: string;
+      readonly members?: readonly CollectionMemberOutcome[];
+    };
 
 /**
  * What both install controls need from the region that owns the press: the
@@ -55,6 +62,9 @@ export interface InstallControl {
         readonly members?: readonly CollectionMemberOutcome[];
         /** A collection member the host held, with the growth that held it. */
         readonly held?: HeldUpdate;
+        /** The held member's id, so the approval press names exactly that
+         *  member rather than every chosen one. */
+        readonly memberId?: string;
       }
     | undefined;
   /** The update a press was held for, and the item it names. */
@@ -85,6 +95,8 @@ export async function installItem(
     readonly fetch?: typeof fetch;
     /** The approval press for an update the host held. */
     readonly approveUpdate?: boolean;
+    /** The one collection member whose held update this press approves. */
+    readonly approveMember?: string;
     /** A collection's chosen includes. Absent means every include, which is
      *  what a single item's press has. */
     readonly items?: readonly string[];
@@ -118,6 +130,9 @@ export async function installItem(
           ? {}
           : { publisher: catalogue.publisher }),
         ...(options?.approveUpdate === true ? { approveUpdate: true } : {}),
+        ...(options?.approveMember === undefined
+          ? {}
+          : { approveMember: options.approveMember }),
         ...(options?.items === undefined ? {} : { items: options.items }),
       }),
     });
@@ -134,11 +149,19 @@ export async function installItem(
     // both are answers, not opaque refusals. A plain-text refusal falls back to
     // its body as the host wrote it.
     const body = parseObject(text);
+    const members = body === undefined ? undefined : membersOf(body["members"]);
     if (body !== undefined && isHeldUpdate(body["held"])) {
-      return { ok: false, held: body["held"] };
+      const memberId = body["memberId"];
+      return {
+        ok: false,
+        held: body["held"],
+        ...(typeof memberId === "string" && memberId !== ""
+          ? { memberId }
+          : {}),
+        ...(members === undefined ? {} : { members }),
+      };
     }
     const message = body?.["message"];
-    const members = body === undefined ? undefined : membersOf(body["members"]);
     return {
       ok: false,
       message:

@@ -177,7 +177,7 @@ async function mount(options: HarnessOptions = {}): Promise<void> {
 function pressWith(
   options: HarnessOptions,
   items: readonly string[],
-  approveUpdate = false,
+  approveMember?: string,
 ): void {
   const install = control;
   if (install?.onInstallCollection === undefined) {
@@ -189,7 +189,7 @@ function pressWith(
     PLAN,
     (plan) => options.onPlanReplaced?.(plan),
     () => undefined,
-    approveUpdate,
+    approveMember,
   );
 }
 
@@ -290,8 +290,8 @@ it("states the host's refusal and grants nothing", async () => {
 });
 
 /** **A held collection member is approvable from the sheet.** The hook keeps
- *  the growth on the refusal the sheet reads, and a re-post forwards the flag
- *  with the same chosen set. */
+ *  the growth and the held member's id on the refusal the sheet reads, and a
+ *  re-post names only that member with the same chosen set. */
 it("carries a held member and re-posts its approval with the chosen set", async () => {
   const held = {
     key: CONSENT.key,
@@ -300,7 +300,7 @@ it("carries a held member and re-posts its approval with the chosen set", async 
     reasons: ["adds usb:device"],
   };
   const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-    jsonResponse({ held }, 409),
+    jsonResponse({ held, memberId: ITEM_ID }, 409),
   );
   vi.stubGlobal("fetch", fetch);
   const harness: HarnessOptions = { readPlan: async () => PLAN };
@@ -310,14 +310,16 @@ it("carries a held member and re-posts its approval with the chosen set", async 
   await vi.waitFor(() =>
     expect(control?.refusal?.held, "the hold was lost").toEqual(held),
   );
+  expect(control?.refusal?.memberId, "the held member was lost").toBe(ITEM_ID);
 
-  await act(async () => pressWith(harness, ["wall-theme", ITEM_ID], true));
+  await act(async () => pressWith(harness, ["wall-theme", ITEM_ID], ITEM_ID));
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   const body = JSON.parse(
     String((fetch.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
-  ) as { items: readonly string[]; approveUpdate?: boolean };
+  ) as { items: readonly string[]; approveMember?: string };
   expect(body.items).toEqual(["wall-theme", ITEM_ID]);
-  expect(body.approveUpdate).toBe(true);
+  expect(body.approveMember).toBe(ITEM_ID);
+  expect(body).not.toHaveProperty("approveUpdate");
 });
 
 it("states a stale list after a successful write", async () => {

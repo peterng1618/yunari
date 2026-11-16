@@ -353,7 +353,7 @@ describe("pressCollection", () => {
     expect(install).toHaveBeenCalledWith(
       collectionItem(),
       ["wall-theme", "hwinfo-plugin"],
-      false,
+      undefined,
     );
     expect(grant).toHaveBeenCalledTimes(1);
     expect(outcome).toEqual({
@@ -448,7 +448,7 @@ describe("pressCollection", () => {
     expect(install).toHaveBeenCalledWith(
       collectionItem(),
       ["wall-theme"],
-      false,
+      undefined,
     );
     expect(list).not.toHaveBeenCalled();
     expect(grant).not.toHaveBeenCalled();
@@ -499,16 +499,20 @@ describe("pressCollection", () => {
   });
 
   /** **A held member is an answer, not a lost press.** The outcome carries the
-   *  growth so the sheet can render it, and the approval press forwards the
-   *  flag that lets the host write it. */
-  it("carries a held member and forwards the approval flag", async () => {
+   *  growth and the member it belongs to, so the sheet can render it and its
+   *  approval names exactly that member. */
+  it("carries a held member and forwards its id as the approval", async () => {
     const held = {
       key: "acme/hwinfo",
       name: "HWiNFO bridge",
       publisher: "acme",
       reasons: ["adds usb:device"],
     };
-    const install = vi.fn(async () => ({ ok: false as const, held }));
+    const install = vi.fn(async () => ({
+      ok: false as const,
+      held,
+      memberId: "hwinfo-plugin",
+    }));
 
     const outcome = await pressCollection(
       collectionItem(),
@@ -517,7 +521,7 @@ describe("pressCollection", () => {
       {
         readPlan,
         install,
-        approveUpdate: true,
+        approveMember: "hwinfo-plugin",
         consent: { list: vi.fn(), grant: vi.fn() },
       },
     );
@@ -525,12 +529,13 @@ describe("pressCollection", () => {
     expect(install).toHaveBeenCalledWith(
       collectionItem(),
       ["wall-theme", "hwinfo-plugin"],
-      true,
+      "hwinfo-plugin",
     );
     expect(outcome).toEqual({
       kind: "refused",
       message: uiCopy.store.install.reviewHeading,
       held,
+      memberId: "hwinfo-plugin",
     });
   });
 });

@@ -43,6 +43,11 @@ const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
  *  the rows and the editor that removes them must agree on the spelling. */
 const PACK_PREFIX = "pack:";
 
+/** An installed preset row's id: the pack prefix, the pack's own id and the
+ *  preset's id. The type is derived from the prefix so no surface spells the
+ *  segment a second time. */
+export type PathPresetPackRowId = `${typeof PACK_PREFIX}${string}`;
+
 export function pathPresetPackPrefix(packId: string): string {
   return `${PACK_PREFIX}${packId}:`;
 }

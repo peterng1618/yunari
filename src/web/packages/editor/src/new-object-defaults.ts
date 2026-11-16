@@ -22,7 +22,12 @@ import {
   SURFACE_TOKENS,
   surfacePaletteToken,
 } from "@yunari/theme-kit";
-import { BUILTIN_PATH_PRESETS, type PathPreset } from "@yunari/theme-package";
+import {
+  BUILTIN_PATH_PRESETS,
+  type PathPreset,
+  type PathPresetPackRowId,
+  pathPresetPackIdOf,
+} from "@yunari/theme-package";
 import {
   Ellipse,
   type FabricObject,
@@ -114,7 +119,7 @@ export function newObjectName(
  *  chart family `newObjectName` resolves it to. */
 export function newShapeName(kind: ShapeInsertion): string {
   if (isPathPreset(kind)) {
-    if (kind.startsWith("user:") || kind.startsWith("pack:")) {
+    if (kind.startsWith("user:") || pathPresetPackIdOf(kind) !== undefined) {
       return userPathPreset(kind)?.label ?? uiCopy.shapeKinds.path;
     }
     return uiCopy.pathPresets[kind as PathPresetId];
@@ -305,9 +310,9 @@ export const PATH_PRESET_IDS: readonly PathPresetId[] =
  *  Its label and data live in the live list rather than in this module. */
 export type UserPathPresetId = `user:${string}`;
 
-/** A preset an installed pack carries. The prefix keeps one pack's ids from
- *  colliding with another's or with the author's own rows. */
-export type PackPathPresetId = `pack:${string}`;
+/** A preset an installed pack carries. The id shape is the pack owner's, so a
+ *  second spelling of the prefix cannot drift from it. */
+export type PackPathPresetId = PathPresetPackRowId;
 
 export type CustomShapeId = PathPresetId | UserPathPresetId | PackPathPresetId;
 
@@ -319,7 +324,7 @@ export function isPathPreset(value: string): value is CustomShapeId {
   return (
     (PATH_PRESET_IDS as readonly string[]).includes(value) ||
     value.startsWith("user:") ||
-    value.startsWith("pack:")
+    pathPresetPackIdOf(value) !== undefined
   );
 }
 

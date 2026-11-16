@@ -174,6 +174,35 @@ it("returns a held update as its own outcome", async () => {
   expect(outcome).toEqual({ ok: false, held });
 });
 
+/** **A hold does not discard what already landed.** The host sends the earlier
+ *  members' outcomes beside the held facts, and the sheet names them. */
+it("keeps a held answer's member outcomes and held member id", async () => {
+  const held = {
+    key: "local/office-wall",
+    name: "Office wall",
+    publisher: "local",
+    reasons: ["capability:sensor:provide"],
+  };
+  const members = [
+    { id: "wall-theme", ok: true },
+    { id: "hwinfo-plugin", ok: false },
+  ];
+  const outcome = await installItem(ITEM, {
+    fetch: (async () =>
+      new Response(
+        JSON.stringify({ ok: false, held, memberId: "hwinfo-plugin", members }),
+        { status: 409 },
+      )) as unknown as typeof fetch,
+  });
+
+  expect(outcome).toEqual({
+    ok: false,
+    held,
+    memberId: "hwinfo-plugin",
+    members,
+  });
+});
+
 it("posts the approval flag when the held update is approved", async () => {
   let posted: Record<string, unknown> | undefined;
   const outcome = await installItem(ITEM, {

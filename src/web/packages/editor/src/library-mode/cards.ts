@@ -79,10 +79,10 @@ export interface CollectionState {
  * **A collection whose every include is optional still has a state.** Its
  * required set is empty, and a caller that read the state's absence as an
  * unreadable register would draw no install control at all. It answers
- * `installed: 0, total: 0` and reads `absent` until a chosen optional is
- * written, so the first press is Install. Only a listing that installs no
- * include at all — an absent or empty `includes` list — answers `undefined`,
- * which leaves a plain theme's `installStateOf` as the owner.
+ * `installed: 0, total: 0` and always reads `absent`, because an optional
+ * include is not part of the count, so the press stays Install. Only a listing
+ * that installs no include at all — an absent or empty `includes` list — answers
+ * `undefined`, which leaves a plain theme's `installStateOf` as the owner.
  */
 export function collectionStateOf(
   listing: StoreItem,

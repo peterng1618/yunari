@@ -3,6 +3,7 @@ import {
   type ChartFamily,
   type FabricGlobals,
 } from "@yunari/renderer-core";
+import { pathPresetPackIdOf } from "@yunari/theme-package";
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -293,7 +294,7 @@ export function insertNewShape(
   // rather than the preset id; the preset still supplies the data and the
   // display name.
   const prefix =
-    kind.startsWith("user:") || kind.startsWith("pack:")
+    kind.startsWith("user:") || pathPresetPackIdOf(kind) !== undefined
       ? "custom-shape"
       : kind;
   const inserted = createNewShape(

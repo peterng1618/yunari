@@ -353,10 +353,17 @@ function Cell(props: {
     (installState === "none" || themeCommands);
   /** **A package's count is stated only where it can be opened**, so a grid with
    *  no expand handler does not advertise members nothing can show. A
-   *  collection's count has no such dependency: it is its state. */
+   *  collection's count has no such dependency: it is its state. An all-optional
+   *  collection has no required include to count, so it prints no "0 of 0"
+   *  reading and offers Install instead. */
   const countText =
     collection !== undefined
-      ? uiCopy.store.cell.pack.installed(collection.installed, collection.total)
+      ? collection.total === 0
+        ? undefined
+        : uiCopy.store.cell.pack.installed(
+            collection.installed,
+            collection.total,
+          )
       : expandable
         ? uiCopy.store.cell.pack.members(members.length)
         : undefined;

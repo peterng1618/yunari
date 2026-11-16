@@ -174,7 +174,7 @@ function collectionItem(): StoreItem {
 interface PressCapture {
   readonly items: readonly string[];
   readonly plan: CollectionPlan;
-  readonly approveUpdate: boolean | undefined;
+  readonly approveMember: string | undefined;
   readonly replace: (plan: CollectionPlan, change: PlanChange) => void;
   readonly installed: (consent: {
     readonly granted: readonly string[];
@@ -194,12 +194,12 @@ function capturingInstall(
       plan,
       onPlanReplaced,
       onInstalled,
-      approveUpdate,
+      approveMember,
     ) => {
       capture({
         items,
         plan,
-        approveUpdate,
+        approveMember,
         replace: onPlanReplaced,
         installed: onInstalled,
       });
@@ -617,8 +617,8 @@ it("traps focus in a named dialog", async () => {
 });
 
 /** **A held member is approvable from the sheet.** The sheet is where the
- *  chosen set was made, so the approval re-posts exactly that set with the
- *  flag; Dismiss leaves nothing written. */
+ *  chosen set was made, so the approval re-posts exactly that set naming the
+ *  held member; Dismiss leaves nothing written. */
 it("renders a held member and approves it with the chosen set", async () => {
   const held: HeldUpdate = {
     key: "acme/hwinfo",
@@ -636,6 +636,7 @@ it("renders a held member and approves it with the chosen set", async () => {
           id: COLLECTION_ID,
           message: uiCopy.store.install.reviewHeading,
           held,
+          memberId: "hwinfo-plugin",
         },
         onDismissUpdate: () => {
           dismissed += 1;
@@ -657,7 +658,10 @@ it("renders a held member and approves it with the chosen set", async () => {
       "approve control",
     ).click(),
   );
-  expect(press?.approveUpdate, "the approval press lost its flag").toBe(true);
+  expect(
+    press?.approveMember,
+    "the approval press did not name the held member",
+  ).toBe("hwinfo-plugin");
   expect(press?.items).toEqual(["wall-theme", "clock-widget", "hwinfo-plugin"]);
 
   await act(async () =>

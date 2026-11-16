@@ -379,6 +379,7 @@ const COLLECTION_ID = "11111111-1111-4111-8111-111111111111";
 const WIDGET_A_ID = "33333333-3333-4333-8333-333333333333";
 const WIDGET_B_ID = "44444444-4444-4444-8444-444444444444";
 const PLUGIN_ID = "55555555-5555-4555-8555-555555555555";
+const PLUGIN_B_ID = "66666666-6666-4666-8666-666666666666";
 
 const WIDGET_B_BYTES = zipSync(
   {
@@ -1060,13 +1061,14 @@ describe("collection install and plan", () => {
       ok: false,
       stage: "review",
       held,
+      memberId: PLUGIN_ID,
       members: [{ id: PLUGIN_ID, ok: false }],
     });
 
-    // The browser's approve press rides the collection request; without it the
-    // member would be held forever.
+    // The browser's approval names the held member; without it the member
+    // would be held forever.
     const second = await installCatalogueItem(
-      await collectionRequest(bytes, { approveUpdate: true }),
+      await collectionRequest(bytes, { approveMember: PLUGIN_ID }),
       options,
     );
     expect(second).toMatchObject({
@@ -1074,6 +1076,158 @@ describe("collection install and plan", () => {
       members: [{ id: PLUGIN_ID, ok: true }],
     });
     expect(calls).toEqual([{ approveUpdate: false }, { approveUpdate: true }]);
+  });
+
+  it("approves only the held member and leaves a second grown member held", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: PLUGIN_ID }, { id: PLUGIN_B_ID }]);
+    const heldA = {
+      key: "local/plugin-a",
+      name: "Plugin A",
+      publisher: "local",
+      reasons: ["capability:sensor:provide"],
+    };
+    const heldB = {
+      key: "local/plugin-b",
+      name: "Plugin B",
+      publisher: "local",
+      reasons: ["capability:usb:device"],
+    };
+    const installs: boolean[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+      [
+        itemUrl(PLUGIN_B_ID),
+        await itemJson({
+          id: PLUGIN_B_ID,
+          kind: "plugin",
+          name: "Acme Panel B",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_B_ID), pluginBytes],
+    ]);
+    const origins = memoryOrigins();
+    const options = {
+      fetch: storeFetch(routes),
+      stores: stores({
+        extensions: extensionService({
+          install: async (_bytes, installOptions) => {
+            const approve = installOptions?.approveUpdate === true;
+            installs.push(approve);
+            const which = installs.length <= 2 ? "a" : "b";
+            if (!approve) {
+              return { ok: false, held: which === "a" ? heldA : heldB };
+            }
+            return {
+              ok: true,
+              plugin: {
+                key: `local/plugin-${which}`,
+                publisher: "local",
+                manifest: panelManifest(),
+                directory: `/nowhere/${which}`,
+                contentHash: "hash",
+              },
+            };
+          },
+        }),
+      }),
+      storeOrigin: ORIGIN,
+      origins,
+    };
+
+    // A holds; B was never attempted, so its growth was never written.
+    const first = await installCatalogueItem(
+      await collectionRequest(bytes),
+      options,
+    );
+    expect(first).toMatchObject({
+      ok: false,
+      stage: "review",
+      held: heldA,
+      memberId: PLUGIN_ID,
+      members: [
+        { id: PLUGIN_ID, ok: false },
+        {
+          id: PLUGIN_B_ID,
+          ok: false,
+          reason: "Not attempted after an earlier member failed.",
+        },
+      ],
+    });
+    expect(origins.rows()).toEqual({});
+
+    // Approving A writes A and re-presents B's own notice; B's install never
+    // ran with the approval flag.
+    const second = await installCatalogueItem(
+      await collectionRequest(bytes, { approveMember: PLUGIN_ID }),
+      options,
+    );
+    expect(second).toMatchObject({
+      ok: false,
+      stage: "review",
+      held: heldB,
+      memberId: PLUGIN_B_ID,
+      members: [
+        { id: PLUGIN_ID, ok: true },
+        { id: PLUGIN_B_ID, ok: false },
+      ],
+    });
+    expect(
+      origins.rows()[catalogueOriginKey("plugin", "local/plugin-a")]
+        ?.catalogueId,
+    ).toBe(PLUGIN_ID);
+    expect(
+      origins.rows()[catalogueOriginKey("plugin", "local/plugin-b")],
+    ).toBeUndefined();
+
+    // B is approved by its own id, and only then is its growth written.
+    const third = await installCatalogueItem(
+      await collectionRequest(bytes, { approveMember: PLUGIN_B_ID }),
+      options,
+    );
+    expect(third).toMatchObject({
+      ok: true,
+      members: [
+        { id: PLUGIN_ID, ok: true, reason: "Already installed." },
+        { id: PLUGIN_B_ID, ok: true },
+      ],
+    });
+    expect(installs).toEqual([false, true, false, true]);
+  });
+
+  it("refuses an approval that names a member this press does not install", async () => {
+    const bytes = collectionBytes([
+      { id: WIDGET_A_ID },
+      { id: WIDGET_B_ID, optional: true },
+    ]);
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+    ]);
+
+    const result = await installCatalogueItem(
+      await collectionRequest(bytes, {
+        items: [WIDGET_A_ID],
+        approveMember: WIDGET_B_ID,
+      }),
+      {
+        fetch: storeFetch(routes),
+        stores: stores(),
+        storeOrigin: ORIGIN,
+      },
+    );
+
+    expect(result).toMatchObject({ ok: false, stage: "package" });
   });
 
   it("reports a plugin member whose installer throws, keeping earlier members", async () => {

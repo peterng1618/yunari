@@ -73,6 +73,8 @@ export function useInstall(options: {
         }[];
         /** A collection member the host held, with what grew. */
         readonly held?: HeldUpdate;
+        /** The held member's id, so pressing Approve names only that member. */
+        readonly memberId?: string;
       }
     | undefined
   >(undefined);
@@ -166,6 +168,9 @@ export function useInstall(options: {
    * planned key the listing does not name is reported as not granted. A
    * refusal returns before the listing is read, so a press that wrote nothing
    * grants nothing.
+   *
+   * **An approval names one member.** The host approves no other chosen member,
+   * so a second grown plugin stays held until its own notice is shown.
    */
   const onInstallCollection: CollectionInstallPress = (
     item,
@@ -173,7 +178,7 @@ export function useInstall(options: {
     openPlan,
     onPlanReplaced,
     onInstalled,
-    approveUpdate = false,
+    approveMember = undefined,
   ): void => {
     if (inFlight.current.has(item.id)) return;
     inFlight.current.add(item.id);
@@ -187,14 +192,16 @@ export function useInstall(options: {
         : uiCopy.store.collectionSheet.notGranted(consent.notGranted);
     void pressCollection(item, items, openPlan, {
       readPlan: options.readPlan ?? readCollectionPlan,
-      install: (pressed, chosen, approve) =>
+      install: (pressed, chosen, approvedMember) =>
         installCollection(
           pressed,
           chosen,
-          approve ? { approveUpdate: true } : undefined,
+          approvedMember === undefined
+            ? undefined
+            : { approveMember: approvedMember },
         ),
       consent: options.extensions ?? createExtensionClient(),
-      ...(approveUpdate ? { approveUpdate: true } : {}),
+      ...(approveMember === undefined ? {} : { approveMember }),
     })
       .then(async (outcome) => {
         if (!alive.current) return;
@@ -210,6 +217,9 @@ export function useInstall(options: {
               ? {}
               : { members: outcome.members }),
             ...(outcome.held === undefined ? {} : { held: outcome.held }),
+            ...(outcome.memberId === undefined
+              ? {}
+              : { memberId: outcome.memberId }),
           });
           return;
         }

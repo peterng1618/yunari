@@ -159,13 +159,15 @@ export async function installCollection(
   items: readonly string[],
   options: {
     readonly fetch?: typeof fetch;
-    /** The approval press for an update the host held. */
-    readonly approveUpdate?: boolean;
+    /** The one member whose held update this press approves. */
+    readonly approveMember?: string;
   } = {},
 ): Promise<InstallOutcome> {
   return installItem(item, {
     items,
-    ...(options.approveUpdate === true ? { approveUpdate: true } : {}),
+    ...(options.approveMember === undefined
+      ? {}
+      : { approveMember: options.approveMember }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 }
@@ -249,7 +251,8 @@ export type CollectionPressOutcome =
     }
   /** The host refused the press. `members` is present for a part-way failure:
    *  the sheet names the members it could not write. `held` is the update the
-   *  host read and refused to write, which the sheet renders for approval. */
+   *  host read and refused to write, which the sheet renders for approval;
+   *  `memberId` names the include that hold belongs to. */
   | {
       readonly kind: "refused";
       readonly message: string;
@@ -258,26 +261,28 @@ export type CollectionPressOutcome =
         readonly ok: boolean;
       }[];
       readonly held?: HeldUpdate;
+      readonly memberId?: string;
     };
 
 export interface CollectionPressDeps {
   readonly readPlan: (item: StoreItem) => Promise<CollectionPlan>;
-  /** The chosen press, or its approval re-post. `approveUpdate` is the flag the
-   *  host reads for a held member's growth. */
+  /** The chosen press, or its approval re-post. `approveMember` names the one
+   *  held include the host may approve, so a second grown member stays held. */
   readonly install: (
     item: StoreItem,
     items: readonly string[],
-    approveUpdate: boolean,
+    approveMember: string | undefined,
   ) => Promise<InstallOutcome>;
   readonly consent: CollectionConsentGateway;
-  /** Whether this press approves an update the host held. */
-  readonly approveUpdate?: boolean;
+  /** The held include this press answers, if any. */
+  readonly approveMember?: string;
 }
 
 /** The press the sheet hands the region's install hook. The two callbacks are
  *  how a re-read plan replaces the sheet and how a write reports the consent it
- *  did or did not obtain. `approveUpdate` re-posts the same chosen set after a
- *  hold, and is never set by the first press. */
+ *  did or did not obtain. `approveMember` re-posts the same chosen set, naming
+ *  the one held member whose notice the person saw; it is never set by the
+ *  first press. */
 export interface CollectionInstallPress {
   (
     item: StoreItem,
@@ -285,7 +290,7 @@ export interface CollectionInstallPress {
     openPlan: CollectionPlan,
     onPlanReplaced: (plan: CollectionPlan, change: PlanChange) => void,
     onInstalled: (consent: CollectionConsentResult) => void,
-    approveUpdate?: boolean,
+    approveMember?: string,
   ): void;
 }
 
@@ -340,7 +345,7 @@ export async function pressCollection(
   const outcome = await deps.install(
     item,
     [...choice.chosen],
-    deps.approveUpdate === true,
+    deps.approveMember,
   );
   if (!outcome.ok) {
     return {
@@ -353,6 +358,9 @@ export async function pressCollection(
         ? { members: outcome.members }
         : {}),
       ...("held" in outcome ? { held: outcome.held } : {}),
+      ...("memberId" in outcome && outcome.memberId !== undefined
+        ? { memberId: outcome.memberId }
+        : {}),
     };
   }
 

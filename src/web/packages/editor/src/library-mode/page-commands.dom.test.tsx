@@ -294,8 +294,9 @@ it("keeps the four theme commands on an installed catalogue theme", async () => 
 
 /**
  * **A path-preset pack is removed by the pack id its stored rows name**, not by
- * the joined preset id. A pack with one member draws no pack card, so its
- * member card's Remove is the pack's only removal path and must reach it.
+ * the joined preset id. The pack card is drawn, but it carries no Remove of its
+ * own: the pack's detail surface is where the press is made, and the route it
+ * reaches must be the pack's.
  */
 it("removes a path-preset pack through its pack id", async () => {
   const PACK_CATALOGUE = "77777777-7777-4777-8777-777777777777";
