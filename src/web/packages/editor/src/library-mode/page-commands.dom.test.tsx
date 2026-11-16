@@ -292,7 +292,84 @@ it("keeps the four theme commands on an installed catalogue theme", async () => 
   }
 });
 
-/** **R27: a live per-kind command runs through its route.** A code member's
+/**
+ * **A path-preset pack is removed by the pack id its stored rows name**, not by
+ * the joined preset id. A pack with one member draws no pack card, so its
+ * member card's Remove is the pack's only removal path and must reach it.
+ */
+it("removes a path-preset pack through its pack id", async () => {
+  const PACK_CATALOGUE = "77777777-7777-4777-8777-777777777777";
+  const calls: { readonly url: string; readonly method: string }[] = [];
+  const base = answering([
+    [
+      "/index.json",
+      () =>
+        indexOf([
+          entry(PACK_CATALOGUE, "Rounded set", {
+            kind: "path-preset-pack",
+            members: [{ id: "pill", kind: "shape", name: "Pill" }],
+          }),
+        ]),
+    ],
+    [
+      "/api/path-presets",
+      () =>
+        json({
+          presets: [
+            {
+              id: "pack:pack-one:pill",
+              label: "Pill",
+              data: "M 0 0 L 10 10",
+              paint: "stroke",
+              origin: {
+                kind: "path-preset-pack",
+                catalogueId: PACK_CATALOGUE,
+                version: "1.0.0",
+                installedAt: "2026-10-01T00:00:00.000Z",
+              },
+            },
+          ],
+        }),
+    ],
+  ]);
+  const fetcher = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), method: init?.method ?? "GET" });
+      if (init?.method === "DELETE") return json({ ok: true });
+      return base(input, init);
+    },
+  );
+  vi.stubGlobal("fetch", fetcher as unknown as typeof fetch);
+
+  const container = await mountPage("shapes", "all");
+  await waitForCells(container, ["Rounded set"]);
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "card press",
+    ).click(),
+  );
+  await act(async () =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-yunari-store-item-action="remove"]',
+      ),
+      "footer Remove",
+    ).click(),
+  );
+
+  await vi.waitFor(() =>
+    expect(
+      calls.find((call) => call.method === "DELETE")?.url,
+      "Remove did not reach the pack's own route",
+    ).toBe("/api/path-presets/packs/pack-one"),
+  );
+});
+
+/**
+ * **R27: a live per-kind command runs through its route.** A code member's
  *  Remove is the host's extension DELETE, named by the installed copy's own
  *  key; the press re-lists so the row leaves because the host no longer serves
  *  it. */
@@ -337,6 +414,6 @@ it("removes an installed extension through the route its kind owns", async () =>
     expect(
       calls.find((call) => call.method === "DELETE")?.url,
       "Remove did not reach the host's extension route",
-    ).toBe("/api/extensions/acme%2Fpanels"),
+    ).toBe("/api/extensions/acme/panels"),
   );
 });

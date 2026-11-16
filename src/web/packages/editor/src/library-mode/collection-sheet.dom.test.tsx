@@ -22,6 +22,7 @@ import {
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, it } from "vitest";
+import type { HeldUpdate } from "../components/held-update.js";
 import type { InstallControl } from "../store-mode/install-item.js";
 import type { StoreItem } from "../store-mode/local-source.js";
 import { uiCopy } from "../ui-copy.js";
@@ -173,6 +174,7 @@ function collectionItem(): StoreItem {
 interface PressCapture {
   readonly items: readonly string[];
   readonly plan: CollectionPlan;
+  readonly approveUpdate: boolean | undefined;
   readonly replace: (plan: CollectionPlan, change: PlanChange) => void;
   readonly installed: (consent: {
     readonly granted: readonly string[];
@@ -186,10 +188,18 @@ function capturingInstall(
 ): InstallControl {
   return {
     onInstall: () => undefined,
-    onInstallCollection: (item, items, plan, onPlanReplaced, onInstalled) => {
+    onInstallCollection: (
+      item,
+      items,
+      plan,
+      onPlanReplaced,
+      onInstalled,
+      approveUpdate,
+    ) => {
       capture({
         items,
         plan,
+        approveUpdate,
         replace: onPlanReplaced,
         installed: onInstalled,
       });
@@ -604,6 +614,59 @@ it("traps focus in a named dialog", async () => {
   );
   expect(dialog.getAttribute("aria-label")).toContain("Ops collection");
   expect(dialog.textContent).toContain(uiCopy.store.detail.plan.loading);
+});
+
+/** **A held member is approvable from the sheet.** The sheet is where the
+ *  chosen set was made, so the approval re-posts exactly that set with the
+ *  flag; Dismiss leaves nothing written. */
+it("renders a held member and approves it with the chosen set", async () => {
+  const held: HeldUpdate = {
+    key: "acme/hwinfo",
+    name: "HWiNFO bridge",
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  let press: PressCapture | undefined;
+  let dismissed = 0;
+  await mount(
+    sheet(PLAN, {
+      install: {
+        ...capturingInstall((it) => (press = it)),
+        refusal: {
+          id: COLLECTION_ID,
+          message: uiCopy.store.install.reviewHeading,
+          held,
+        },
+        onDismissUpdate: () => {
+          dismissed += 1;
+        },
+      },
+    }),
+  );
+
+  const notice = must(
+    document.querySelector<HTMLElement>("[data-yunari-held-update]"),
+    "held notice",
+  );
+  expect(notice.textContent).toContain(held.name);
+  expect(notice.textContent).toContain(held.reasons[0] as string);
+
+  await act(async () =>
+    must(
+      document.querySelector<HTMLButtonElement>("[data-yunari-held-approve]"),
+      "approve control",
+    ).click(),
+  );
+  expect(press?.approveUpdate, "the approval press lost its flag").toBe(true);
+  expect(press?.items).toEqual(["wall-theme", "clock-widget", "hwinfo-plugin"]);
+
+  await act(async () =>
+    must(
+      document.querySelector<HTMLButtonElement>("[data-yunari-held-dismiss]"),
+      "dismiss control",
+    ).click(),
+  );
+  expect(dismissed, "Dismiss did not clear the hold").toBe(1);
 });
 
 /** **A part-way failure names the members it did not write**, by the plan's own

@@ -24,6 +24,8 @@ const PACK_ID = "33333333-3333-4333-8333-333333333333";
 const PRESET_ID = "44444444-4444-4444-8444-444444444444";
 const PLUGIN_ID = "55555555-5555-4555-8555-555555555555";
 const COLLECTION_ID = "66666666-6666-4666-8666-666666666666";
+/** The last row of the second batch the Dashboard themes grid loads. */
+const LATE_THEME_ID = "88888888-8888-4888-8888-888888888825";
 
 const COLLECTION_NAME = "Desk kit";
 
@@ -162,6 +164,23 @@ const ENTRIES: readonly Record<string, unknown>[] = [
     ],
     digest: true,
   }),
+  // Enough Dashboard themes that the grid's first batch cannot draw them all:
+  // the last of these is the row only the second batch reaches.
+  ...Array.from({ length: 26 }, (_, index) =>
+    entry({
+      id: `88888888-8888-4888-8888-8888888888${String(index).padStart(2, "0")}`,
+      kind: "dashboard-theme",
+      name: `Batch theme ${index + 1}`,
+      author: "mira-k",
+      members: [
+        {
+          id: `batch-${index + 1}`,
+          kind: "dashboard-theme",
+          name: `Batch theme ${index + 1}`,
+        },
+      ],
+    }),
+  ),
 ];
 
 /** The host's answers for every route the Library reads. */
@@ -305,6 +324,43 @@ test("every Library page opens on the catalogue", async ({
   await expect(
     region.locator("[data-yunari-submissions-page]"),
     "My submissions did not open",
+  ).toBeVisible();
+});
+
+/**
+ * **The grid loads near the end, not all at once.** The first batch cannot
+ * draw the last dashboard theme; scrolling to the sentinel loads the second,
+ * and a row only that batch draws appears.
+ */
+test("the grid draws a second batch when the sentinel is reached", async ({
+  page,
+}, testInfo) => {
+  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
+  await routeHost(page);
+  // A short viewport keeps the sentinel below the observer's margin until the
+  // grid is scrolled, so the first batch is the state this case reads.
+  await page.setViewportSize({ width: 1280, height: 600 });
+  const region = await openLibrary(page);
+  await region
+    .locator('[data-yunari-library-nav-item="dashboard-themes"]')
+    .click();
+  const panel = region.locator(
+    '[data-yunari-library-panel="dashboard-themes"]',
+  );
+  await expect(panel.locator("[data-yunari-store-cell]").first()).toBeVisible();
+
+  const late = panel.locator(`[data-yunari-store-cell="${LATE_THEME_ID}"]`);
+  await expect(
+    late,
+    "the first batch drew a row only the second batch should reach",
+  ).toHaveCount(0);
+
+  await panel
+    .locator("[data-yunari-library-sentinel]")
+    .scrollIntoViewIfNeeded();
+  await expect(
+    late,
+    "scrolling to the sentinel loaded no second batch",
   ).toBeVisible();
 });
 

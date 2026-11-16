@@ -53,13 +53,16 @@ export interface InstallControl {
         /** A part-way collection failure's per-member outcomes, so the sheet
          *  can name what the host did not write. */
         readonly members?: readonly CollectionMemberOutcome[];
+        /** A collection member the host held, with the growth that held it. */
+        readonly held?: HeldUpdate;
       }
     | undefined;
   /** The update a press was held for, and the item it names. */
   readonly held: { readonly id: string; readonly held: HeldUpdate } | undefined;
   /** Presses the held item again with the approval flag. */
   readonly onApproveUpdate: () => void;
-  /** Leaves the notice standing on nothing; nothing was written. */
+  /** Leaves the notice standing on nothing; nothing was written. For a
+   *  collection the hold is carried on the refusal, which this clears too. */
   readonly onDismissUpdate: () => void;
 }
 

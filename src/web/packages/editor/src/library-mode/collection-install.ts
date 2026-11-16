@@ -4,6 +4,7 @@ import type {
   CollectionPlan,
   CollectionPlanMember,
 } from "@yunari/renderer-core";
+import type { HeldUpdate } from "../components/held-update.js";
 import {
   type InstallOutcome,
   installItem,
@@ -156,10 +157,15 @@ export function planChange(
 export async function installCollection(
   item: StoreItem,
   items: readonly string[],
-  options: { readonly fetch?: typeof fetch } = {},
+  options: {
+    readonly fetch?: typeof fetch;
+    /** The approval press for an update the host held. */
+    readonly approveUpdate?: boolean;
+  } = {},
 ): Promise<InstallOutcome> {
   return installItem(item, {
     items,
+    ...(options.approveUpdate === true ? { approveUpdate: true } : {}),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 }
@@ -242,7 +248,8 @@ export type CollectionPressOutcome =
       readonly change: PlanChange;
     }
   /** The host refused the press. `members` is present for a part-way failure:
-   *  the sheet names the members it could not write. */
+   *  the sheet names the members it could not write. `held` is the update the
+   *  host read and refused to write, which the sheet renders for approval. */
   | {
       readonly kind: "refused";
       readonly message: string;
@@ -250,20 +257,27 @@ export type CollectionPressOutcome =
         readonly id: string;
         readonly ok: boolean;
       }[];
+      readonly held?: HeldUpdate;
     };
 
 export interface CollectionPressDeps {
   readonly readPlan: (item: StoreItem) => Promise<CollectionPlan>;
+  /** The chosen press, or its approval re-post. `approveUpdate` is the flag the
+   *  host reads for a held member's growth. */
   readonly install: (
     item: StoreItem,
     items: readonly string[],
+    approveUpdate: boolean,
   ) => Promise<InstallOutcome>;
   readonly consent: CollectionConsentGateway;
+  /** Whether this press approves an update the host held. */
+  readonly approveUpdate?: boolean;
 }
 
 /** The press the sheet hands the region's install hook. The two callbacks are
  *  how a re-read plan replaces the sheet and how a write reports the consent it
- *  did or did not obtain. */
+ *  did or did not obtain. `approveUpdate` re-posts the same chosen set after a
+ *  hold, and is never set by the first press. */
 export interface CollectionInstallPress {
   (
     item: StoreItem,
@@ -271,6 +285,7 @@ export interface CollectionInstallPress {
     openPlan: CollectionPlan,
     onPlanReplaced: (plan: CollectionPlan, change: PlanChange) => void,
     onInstalled: (consent: CollectionConsentResult) => void,
+    approveUpdate?: boolean,
   ): void;
 }
 
@@ -322,15 +337,22 @@ export async function pressCollection(
     };
   }
 
-  const outcome = await deps.install(item, [...choice.chosen]);
+  const outcome = await deps.install(
+    item,
+    [...choice.chosen],
+    deps.approveUpdate === true,
+  );
   if (!outcome.ok) {
     return {
       kind: "refused",
       message:
-        "held" in outcome ? uiCopy.store.collectionSheet.held : outcome.message,
+        "held" in outcome
+          ? uiCopy.store.install.reviewHeading
+          : outcome.message,
       ...("members" in outcome && outcome.members !== undefined
         ? { members: outcome.members }
         : {}),
+      ...("held" in outcome ? { held: outcome.held } : {}),
     };
   }
 

@@ -1,6 +1,7 @@
 import { Checkbox } from "@base-ui/react/checkbox";
 import type { CatalogueOrigin, CollectionPlan } from "@yunari/renderer-core";
 import { useEffect, useState } from "react";
+import { HeldUpdateNotice } from "../components/held-update-notice.js";
 import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
 import { CHECK_GLYPH, Glyph } from "../editor-shell/icons.js";
 import type { InstallControl } from "../store-mode/install-item.js";
@@ -291,6 +292,12 @@ export function CollectionSheet(props: {
     props.install.refusal?.id === props.item.id
       ? props.install.refusal.message
       : undefined;
+  /** **A held member is approved here**, not in Settings: the sheet is where
+   *  the chosen set was made, and the approval re-posts exactly that set. */
+  const held =
+    props.install.refusal?.id === props.item.id
+      ? props.install.refusal.held
+      : undefined;
   const choice = shown === undefined ? undefined : choiceOf(shown, chosen);
   const blockedReason =
     shown === undefined
@@ -325,7 +332,7 @@ export function CollectionSheet(props: {
           .filter((member) => chosen.has(member.id))
           .reduce((sum, member) => sum + member.bytes, 0);
 
-  const press = (): void => {
+  const press = (approveUpdate = false): void => {
     if (shown === undefined || blockedReason !== undefined || busy) return;
     if (props.install.onInstallCollection === undefined) return;
     // A fresh press answers the change the last one reported: the notice must
@@ -342,6 +349,7 @@ export function CollectionSheet(props: {
         setSettled(undefined);
       },
       (consent) => setSettled(consent),
+      approveUpdate,
     );
   };
 
@@ -384,7 +392,7 @@ export function CollectionSheet(props: {
               : {
                   "aria-describedby": "yunari-collection-sheet-blocked-reason",
                 })}
-            onClick={press}
+            onClick={() => press()}
             className={`${ACTION_BUTTON} disabled:text-faint`}
           >
             {busy
@@ -496,6 +504,19 @@ export function CollectionSheet(props: {
               </p>
             )}
 
+            {held === undefined ? null : (
+              <HeldUpdateNotice
+                held={held}
+                heading={uiCopy.store.install.reviewHeading}
+                reasonsLabel={uiCopy.store.install.reviewReasons}
+                approveLabel={uiCopy.store.install.reviewApprove}
+                dismissLabel={uiCopy.store.install.reviewDismiss}
+                disabled={busy}
+                onApprove={() => press(true)}
+                onDismiss={props.install.onDismissUpdate}
+              />
+            )}
+
             {props.origins === undefined ? null : (
               <DiffSection
                 plan={shown}
@@ -528,7 +549,7 @@ export function CollectionSheet(props: {
               </p>
             )}
 
-            {refusal === undefined ? null : (
+            {refusal === undefined || held !== undefined ? null : (
               <p
                 data-yunari-collection-sheet-refusal=""
                 className="text-xs text-warn"

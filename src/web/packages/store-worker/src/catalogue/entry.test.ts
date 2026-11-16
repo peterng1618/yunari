@@ -238,6 +238,22 @@ describe("entryOf members", () => {
     ]);
   });
 
+  it("drops a pack whose member list could not be read", () => {
+    // The derivation refuses input that names members it cannot parse; the row
+    // is dropped rather than emitted with an empty list that reads as "none".
+    const entry = entryOf(
+      itemRow({ kind: "widget-pack" }),
+      versionRow({
+        envelope_json: "{}",
+        metadata_json: JSON.stringify({ name: "Broken pack", units: "nope" }),
+      }),
+      0,
+      URL,
+      THUMBNAIL,
+    );
+    expect(entry).toBeUndefined();
+  });
+
   it("maps plugin contributions to member kinds", () => {
     const entry = madeEntry(
       itemRow({ kind: "plugin" }),

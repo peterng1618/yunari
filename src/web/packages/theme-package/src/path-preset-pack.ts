@@ -38,6 +38,23 @@ const VERSION = 1;
  *  so no `:` — or any separator a removal prefix could be confused by. */
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/;
 
+/** A pack's presets live in one flat list under this id prefix, so a row's id
+ *  names the pack it came from. Its owner is here because the host that stores
+ *  the rows and the editor that removes them must agree on the spelling. */
+const PACK_PREFIX = "pack:";
+
+export function pathPresetPackPrefix(packId: string): string {
+  return `${PACK_PREFIX}${packId}:`;
+}
+
+/** The pack an installed preset row came from, or nothing for a user row. */
+export function pathPresetPackIdOf(id: string): string | undefined {
+  if (!id.startsWith(PACK_PREFIX)) return undefined;
+  const rest = id.slice(PACK_PREFIX.length);
+  const end = rest.indexOf(":");
+  return end <= 0 ? undefined : rest.slice(0, end);
+}
+
 /**
  * The shapes every editor ships, in the order the Add pane offers them.
  *

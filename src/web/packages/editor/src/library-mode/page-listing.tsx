@@ -243,22 +243,25 @@ export function PageListing(props: {
   );
   const items = useMemo(() => visible.map((row) => row.item), [visible]);
   const facets = useMemo(() => listingFacets(items), [items]);
-  /** **A prune waits for the listing.** The restored choice is the person's, and
-   *  the first render holds no rows yet; pruning then would erase it. The
-   *  one-shot flag keeps a later prune of the same listing from eating a facet
-   *  they just chose. */
+  /** **A prune waits for the listing, and only a listing with rows may prune.**
+   *  The restored choice is the person's, and the first render holds no rows
+   *  yet; pruning then would erase it. A failed read is not an empty listing
+   *  either, so it never prunes against an empty facet set. The one-shot flag
+   *  keeps a later prune of the same listing from eating a facet they just
+   *  chose. */
   const listingsSettled =
     (catalogue !== undefined || catalogueFailed) &&
     (library !== undefined || libraryFailed);
+  const listingHasRows = (catalogue?.length ?? 0) + (library?.length ?? 0) > 0;
   useEffect(() => {
-    if (pruned.current || !listingsSettled) return;
+    if (pruned.current || !listingsSettled || !listingHasRows) return;
     pruned.current = true;
     const next = pruneLibraryFacets(chosen, facets);
     if (next !== chosen) {
       setChosen(next);
       rememberLibraryFacets(next);
     }
-  }, [chosen, facets, listingsSettled]);
+  }, [chosen, facets, listingsSettled, listingHasRows]);
   const matched = useMemo(
     () =>
       items.filter(
@@ -637,10 +640,20 @@ export function PageListing(props: {
           />
         ) : answered && !catalogueFailed && !libraryFailed ? (
           <div data-yunari-library-empty="">
-            <Empty
-              lead={uiCopy.library.empty}
-              hint={uiCopy.library.emptyHint}
-            />
+            {/* **Two facts, two sentences.** A read that answered rows the
+                page's filters then removed is not an empty catalogue: telling
+                that person to install something hides the filter they chose. */}
+            {listingHasRows ? (
+              <Empty
+                lead={uiCopy.library.noMatches}
+                hint={uiCopy.library.noMatchesHint}
+              />
+            ) : (
+              <Empty
+                lead={uiCopy.library.empty}
+                hint={uiCopy.library.emptyHint}
+              />
+            )}
           </div>
         ) : null}
         {/* **The sentinel asks for the next batch near the end.** It is drawn

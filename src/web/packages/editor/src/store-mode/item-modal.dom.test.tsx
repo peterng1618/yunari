@@ -1566,6 +1566,32 @@ it("draws only the actions its member kind allows", async () => {
 });
 
 /**
+ * **An all-optional collection still has an install press.** Its required set
+ * is empty, and answering no state left the modal claiming the register could
+ * not be read.
+ */
+it("offers an all-optional collection its Install press", async () => {
+  await mount(
+    detailModal(
+      collectionItem({
+        includes: [{ id: "widget-uuid", optional: true }],
+      }),
+      { origins: [], readPlan: async () => PLAN },
+    ),
+  );
+  await settle();
+
+  detailNode(
+    '[data-yunari-store-collection-install="install"]',
+    "Install control",
+  );
+  expect(
+    document.body.textContent,
+    "an all-optional collection was called unreadable",
+  ).not.toContain(uiCopy.store.detail.collectionStateUnavailable);
+});
+
+/**
  * **A member is named with its real publisher**, so a collection can never
  * imply endorsement by one of its members. A pack's members carry the pack's
  * publisher; a collection's plan carries each member's own.

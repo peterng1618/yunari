@@ -350,10 +350,11 @@ describe("pressCollection", () => {
       { readPlan, install, consent: gateway },
     );
 
-    expect(install).toHaveBeenCalledWith(collectionItem(), [
-      "wall-theme",
-      "hwinfo-plugin",
-    ]);
+    expect(install).toHaveBeenCalledWith(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      false,
+    );
     expect(grant).toHaveBeenCalledTimes(1);
     expect(outcome).toEqual({
       kind: "installed",
@@ -444,7 +445,11 @@ describe("pressCollection", () => {
       { readPlan, install, consent: { list, grant } },
     );
 
-    expect(install).toHaveBeenCalledWith(collectionItem(), ["wall-theme"]);
+    expect(install).toHaveBeenCalledWith(
+      collectionItem(),
+      ["wall-theme"],
+      false,
+    );
     expect(list).not.toHaveBeenCalled();
     expect(grant).not.toHaveBeenCalled();
     expect(outcome).toEqual({
@@ -491,5 +496,41 @@ describe("pressCollection", () => {
       message: uiCopy.store.collectionSheet.requiredMissing(["wall-theme"]),
     });
     expect(install).not.toHaveBeenCalled();
+  });
+
+  /** **A held member is an answer, not a lost press.** The outcome carries the
+   *  growth so the sheet can render it, and the approval press forwards the
+   *  flag that lets the host write it. */
+  it("carries a held member and forwards the approval flag", async () => {
+    const held = {
+      key: "acme/hwinfo",
+      name: "HWiNFO bridge",
+      publisher: "acme",
+      reasons: ["adds usb:device"],
+    };
+    const install = vi.fn(async () => ({ ok: false as const, held }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      PLAN,
+      {
+        readPlan,
+        install,
+        approveUpdate: true,
+        consent: { list: vi.fn(), grant: vi.fn() },
+      },
+    );
+
+    expect(install).toHaveBeenCalledWith(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      true,
+    );
+    expect(outcome).toEqual({
+      kind: "refused",
+      message: uiCopy.store.install.reviewHeading,
+      held,
+    });
   });
 });

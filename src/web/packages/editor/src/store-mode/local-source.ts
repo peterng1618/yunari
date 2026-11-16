@@ -44,9 +44,9 @@ export interface StoreItem {
   readonly members: readonly MemberRecord[];
   /** The listings a collection installs, with the author's required/optional
    *  flag. Present only on a collection entry, absent rather than undefined on
-   *  every other kind. The public index carries ids only, so a catalogue-built
-   *  row marks an include required unless the source learned otherwise: a
-   *  declined optional must never read as installed. */
+   *  every other kind. The public index carries each include's `optional`
+   *  default, so a catalogue-built row reads the author's own answer rather
+   *  than assuming a declined optional is required. */
   readonly includes?: readonly CollectionInclude[];
   readonly author: string | undefined;
   /** The document's own version, or `undefined` when it declares none. The

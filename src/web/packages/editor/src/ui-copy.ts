@@ -1496,9 +1496,6 @@ export const uiCopy = {
           " ",
         )} Nothing was installed; the sheet shows the new plan.`;
       },
-      /** A collection update that asked a plugin for more than it held. The
-       *  review lives in Settings, which this states rather than duplicating. */
-      held: "The collection's update was held for review. Review it in Settings.",
       install: "Install",
       busy: "Installing…",
       cancel: "Cancel",
@@ -1872,6 +1869,10 @@ export const uiCopy = {
      *  instead (`uiCopy.store.unreadable`), and never draws this. */
     empty: "Nothing here yet.",
     emptyHint: "Install an item from the store, or publish your own.",
+    /** A read that answered rows, and the page's filter or search left none.
+     *  Distinct from `empty`: the catalogue is not empty, the view is. */
+    noMatches: "No listing matches these filters.",
+    noMatchesHint: "Clear a filter or the search to see the listing again.",
     /** The page toolbar's query field. It narrows the drawn rows by the name and
      *  author the cards already print. */
     search: "Search listings",

@@ -354,7 +354,11 @@ function membersOf(
   if (!Array.isArray(raw) || raw.length > MAX_LISTING_MEMBERS) return undefined;
 
   const members: MemberRecord[] = [];
-  const ids = new Set<string>();
+  /** **The pair is the identity, not the id.** One plugin may contribute the
+   *  same id under two groups (a sensor provider and a data source), and both
+   *  cards are real; a second record of the same `(kind, id)` names no separate
+   *  member a reader could draw. */
+  const pairs = new Set<string>();
   for (const item of raw) {
     if (!isObject(item)) return undefined;
     const id = stringField(item, "id");
@@ -366,10 +370,9 @@ function membersOf(
     if (id.trim() === "" || kind.trim() === "" || name.trim() === "") {
       return undefined;
     }
-    // A repeated id is one member counted twice: the second record names no
-    // separate member a reader could draw.
-    if (ids.has(id)) return undefined;
-    ids.add(id);
+    const pair = `${kind}\u0000${id}`;
+    if (pairs.has(pair)) return undefined;
+    pairs.add(pair);
     members.push({ id, kind, name });
   }
   return members;

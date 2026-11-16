@@ -71,6 +71,8 @@ export function useInstall(options: {
           readonly id: string;
           readonly ok: boolean;
         }[];
+        /** A collection member the host held, with what grew. */
+        readonly held?: HeldUpdate;
       }
     | undefined
   >(undefined);
@@ -171,6 +173,7 @@ export function useInstall(options: {
     openPlan,
     onPlanReplaced,
     onInstalled,
+    approveUpdate = false,
   ): void => {
     if (inFlight.current.has(item.id)) return;
     inFlight.current.add(item.id);
@@ -184,8 +187,14 @@ export function useInstall(options: {
         : uiCopy.store.collectionSheet.notGranted(consent.notGranted);
     void pressCollection(item, items, openPlan, {
       readPlan: options.readPlan ?? readCollectionPlan,
-      install: (pressed, chosen) => installCollection(pressed, chosen),
+      install: (pressed, chosen, approve) =>
+        installCollection(
+          pressed,
+          chosen,
+          approve ? { approveUpdate: true } : undefined,
+        ),
       consent: options.extensions ?? createExtensionClient(),
+      ...(approveUpdate ? { approveUpdate: true } : {}),
     })
       .then(async (outcome) => {
         if (!alive.current) return;
@@ -200,6 +209,7 @@ export function useInstall(options: {
             ...(outcome.members === undefined
               ? {}
               : { members: outcome.members }),
+            ...(outcome.held === undefined ? {} : { held: outcome.held }),
           });
           return;
         }
@@ -232,7 +242,14 @@ export function useInstall(options: {
     if (held === undefined) return;
     press(held.item, true);
   };
-  const onDismissUpdate = (): void => setHeld(undefined);
+  const onDismissUpdate = (): void => {
+    setHeld(undefined);
+    // A collection's held press is a refusal that carries the same notice;
+    // dismissing it leaves nothing written, like the single item's hold.
+    setRefusal((current) =>
+      current?.held === undefined ? current : undefined,
+    );
+  };
 
   return {
     control: {

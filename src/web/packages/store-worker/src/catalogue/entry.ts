@@ -5,8 +5,8 @@ import {
   DASHBOARD_THEME_KIND,
   type FabricThemeEnvelope,
   type FacetRecord,
+  type ListingMembers,
   listingMemberRecords,
-  type MemberRecord,
   type PluginMemberContributions,
 } from "@yunari/renderer-core";
 import type { CollectionPackage } from "@yunari/theme-package";
@@ -56,12 +56,14 @@ export function entryOf(
   if (item.kind === DASHBOARD_THEME_KIND) {
     const envelope = readJson<FabricThemeEnvelope>(version.envelope_json);
     const remixOf = envelope.metadata?.remixOf;
+    const members = membersOf(item, version, envelope);
+    if (members === undefined) return undefined;
     return {
       ...shared,
       name: item.name,
       // The derivation tags its refusal on the array; the wire carries a plain
       // list, or every consumer would compare the tag as if it were a member.
-      members: [...membersOf(item, version, envelope)],
+      members: [...members],
       ...(remixOf === undefined ? {} : { remixOf }),
     };
   }
@@ -84,7 +86,9 @@ export function entryOf(
 
   const name = metadataName(version.metadata_json);
   if (name === undefined) return undefined;
-  return { ...shared, name, members: [...membersOf(item, version)] };
+  const members = membersOf(item, version);
+  if (members === undefined) return undefined;
+  return { ...shared, name, members: [...members] };
 }
 
 /**
@@ -93,36 +97,55 @@ export function entryOf(
  * so a member's id and name are the catalogue's and the installed copy's
  * alike. A collection never reaches here — `entryOf` answers it before this
  * point — and the derivation answers no members for it anyway.
+ *
+ * `undefined` when the derivation reports that the input naming members could
+ * not be read: this file's existing shape for "could not read" is to drop the
+ * row rather than emit it under a fabricated member list.
  */
 function membersOf(
   item: ItemRow,
   version: VersionRow,
   envelope?: FabricThemeEnvelope,
-): readonly MemberRecord[] {
+): ListingMembers | undefined {
   if (item.kind === DASHBOARD_THEME_KIND) {
     const parsed =
       envelope ?? readJson<FabricThemeEnvelope>(version.envelope_json);
-    return listingMemberRecords(DASHBOARD_THEME_KIND, {
-      theme: { id: parsed.id, name: item.name },
-    });
+    return readable(
+      listingMemberRecords(DASHBOARD_THEME_KIND, {
+        theme: { id: parsed.id, name: item.name },
+      }),
+    );
   }
 
   const metadata = readJson<Readonly<Record<string, unknown>>>(
     version.metadata_json,
   );
   if (item.kind === "widget-pack")
-    return listingMemberRecords(item.kind, { named: metadata["units"] });
+    return readable(
+      listingMemberRecords(item.kind, { named: metadata["units"] }),
+    );
   if (item.kind === "path-preset-pack")
-    return listingMemberRecords(item.kind, { named: metadata["presets"] });
+    return readable(
+      listingMemberRecords(item.kind, { named: metadata["presets"] }),
+    );
   if (item.kind === "editor-theme")
-    return listingMemberRecords(item.kind, {
-      editorThemeName: metadata["name"],
-    });
+    return readable(
+      listingMemberRecords(item.kind, {
+        editorThemeName: metadata["name"],
+      }),
+    );
   if (item.kind === "plugin")
-    return listingMemberRecords(item.kind, {
-      contributions: pluginContributions(metadata),
-    });
-  return [];
+    return readable(
+      listingMemberRecords(item.kind, {
+        contributions: pluginContributions(metadata),
+      }),
+    );
+  return readable(listingMemberRecords(item.kind, {}));
+}
+
+/** The derivation's refusal arm, kept rather than spread away. */
+function readable(members: ListingMembers): ListingMembers | undefined {
+  return members.unreadable ? undefined : members;
 }
 
 /** The stored manifest's contributions, which were validated when the version

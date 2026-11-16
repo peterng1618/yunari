@@ -256,6 +256,76 @@ it("narrows the listing by the toolbar's search, and keeps it across a re-render
   ).toBe("catalogue");
 });
 
+/** **A filter that leaves none is not an empty catalogue.** The two facts read
+ *  with different sentences: the install prompt belongs to a read that holds
+ *  nothing, and hiding a chosen filter behind it leaves the person stuck. */
+it("says when a filter matched nothing, and keeps the prompt for an empty catalogue", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      ["/index.json", () => indexOf([entry(THEME_A, "Catalogue theme")])],
+      ["/api/themes", () => json({ themes: [] })],
+    ]),
+  );
+  const filtered = await mountPage("dashboard-themes", "all");
+  await waitForCells(filtered, ["Catalogue theme"]);
+  await typeSearch(filtered, "nothing-matches-this");
+  await vi.waitFor(() =>
+    expect(
+      must(
+        filtered.querySelector<HTMLElement>("[data-yunari-library-empty]"),
+        "empty state",
+      ).textContent,
+      "a filter that matched nothing drew the install prompt",
+    ).toContain(uiCopy.library.noMatches),
+  );
+
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      ["/index.json", () => indexOf([])],
+      ["/api/themes", () => json({ themes: [] })],
+    ]),
+  );
+  const empty = await mountPage("dashboard-themes", "all");
+  await vi.waitFor(() =>
+    expect(
+      must(
+        empty.querySelector<HTMLElement>("[data-yunari-library-empty]"),
+        "empty state",
+      ).textContent,
+      "an empty catalogue did not draw the install prompt",
+    ).toContain(uiCopy.library.empty),
+  );
+});
+
+/** **A failed read must not erase a restored facet.** A failure is not an
+ *  empty listing, so it never prunes the saved selection against no facets. */
+it("keeps a restored facet when both reads fail", async () => {
+  window.sessionStorage.setItem(
+    LIBRARY_FACETS_KEY,
+    JSON.stringify({ author: ["mira-k"] }),
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }),
+  );
+  const container = await mountPage("dashboard-themes", "all");
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector("[data-yunari-store-failure]"),
+      "an offline mount drew no failure",
+    ).not.toBeNull(),
+  );
+
+  expect(
+    JSON.parse(window.sessionStorage.getItem(LIBRARY_FACETS_KEY) ?? "null"),
+    "a failed read pruned the restored facet choice",
+  ).toEqual({ author: ["mira-k"] });
+});
+
 /** An `IntersectionObserver` a case fires by hand: jsdom has none, and the
  *  grid's sentinel is the only observer on this surface. */
 let observe: (() => void) | undefined;

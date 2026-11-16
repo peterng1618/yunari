@@ -174,7 +174,11 @@ async function mount(options: HarnessOptions = {}): Promise<void> {
   await act(async () => mounted.render(<Harness {...options} />));
 }
 
-function pressWith(options: HarnessOptions, items: readonly string[]): void {
+function pressWith(
+  options: HarnessOptions,
+  items: readonly string[],
+  approveUpdate = false,
+): void {
   const install = control;
   if (install?.onInstallCollection === undefined) {
     throw new Error("the hook returned no collection press");
@@ -185,6 +189,7 @@ function pressWith(options: HarnessOptions, items: readonly string[]): void {
     PLAN,
     (plan) => options.onPlanReplaced?.(plan),
     () => undefined,
+    approveUpdate,
   );
 }
 
@@ -282,6 +287,37 @@ it("states the host's refusal and grants nothing", async () => {
   await act(async () => pressWith(harness, ["wall-theme"]));
   await vi.waitFor(() => expect(announcement).toBe("a member refused"));
   expect(grant).not.toHaveBeenCalled();
+});
+
+/** **A held collection member is approvable from the sheet.** The hook keeps
+ *  the growth on the refusal the sheet reads, and a re-post forwards the flag
+ *  with the same chosen set. */
+it("carries a held member and re-posts its approval with the chosen set", async () => {
+  const held = {
+    key: CONSENT.key,
+    name: CONSENT.name,
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    jsonResponse({ held }, 409),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const harness: HarnessOptions = { readPlan: async () => PLAN };
+  await mount(harness);
+
+  await act(async () => pressWith(harness, ["wall-theme", ITEM_ID]));
+  await vi.waitFor(() =>
+    expect(control?.refusal?.held, "the hold was lost").toEqual(held),
+  );
+
+  await act(async () => pressWith(harness, ["wall-theme", ITEM_ID], true));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  const body = JSON.parse(
+    String((fetch.mock.calls[1]?.[1] as RequestInit | undefined)?.body),
+  ) as { items: readonly string[]; approveUpdate?: boolean };
+  expect(body.items).toEqual(["wall-theme", ITEM_ID]);
+  expect(body.approveUpdate).toBe(true);
 });
 
 it("states a stale list after a successful write", async () => {

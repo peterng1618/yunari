@@ -198,6 +198,22 @@ it("answers no collection state for a listing that installs no includes", () => 
   ).toBeUndefined();
 });
 
+it("states an all-optional collection rather than answering nothing", () => {
+  const collection = listing({
+    kind: "collection",
+    members: [],
+    includes: [{ id: "11111111-1111-4111-8111-111111111111", optional: true }],
+  });
+
+  // A defined state is what draws the card's Install control. Answering
+  // `undefined` left the card with no control and the modal claiming the
+  // register was unreadable.
+  expect(
+    collectionStateOf(collection, []),
+    "an all-optional collection has no install state",
+  ).toEqual({ installed: 0, total: 0, state: "absent" });
+});
+
 /** **A declined optional member is not part of the count.** The spec reads "On
  *  this PC" when every required include is installed, so an unticked optional
  *  can never leave the collection permanently partial and re-offer Update. */

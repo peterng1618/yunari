@@ -1,3 +1,5 @@
+import { pathPresetPackIdOf } from "@yunari/theme-package";
+import { keyPath } from "../plugin-manager/use-extensions.js";
 import { uiCopy } from "../ui-copy.js";
 import type { CellAction, StoreItem } from "./local-source.js";
 
@@ -182,11 +184,13 @@ export function actionDisabledReason(
 /**
  * The host route that removes one kind's copy, or `undefined` when the kind has
  * none. **The id is the library copy's**, not the catalogue's, so a joined
- * catalogue row passes `installedId`. A pack's preset row (`pack:…`) is removed
- * with its pack, never through the single-preset route.
+ * catalogue row passes `installedId`. A plugin key is `publisher/id`, encoded
+ * by the extension client's own `keyPath`: the host route reads two segments,
+ * and a single encoded segment answers 404. A pack's preset row (`pack:…`) is
+ * removed with its pack: the row names the pack, so its Remove is the pack's
+ * route rather than the single-preset one.
  */
 export function removalPath(kind: string, id: string): string | undefined {
-  const encoded = encodeURIComponent(id);
   if (
     kind === "plugin" ||
     kind === "sensor-provider" ||
@@ -194,14 +198,20 @@ export function removalPath(kind: string, id: string): string | undefined {
     kind === "asset-source" ||
     kind === "panel-driver"
   ) {
-    return `/api/extensions/${encoded}`;
+    return `/api/extensions/${keyPath(id)}`;
   }
-  if (kind === "widget-pack") return `/api/widget-packs/${encoded}`;
+  if (kind === "widget-pack") {
+    return `/api/widget-packs/${encodeURIComponent(id)}`;
+  }
   if (kind === "shape") {
-    return id.startsWith("pack:") ? undefined : `/api/path-presets/${encoded}`;
+    const packId = pathPresetPackIdOf(id);
+    return packId === undefined
+      ? `/api/path-presets/${encodeURIComponent(id)}`
+      : `/api/path-presets/packs/${encodeURIComponent(packId)}`;
   }
   if (kind === "path-preset-pack") {
-    return `/api/path-presets/packs/${encoded}`;
+    const packId = pathPresetPackIdOf(id) ?? id;
+    return `/api/path-presets/packs/${encodeURIComponent(packId)}`;
   }
   return undefined;
 }

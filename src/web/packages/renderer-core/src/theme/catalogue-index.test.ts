@@ -385,6 +385,19 @@ describe("parseCatalogueIndex", () => {
     ]);
   });
 
+  it("accepts one member id under two groups", () => {
+    // A plugin may contribute the same id as a sensor provider and a data
+    // source; both records are separate members, so the identity is the pair.
+    const members = [
+      { id: "acme", kind: "sensor-provider", name: "Acme load" },
+      { id: "acme", kind: "data-source", name: "Acme HTTP" },
+    ];
+    const parsed = parseCatalogueIndex(document([entry({ members })]), KNOWN);
+
+    expect(parsed.refused).toStrictEqual([]);
+    expect(parsed.entries[0]?.members).toStrictEqual(members);
+  });
+
   it("refuses a whitespace-only member name or id", () => {
     const parsed = parseCatalogueIndex(
       document([
