@@ -160,6 +160,7 @@ function collectionItem(): StoreItem {
 interface PressCapture {
   readonly items: readonly string[];
   readonly approveMember: string | undefined;
+  readonly carried: readonly string[] | undefined;
 }
 
 /** An install control whose collection press is captured rather than posted. */
@@ -175,8 +176,9 @@ function capturingInstall(
       onPlanReplaced,
       onInstalled,
       approveMember,
+      carried,
     ) => {
-      capture({ items, approveMember });
+      capture({ items, approveMember, carried });
     },
     installingIds: new Set(),
     refusal: undefined,
@@ -297,4 +299,53 @@ it("states the consent a stopped press granted and withheld", async () => {
       "withheld consent sentence",
     ).textContent,
   ).toBe(uiCopy.store.collectionSheet.consentNotGranted(["HWiNFO bridge"]));
+});
+
+/** **The approval press carries what the stopped press wrote.** The retry skips
+ *  an already-registered member, so without these ids its failed grant would be
+ *  forgotten when the refusal clears. */
+it("carries a stopped press's written ids into the approval press", async () => {
+  const held: HeldUpdate = {
+    key: "acme/hwinfo",
+    name: "HWiNFO bridge",
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  let press: PressCapture | undefined;
+  const base = capturingInstall((it) => {
+    press = it;
+  });
+  const element = (install: InstallControl): ReactElement => (
+    <CollectionSheet
+      item={collectionItem()}
+      plan={{ status: "ready", plan: PLAN }}
+      origins={[]}
+      install={install}
+      onClose={() => undefined}
+    />
+  );
+  await mount(
+    element({
+      ...base,
+      refusal: {
+        id: COLLECTION_ID,
+        message: uiCopy.store.install.reviewHeading,
+        held,
+        memberId: "hwinfo-plugin",
+        written: ["clock-widget", "hwinfo-plugin"],
+        consent: { granted: [], notGranted: ["HWiNFO bridge"] },
+      },
+    }),
+  );
+
+  await act(async () =>
+    must(
+      document.querySelector<HTMLButtonElement>("[data-yunari-held-approve]"),
+      "approve control",
+    ).click(),
+  );
+
+  expect(press?.approveMember).toBe("hwinfo-plugin");
+  expect(press?.carried).toEqual(["clock-widget", "hwinfo-plugin"]);
+  expect(press?.items).toEqual(["wall-theme", "clock-widget", "hwinfo-plugin"]);
 });

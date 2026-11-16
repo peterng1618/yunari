@@ -116,6 +116,7 @@ function origin(
 function extension(row: {
   readonly key: string;
   readonly fingerprint: string;
+  readonly consent?: InstalledExtension["consent"];
 }): InstalledExtension {
   return {
     key: row.key,
@@ -126,7 +127,7 @@ function extension(row: {
     capabilities: [],
     contributions: {},
     devices: [],
-    consent: "granted",
+    consent: row.consent ?? "missing",
     fingerprint: row.fingerprint,
   };
 }
@@ -325,6 +326,19 @@ describe("grantCollectionConsent", () => {
   });
 });
 
+const PLUGIN_A = { ...CONSENT, name: "Plugin A" };
+const PLUGIN_B = { ...CONSENT, key: "acme/clock", name: "Plugin B" };
+/** Two plugin members, one written before a later hold and one carried into an
+ *  approval press. */
+const TWO_PLUGIN_PLAN: CollectionPlan = {
+  members: [
+    member({ id: "plugin-a", kind: "plugin", consent: PLUGIN_A }),
+    member({ id: "plugin-b", kind: "plugin", consent: PLUGIN_B }),
+  ],
+  missing: [],
+  totalBytes: 2048,
+};
+
 describe("pressCollection", () => {
   const readPlan = async (): Promise<CollectionPlan> => PLAN;
 
@@ -504,20 +518,6 @@ describe("pressCollection", () => {
    *  grant on the refused arm the plugin is written, registered, and unloadable
    *  while the sheet says installed. */
   it("grants the member a stopped press wrote, and not the held one", async () => {
-    const pluginA = { ...CONSENT, name: "Plugin A" };
-    const pluginB = {
-      ...CONSENT,
-      key: "acme/clock",
-      name: "Plugin B",
-    };
-    const plan: CollectionPlan = {
-      members: [
-        member({ id: "plugin-a", kind: "plugin", consent: pluginA }),
-        member({ id: "plugin-b", kind: "plugin", consent: pluginB }),
-      ],
-      missing: [],
-      totalBytes: 2048,
-    };
     const heldB = {
       key: "acme/clock",
       name: "Plugin B",
@@ -544,14 +544,19 @@ describe("pressCollection", () => {
     const first = await pressCollection(
       collectionItem(),
       ["plugin-a", "plugin-b"],
-      plan,
-      { readPlan: async () => plan, install, consent: { list, grant } },
+      TWO_PLUGIN_PLAN,
+      {
+        readPlan: async () => TWO_PLUGIN_PLAN,
+        install,
+        consent: { list, grant },
+      },
     );
 
     expect(first).toMatchObject({
       kind: "refused",
       held: heldB,
       memberId: "plugin-b",
+      written: ["plugin-a"],
       consent: { granted: ["Plugin A"], notGranted: [] },
     });
     // B was held, not written, so its consent is never granted by this press.
@@ -559,7 +564,17 @@ describe("pressCollection", () => {
     expect(grant).toHaveBeenCalledWith("acme/hwinfo", "fp-a");
 
     // The approval press writes B; A is already registered and stays ungranted
-    // by the retry because this press wrote none of its bytes.
+    // by the retry because this press wrote none of its bytes. The sheet carries
+    // A's id forward, and the listing now shows its consent, so it is not
+    // granted a second time.
+    list.mockResolvedValueOnce([
+      extension({
+        key: "acme/hwinfo",
+        fingerprint: "fp-a",
+        consent: "granted",
+      }),
+      extension({ key: "acme/clock", fingerprint: "fp-b" }),
+    ]);
     install.mockResolvedValueOnce({
       ok: true,
       members: [
@@ -571,11 +586,12 @@ describe("pressCollection", () => {
     const second = await pressCollection(
       collectionItem(),
       ["plugin-a", "plugin-b"],
-      plan,
+      TWO_PLUGIN_PLAN,
       {
-        readPlan: async () => plan,
+        readPlan: async () => TWO_PLUGIN_PLAN,
         install,
         approveMember: "plugin-b",
+        carried: ["plugin-a"],
         consent: { list, grant: approveGrant },
       },
     );
@@ -586,6 +602,113 @@ describe("pressCollection", () => {
     });
     expect(approveGrant).toHaveBeenCalledTimes(1);
     expect(approveGrant).toHaveBeenCalledWith("acme/clock", "fp-b");
+  });
+
+  /** **The sheet's carried ids survive the refusal being cleared.** A grant
+   *  that failed on the stopped press is retried on the approval press, over the
+   *  union of what that press wrote and what the sheet carried. */
+  it("grants a carried member whose grant failed, plus the one this press wrote", async () => {
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [
+        { id: "plugin-a", ok: true, reason: "Already installed." },
+        { id: "plugin-b", ok: true },
+      ],
+    }));
+    const list = vi.fn(async () => [
+      extension({ key: "acme/hwinfo", fingerprint: "fp-a" }),
+      extension({ key: "acme/clock", fingerprint: "fp-b" }),
+    ]);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["plugin-a", "plugin-b"],
+      TWO_PLUGIN_PLAN,
+      {
+        readPlan: async () => TWO_PLUGIN_PLAN,
+        install,
+        approveMember: "plugin-b",
+        carried: ["plugin-a"],
+        consent: { list, grant },
+      },
+    );
+
+    expect(grant).toHaveBeenCalledTimes(2);
+    expect(grant).toHaveBeenCalledWith("acme/hwinfo", "fp-a");
+    expect(grant).toHaveBeenCalledWith("acme/clock", "fp-b");
+    expect(outcome).toEqual({
+      kind: "installed",
+      consent: { granted: ["Plugin A", "Plugin B"], notGranted: [] },
+    });
+  });
+
+  it("does not grant a carried id the current plan no longer names", async () => {
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [{ id: "hwinfo-plugin", ok: true }],
+    }));
+    const list = vi.fn(async () => [
+      extension({ key: "acme/hwinfo", fingerprint: "fp-hwinfo" }),
+    ]);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["wall-theme", "clock-widget", "hwinfo-plugin"],
+      PLAN,
+      {
+        readPlan,
+        install,
+        carried: ["retired-plugin"],
+        consent: { list, grant },
+      },
+    );
+
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(grant).toHaveBeenCalledWith("acme/hwinfo", "fp-hwinfo");
+    expect(outcome).toEqual({
+      kind: "installed",
+      consent: { granted: ["HWiNFO bridge"], notGranted: [] },
+    });
+  });
+
+  it("does not re-grant a carried member whose consent already succeeded", async () => {
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [
+        { id: "plugin-a", ok: true, reason: "Already installed." },
+        { id: "plugin-b", ok: true },
+      ],
+    }));
+    const list = vi.fn(async () => [
+      extension({
+        key: "acme/hwinfo",
+        fingerprint: "fp-a",
+        consent: "granted",
+      }),
+      extension({ key: "acme/clock", fingerprint: "fp-b" }),
+    ]);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["plugin-a", "plugin-b"],
+      TWO_PLUGIN_PLAN,
+      {
+        readPlan: async () => TWO_PLUGIN_PLAN,
+        install,
+        carried: ["plugin-a"],
+        consent: { list, grant },
+      },
+    );
+
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(grant).toHaveBeenCalledWith("acme/clock", "fp-b");
+    expect(outcome).toEqual({
+      kind: "installed",
+      consent: { granted: ["Plugin B"], notGranted: [] },
+    });
   });
 
   /** A refused answer whose members all carry a reason wrote nothing, so the

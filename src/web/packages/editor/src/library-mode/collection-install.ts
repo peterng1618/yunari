@@ -195,20 +195,26 @@ export interface CollectionConsentResult {
  * granted blind, and not silently skipped; a refused grant is reported the same
  * way. A listing that could not be read leaves every code member ungranted for
  * the same reason.
+ *
+ * **A listing whose consent already matches is not granted again**: a member an
+ * earlier stopped press granted is skipped rather than re-posted, and a grant
+ * this PC already holds is never a second call.
  */
 export async function grantCollectionConsent(
   plan: CollectionPlan,
   gateway: CollectionConsentGateway,
-  /** The ids this press wrote. Absent means the whole plan, which is the
+  /** The ids this press owes consent: what it wrote plus what an earlier
+   *  stopped press wrote. Absent means the whole plan, which is the
    *  single-call default the tests and a whole-plan grant share. */
-  written?: ReadonlySet<string>,
+  owed?: ReadonlySet<string>,
 ): Promise<CollectionConsentResult> {
   const byKey = new Map<string, CollectionPlanMember>();
   for (const member of plan.members) {
     if (member.consent === undefined) continue;
-    // **A member this press did not write is not granted**: consent follows
-    // the write, never the plan's full membership.
-    if (written !== undefined && !written.has(member.id)) continue;
+    // **A member this press does not owe is not granted**: consent follows the
+    // write, never the plan's full membership. An id the plan no longer names
+    // matches no member here, so a carried member that left is not granted.
+    if (owed !== undefined && !owed.has(member.id)) continue;
     if (!byKey.has(member.consent.key)) byKey.set(member.consent.key, member);
   }
   if (byKey.size === 0) return { granted: [], notGranted: [] };
@@ -230,6 +236,10 @@ export async function grantCollectionConsent(
       notGranted.push(name);
       continue;
     }
+    // **Already granted for this exact fingerprint is not granted twice.** An
+    // earlier press of the sheet may have obtained it; re-posting consent would
+    // be a second call for a grant this PC already holds.
+    if (row.consent === "granted") continue;
     const answer = await gateway
       .grant(row.key, row.fingerprint)
       .catch(() => undefined);
@@ -263,6 +273,25 @@ function writtenMembers(
   );
 }
 
+/**
+ * The ids one press owes consent: what it wrote, plus the members an earlier
+ * stopped press wrote and the sheet carried. **Without per-member evidence on
+ * either side this is `undefined`**, because a press that cannot say what it
+ * wrote must not touch the gateway.
+ */
+function owedMembers(
+  written: ReadonlySet<string> | undefined,
+  carried: readonly string[] | undefined,
+): ReadonlySet<string> | undefined {
+  if (
+    written === undefined &&
+    (carried === undefined || carried.length === 0)
+  ) {
+    return undefined;
+  }
+  return new Set([...(written ?? []), ...(carried ?? [])]);
+}
+
 /** What one Install press answers. */
 export type CollectionPressOutcome =
   | { readonly kind: "installed"; readonly consent: CollectionConsentResult }
@@ -273,18 +302,22 @@ export type CollectionPressOutcome =
       readonly change: PlanChange;
     }
   /** The host refused the press. `members` is present for a part-way failure:
-   *  the sheet names the members it could not write. `consent` is the grant the
-   *  members this press did write received before a later member's hold stopped
-   *  it, so a written plugin is never left loadable. `held` is the update the
-   *  host read and refused to write, which the sheet renders for approval;
-   *  `memberId` names the include that hold belongs to. */
+   *  the sheet names the members it could not write. `written` is the ids this
+   *  press wrote; the sheet carries them into a later approval press, because
+   *  the retry skips an already-registered member. `consent` is the grant those
+   *  written members (plus whatever the sheet carried) received before a later
+   *  member's hold stopped it, so a written plugin is never left loadable.
+   *  `held` is the update the host read and refused to write, which the sheet
+   *  renders for approval; `memberId` names the include that hold belongs to. */
   | {
       readonly kind: "refused";
       readonly message: string;
       readonly members?: readonly {
         readonly id: string;
         readonly ok: boolean;
+        readonly reason?: string;
       }[];
+      readonly written?: readonly string[];
       readonly consent?: CollectionConsentResult;
       readonly held?: HeldUpdate;
       readonly memberId?: string;
@@ -302,6 +335,10 @@ export interface CollectionPressDeps {
   readonly consent: CollectionConsentGateway;
   /** The held include this press answers, if any. */
   readonly approveMember?: string;
+  /** The member ids a stopped press wrote, which the sheet carries into this
+   *  press. Read against the current plan, so a member that left is not
+   *  granted. */
+  readonly carried?: readonly string[];
 }
 
 /** The press the sheet hands the region's install hook. The two callbacks are
@@ -317,6 +354,9 @@ export interface CollectionInstallPress {
     onPlanReplaced: (plan: CollectionPlan, change: PlanChange) => void,
     onInstalled: (consent: CollectionConsentResult) => void,
     approveMember?: string,
+    /** The members a stopped press wrote, whose consent this press still owes.
+     *  The sheet accumulates them from the refusals it has drawn. */
+    carried?: readonly string[],
   ): void;
 }
 
@@ -376,14 +416,16 @@ export async function pressCollection(
   if (!outcome.ok) {
     // **A part-way press still owes the members it wrote their consent.** The
     // host wrote them before a later member's hold stopped the press, and the
-    // retry skips them as already registered, so this is the only press that
-    // can grant them. Nothing is granted for a member with a reason, and no
-    // per-member evidence means nothing was written.
+    // retry skips them as already registered, so this press and the approval
+    // press that follows are the only ones that can grant them. Nothing is
+    // granted for a member with a reason, and no per-member evidence on either
+    // side means nothing was written.
     const written = writtenMembers(outcome.members);
+    const owed = owedMembers(written, deps.carried);
     const consent =
-      written === undefined
+      owed === undefined
         ? undefined
-        : await grantCollectionConsent(fresh, deps.consent, written);
+        : await grantCollectionConsent(fresh, deps.consent, owed);
     return {
       kind: "refused",
       message:
@@ -393,6 +435,7 @@ export async function pressCollection(
       ...("members" in outcome && outcome.members !== undefined
         ? { members: outcome.members }
         : {}),
+      ...(written === undefined ? {} : { written: [...written] }),
       ...(consent === undefined ? {} : { consent }),
       ...("held" in outcome ? { held: outcome.held } : {}),
       ...("memberId" in outcome && outcome.memberId !== undefined
@@ -401,13 +444,17 @@ export async function pressCollection(
     };
   }
 
-  // **Only a member this press wrote is granted.** The host answers `ok` for a
+  // **Only a member this press owes is granted.** The host answers `ok` for a
   // collection whose members were all already registered, and each such member
-  // carries a reason; granting those would be a consent write behind an
-  // Install or Update press that wrote nothing for them. An answer with no
-  // per-member outcomes cannot say what was written, so it grants nothing and
-  // reports the chosen code members as not granted rather than staying silent.
-  if (outcome.members === undefined) {
+  // carries a reason; granting those would be a consent write behind an Install
+  // or Update press that wrote nothing for them. A member a stopped press wrote
+  // is still owed consent, and the sheet carries it here. An answer with no
+  // per-member outcomes and no carried member cannot say what was written, so
+  // it grants nothing and reports the chosen code members as not granted rather
+  // than staying silent.
+  const written = writtenMembers(outcome.members);
+  const owed = owedMembers(written, deps.carried);
+  if (owed === undefined) {
     // One plugin can supply several members, so the names are deduped by the
     // consent key the grant itself is keyed by: a person reads each plugin once.
     const notGranted = new Map<string, string>();
@@ -421,10 +468,9 @@ export async function pressCollection(
       consent: { granted: [], notGranted: [...notGranted.values()] },
     };
   }
-  const written = writtenMembers(outcome.members) ?? new Set<string>();
 
   return {
     kind: "installed",
-    consent: await grantCollectionConsent(fresh, deps.consent, written),
+    consent: await grantCollectionConsent(fresh, deps.consent, owed),
   };
 }

@@ -1,5 +1,8 @@
 import { type HeldUpdate, isHeldUpdate } from "../components/held-update.js";
-import type { CollectionInstallPress } from "../library-mode/collection-install.js";
+import type {
+  CollectionConsentResult,
+  CollectionInstallPress,
+} from "../library-mode/collection-install.js";
 import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
@@ -62,10 +65,10 @@ export interface InstallControl {
         readonly members?: readonly CollectionMemberOutcome[];
         /** The consent a stopped press obtained for the members it did write
          *  before a later member's hold stopped it. */
-        readonly consent?: {
-          readonly granted: readonly string[];
-          readonly notGranted: readonly string[];
-        };
+        readonly consent?: CollectionConsentResult;
+        /** The member ids that stopped press wrote. The sheet carries them into
+         *  the approval press, whose retry skips them as already registered. */
+        readonly written?: readonly string[];
         /** A collection member the host held, with the growth that held it. */
         readonly held?: HeldUpdate;
         /** The held member's id, so the approval press names exactly that

@@ -310,6 +310,23 @@ export function CollectionSheet(props: {
     props.install.refusal?.id === props.item.id
       ? props.install.refusal.consent
       : undefined;
+  /** The members a stopped press wrote. An approval press posts the same chosen
+   *  set, and the retry skips them as already registered, so the sheet carries
+   *  their ids forward: without them their consent would be forgotten when the
+   *  refusal clears. */
+  const refusalWritten =
+    props.install.refusal?.id === props.item.id
+      ? props.install.refusal.written
+      : undefined;
+  const [carried, setCarried] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (refusalWritten === undefined || refusalWritten.length === 0) return;
+    setCarried((current) => {
+      const next = new Set(current);
+      for (const id of refusalWritten) next.add(id);
+      return next;
+    });
+  }, [refusalWritten]);
   const choice = shown === undefined ? undefined : choiceOf(shown, chosen);
   const blockedReason =
     shown === undefined
@@ -362,6 +379,7 @@ export function CollectionSheet(props: {
       },
       (consent) => setSettled(consent),
       approveMember,
+      carried.size === 0 ? undefined : [...carried],
     );
   };
 

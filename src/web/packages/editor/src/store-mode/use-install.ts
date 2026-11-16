@@ -74,6 +74,9 @@ export function useInstall(options: {
         /** The consent a part-way press obtained for the members it did write
          *  before a later member's hold stopped it. */
         readonly consent?: CollectionConsentResult;
+        /** The member ids that stopped press wrote. The sheet carries them into
+         *  the approval press, whose retry skips them as already registered. */
+        readonly written?: readonly string[];
         /** A collection member the host held, with what grew. */
         readonly held?: HeldUpdate;
         /** The held member's id, so pressing Approve names only that member. */
@@ -182,6 +185,7 @@ export function useInstall(options: {
     onPlanReplaced,
     onInstalled,
     approveMember = undefined,
+    carried = undefined,
   ): void => {
     if (inFlight.current.has(item.id)) return;
     inFlight.current.add(item.id);
@@ -205,6 +209,7 @@ export function useInstall(options: {
         ),
       consent: options.extensions ?? createExtensionClient(),
       ...(approveMember === undefined ? {} : { approveMember }),
+      ...(carried === undefined || carried.length === 0 ? {} : { carried }),
     })
       .then(async (outcome) => {
         if (!alive.current) return;
@@ -222,6 +227,9 @@ export function useInstall(options: {
             ...(outcome.consent === undefined
               ? {}
               : { consent: outcome.consent }),
+            ...(outcome.written === undefined
+              ? {}
+              : { written: outcome.written }),
             ...(outcome.held === undefined ? {} : { held: outcome.held }),
             ...(outcome.memberId === undefined
               ? {}

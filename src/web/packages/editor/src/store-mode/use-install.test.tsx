@@ -111,6 +111,67 @@ const EXTENSION: InstalledExtension = {
   fingerprint: "fp-hwinfo",
 };
 
+/** Two plugin members, so a carried one and a newly written one are told
+ *  apart. */
+const PLUGIN_CONSENT_A = {
+  key: "acme/a",
+  name: "Plugin A",
+  execution: "trusted-worker",
+  capabilities: [],
+  devices: [],
+} as const;
+const PLUGIN_CONSENT_B = {
+  ...PLUGIN_CONSENT_A,
+  key: "acme/b",
+  name: "Plugin B",
+} as const;
+
+const PLUGIN_PLAN: CollectionPlan = {
+  members: [
+    {
+      id: "plugin-a",
+      kind: "plugin",
+      name: "Plugin A",
+      version: "1.0.0",
+      bytes: 1024,
+      publisher: "acme",
+      optional: false,
+      consent: PLUGIN_CONSENT_A,
+    },
+    {
+      id: "plugin-b",
+      kind: "plugin",
+      name: "Plugin B",
+      version: "1.0.0",
+      bytes: 1024,
+      publisher: "acme",
+      optional: false,
+      consent: PLUGIN_CONSENT_B,
+    },
+  ],
+  missing: [],
+  totalBytes: 2048,
+};
+
+function pluginExtension(
+  key: string,
+  fingerprint: string,
+  consent: InstalledExtension["consent"] = "missing",
+): InstalledExtension {
+  return {
+    key,
+    name: key,
+    publisher: "acme",
+    version: "1.0.0",
+    execution: "trusted-worker",
+    capabilities: [],
+    contributions: {},
+    devices: [],
+    consent,
+    fingerprint,
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -178,6 +239,8 @@ function pressWith(
   options: HarnessOptions,
   items: readonly string[],
   approveMember?: string,
+  carried?: readonly string[],
+  plan: CollectionPlan = PLAN,
 ): void {
   const install = control;
   if (install?.onInstallCollection === undefined) {
@@ -186,10 +249,11 @@ function pressWith(
   install.onInstallCollection(
     collectionItem(),
     items,
-    PLAN,
+    plan,
     (plan) => options.onPlanReplaced?.(plan),
     () => undefined,
     approveMember,
+    carried,
   );
 }
 
@@ -320,6 +384,103 @@ it("carries a held member and re-posts its approval with the chosen set", async 
   expect(body.items).toEqual(["wall-theme", ITEM_ID]);
   expect(body.approveMember).toBe(ITEM_ID);
   expect(body).not.toHaveProperty("approveUpdate");
+});
+
+/** **A member a stopped press wrote is granted on the approval press.** The
+ *  retry skips it as already registered, so the sheet's carried ids are the only
+ *  way its failed grant is ever retried. */
+it("grants a carried member plus the member this press wrote", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        id: COLLECTION_ID,
+        members: [
+          { id: "plugin-a", ok: true, reason: "Already installed." },
+          { id: "plugin-b", ok: true },
+        ],
+      }),
+    ),
+  );
+  const grant = vi.fn(granted);
+  const harness: HarnessOptions = {
+    extensions: {
+      list: async () => [
+        pluginExtension("acme/a", "fp-a"),
+        pluginExtension("acme/b", "fp-b"),
+      ],
+      grant,
+    },
+    readPlan: async () => PLUGIN_PLAN,
+  };
+  await mount(harness);
+
+  await act(async () =>
+    pressWith(
+      harness,
+      ["plugin-a", "plugin-b"],
+      "plugin-b",
+      ["plugin-a"],
+      PLUGIN_PLAN,
+    ),
+  );
+  await vi.waitFor(() => expect(grant).toHaveBeenCalledTimes(2));
+
+  expect(grant).toHaveBeenCalledWith("acme/a", "fp-a");
+  expect(grant).toHaveBeenCalledWith("acme/b", "fp-b");
+  expect(announcement).toBe(uiCopy.store.install.installed("Ops collection"));
+});
+
+/** **A cleared refusal does not erase an ungranted plugin.** The approval press
+ *  replaces the refusal that named A; the grant it makes for A fails, so the
+ *  settled announcement still names it. */
+it("states a carried member whose grant the approval press could not obtain", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        id: COLLECTION_ID,
+        members: [
+          { id: "plugin-a", ok: true, reason: "Already installed." },
+          { id: "plugin-b", ok: true },
+        ],
+      }),
+    ),
+  );
+  const grant = vi.fn(
+    async (key: string): Promise<ClientAnswer> =>
+      key === "acme/a" ? { ok: false, message: "no" } : { ok: true },
+  );
+  const harness: HarnessOptions = {
+    extensions: {
+      list: async () => [
+        pluginExtension("acme/a", "fp-a"),
+        pluginExtension("acme/b", "fp-b"),
+      ],
+      grant,
+    },
+    readPlan: async () => PLUGIN_PLAN,
+  };
+  await mount(harness);
+
+  await act(async () =>
+    pressWith(
+      harness,
+      ["plugin-a", "plugin-b"],
+      "plugin-b",
+      ["plugin-a"],
+      PLUGIN_PLAN,
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(announcement).toBe(
+      uiCopy.store.collectionSheet.notGranted(["Plugin A"]),
+    ),
+  );
+
+  expect(grant).toHaveBeenCalledTimes(2);
 });
 
 it("states a stale list after a successful write", async () => {
