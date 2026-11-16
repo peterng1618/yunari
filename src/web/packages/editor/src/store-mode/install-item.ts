@@ -1,4 +1,5 @@
 import { type HeldUpdate, isHeldUpdate } from "../components/held-update.js";
+import type { CollectionInstallPress } from "../library-mode/collection-install.js";
 import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
@@ -19,6 +20,8 @@ export type InstallOutcome =
  */
 export interface InstallControl {
   readonly onInstall: (item: StoreItem) => void;
+  /** A collection's press, which opens the sheet rather than posting here. */
+  readonly onInstallCollection?: CollectionInstallPress | undefined;
   /** The items a press is in flight for, so each control disables itself on
    *  its own id and two items install without losing one another's busy state. */
   readonly installingIds: ReadonlySet<string>;
@@ -54,6 +57,9 @@ export async function installItem(
     readonly fetch?: typeof fetch;
     /** The approval press for an update the host held. */
     readonly approveUpdate?: boolean;
+    /** A collection's chosen includes. Absent means every include, which is
+     *  what a single item's press has. */
+    readonly items?: readonly string[];
   },
 ): Promise<InstallOutcome> {
   const catalogue = item.catalogue;
@@ -84,6 +90,7 @@ export async function installItem(
           ? {}
           : { publisher: catalogue.publisher }),
         ...(options?.approveUpdate === true ? { approveUpdate: true } : {}),
+        ...(options?.items === undefined ? {} : { items: options.items }),
       }),
     });
   } catch (error) {

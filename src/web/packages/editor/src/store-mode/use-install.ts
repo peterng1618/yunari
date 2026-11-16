@@ -1,6 +1,18 @@
+import type { CollectionPlan } from "@yunari/renderer-core";
 import { useRef, useState } from "react";
 import type { HeldUpdate } from "../components/held-update.js";
+import {
+  type CollectionConsentResult,
+  type CollectionInstallPress,
+  installCollection,
+  pressCollection,
+} from "../library-mode/collection-install.js";
+import {
+  createExtensionClient,
+  type ExtensionClient,
+} from "../plugin-manager/use-extensions.js";
 import { uiCopy } from "../ui-copy.js";
+import { readCollectionPlan } from "./collection-plan.js";
 import { type InstallControl, installItem } from "./install-item.js";
 import type { ItemSource, StoreItem } from "./local-source.js";
 
@@ -20,6 +32,13 @@ import type { ItemSource, StoreItem } from "./local-source.js";
 export function useInstall(options: {
   readonly source: ItemSource;
   readonly onListed: (items: readonly StoreItem[]) => void;
+  /** The extension routes a collection's consent is granted through. The
+   *  installed listing is the fingerprint's owner; this hook never takes one
+   *  from a plan. */
+  readonly extensions?: Pick<ExtensionClient, "list" | "grant">;
+  /** The plan's reader, for the re-read an Install press makes. Tests hand
+   *  their own so the wire stays out of a hook case. */
+  readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
 }): { readonly control: InstallControl; readonly announcement: string } {
   /** The items a press is in flight for: each control disables itself on its
    *  own id, so two items install at once and neither loses the other's busy
@@ -103,6 +122,74 @@ export function useInstall(options: {
   };
 
   const onInstall = (item: StoreItem): void => press(item, false);
+  /**
+   * A collection's press, which the sheet owns the choices for.
+   *
+   * **The plan is re-read before anything is written.** A plan that moved since
+   * the sheet opened replaces the sheet through `onPlanReplaced` and installs
+   * nothing — a stale set is never posted. The chosen ids go to the same route
+   * as a single install, and the host re-runs its own pre-flight either way.
+   *
+   * **Consent is granted from what this PC now holds**, after a successful
+   * write: the installed listing carries each plugin's fingerprint, and a
+   * planned key the listing does not name is reported as not granted. A
+   * refusal returns before the listing is read, so a press that wrote nothing
+   * grants nothing.
+   */
+  const onInstallCollection: CollectionInstallPress = (
+    item,
+    items,
+    openPlan,
+    onPlanReplaced,
+    onInstalled,
+  ): void => {
+    if (inFlight.current.has(item.id)) return;
+    inFlight.current.add(item.id);
+    setInstallingIds(new Set(inFlight.current));
+    setRefusal(undefined);
+    setInstalled(undefined);
+    setHeld(undefined);
+    const announce = (consent: CollectionConsentResult): string =>
+      consent.notGranted.length === 0
+        ? uiCopy.store.install.installed(item.name)
+        : uiCopy.store.collectionSheet.notGranted(consent.notGranted);
+    void pressCollection(item, items, openPlan, {
+      readPlan: options.readPlan ?? readCollectionPlan,
+      install: (pressed, chosen) => installCollection(pressed, chosen),
+      consent: options.extensions ?? createExtensionClient(),
+    })
+      .then(async (outcome) => {
+        if (outcome.kind === "replanned") {
+          onPlanReplaced(outcome.plan, outcome.change);
+          return;
+        }
+        if (outcome.kind === "refused") {
+          setRefusal({ id: item.id, message: outcome.message });
+          return;
+        }
+        onInstalled(outcome.consent);
+        setInstalled(announce(outcome.consent));
+        const listed = await options.source.list().catch(() => undefined);
+        if (listed !== undefined) {
+          options.onListed(listed);
+        } else {
+          setRefusal({
+            id: item.id,
+            message: uiCopy.store.install.notRefreshed,
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        setRefusal({
+          id: item.id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => {
+        inFlight.current.delete(item.id);
+        setInstallingIds(new Set(inFlight.current));
+      });
+  };
   const onApproveUpdate = (): void => {
     if (held === undefined) return;
     press(held.item, true);
@@ -112,6 +199,7 @@ export function useInstall(options: {
   return {
     control: {
       onInstall,
+      onInstallCollection,
       installingIds,
       refusal,
       held: held === undefined ? undefined : { id: held.id, held: held.held },

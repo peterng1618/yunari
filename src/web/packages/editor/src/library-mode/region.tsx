@@ -11,16 +11,17 @@ import {
 import { Glyph } from "../editor-shell/icons.js";
 import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
-import type { InstallControl } from "../store-mode/install-item.js";
 import { withInstalledVersions } from "../store-mode/install-state.js";
 import { actionLabel } from "../store-mode/item-foot.js";
 import { ItemModal } from "../store-mode/item-modal.js";
 import {
   type CellAction,
+  type ItemSource,
   type StoreItem,
   settledTags,
 } from "../store-mode/local-source.js";
 import { Empty, Failure, StoreRegion } from "../store-mode/region.js";
+import { useInstall } from "../store-mode/use-install.js";
 import type { SubmitControl } from "../store-mode/use-submit.js";
 import {
   createThemeLibraryClient,
@@ -570,20 +571,43 @@ function PageListing(props: {
     return () => onStatus?.(undefined);
   }, [onStatus, count]);
 
-  // ponytail: navigation and the state filter are this task's; the cell's
-  // actions and the install press land in Tasks 9–11. Every press still names
-  // itself beside the listing, so a control without a handler is not silent.
-  const install = useMemo<InstallControl>(
+  // **Every page installs through the one hook**, including collections: a
+  // collection's press opens the sheet, which posts the chosen ids through
+  // `onInstallCollection`. Success re-lists the page and re-reads the register
+  // and the extension listing, so a collection's count and a plugin's trust
+  // block read what this PC now holds rather than a flag set here.
+  const installSource = useMemo<ItemSource>(
     () => ({
-      onInstall: () => undefined,
-      installingIds: new Set(),
-      refusal: undefined,
-      held: undefined,
-      onApproveUpdate: () => undefined,
-      onDismissUpdate: () => undefined,
+      kind: sources.catalogue.memberKind,
+      list: () => sources.catalogue.list(),
+      refused: () => [],
     }),
-    [],
+    [sources],
   );
+  const install = useInstall({
+    source: installSource,
+    onListed: (listed) => {
+      setCatalogue(listed);
+      // The installed half is re-read too, so a catalogue install appears under
+      // "On this PC" without a page reload.
+      sources.library.list().then(
+        (rows) => setLibrary(rows),
+        () => setLibraryFailed(true),
+      );
+      if (readsOrigins) {
+        readOrigins().then(
+          (rows) => setOrigins(rows),
+          () => setOriginsFailed(true),
+        );
+      }
+      if (readsExtensions) {
+        props.clients.extensions().then(
+          (rows) => setExtensions(rows),
+          () => setExtensionsFailed(true),
+        );
+      }
+    },
+  });
   const submit = useMemo<SubmitControl>(
     () => ({
       onSubmit: () => undefined,
@@ -682,7 +706,7 @@ function PageListing(props: {
             }
             onAction={onAction}
             onOpenItem={openCardAt}
-            install={install}
+            install={install.control}
           />
         ) : answered && !catalogueFailed && !libraryFailed ? (
           <div data-yunari-library-empty="">
@@ -741,7 +765,7 @@ function PageListing(props: {
             onClose={() => setOpenCard(undefined)}
             onAction={onAction}
             actionNotice={notice}
-            install={install}
+            install={install.control}
             submit={submit}
             onOpenItem={openCardAt}
             onOpenCollection={openCardAt}
@@ -751,6 +775,16 @@ function PageListing(props: {
           />
         )}
       </div>
+      {/* One live region for the page's installs, a collection's consent
+          result included: a success is otherwise silent to a screen reader. */}
+      <span
+        data-yunari-library-install-announcement=""
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {install.announcement}
+      </span>
     </div>
   );
 }

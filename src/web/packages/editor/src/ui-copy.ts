@@ -1422,6 +1422,103 @@ export const uiCopy = {
        *  cannot see the cell redraw as *Installed*. */
       installed: (name: string): string => `${name} was installed.`,
     },
+    /** The collection install sheet: every member it will put on this PC, one
+     *  opt-out list, the code members' own authority, and the update diff. The
+     *  copy states the collection's own lack of consent because that is the
+     *  invariant a person is trusting when they press Install. */
+    collectionSheet: {
+      title: (name: string): string => `Install ${name}`,
+      lead: "Choose what this collection installs on this PC.",
+      included: "Included items",
+      required: "Required",
+      optional: "Optional",
+      size: fileSize,
+      total: (size: string): string => `Total size: ${size}`,
+      unavailable: "Unavailable",
+      unavailableLead:
+        "These members are unavailable, so this collection cannot be installed:",
+      unavailableBlocks: (ids: readonly string[]): string =>
+        `${uiCopy.store.collectionSheet.unavailableLead} ${ids.join(", ")}.`,
+      requiredMissing: (ids: readonly string[]): string =>
+        `Required members are missing from this install: ${ids.join(", ")}.`,
+      /** The code half. The labels themselves are `store.detail.trust`'s, so
+       *  the detail modal and this sheet cannot word one fact twice. */
+      consent: {
+        heading: "Code permissions",
+        lead: "Each code member asks for its own permissions. The collection itself asks for none.",
+        noCode: "No chosen member runs code.",
+      },
+      update: {
+        missing: "Not on this PC yet",
+        dropped: "No longer in this collection",
+        droppedLead:
+          "Nothing is removed automatically. Remove each member where its kind lives:",
+        /** The removal action's own word and the surface it lives on. No bulk
+         *  removal exists, so this names where the decision is made rather
+         *  than inventing a route here. */
+        removal: (kind: string): string => {
+          const word =
+            (uiCopy.store.detail.remove as Readonly<Record<string, string>>)[
+              kind
+            ] ?? "Remove";
+          switch (kind) {
+            case "plugin":
+            case "sensor-provider":
+            case "data-source":
+            case "asset-source":
+            case "panel-driver":
+              return `${word} in Settings`;
+            case "widget":
+            case "widget-pack":
+              return `${word} on the ${uiCopy.library.pages.widgets} page`;
+            case "shape":
+            case "path-preset-pack":
+              return `${word} on the ${uiCopy.library.pages.shapes} page`;
+            case "dashboard-theme":
+              return `${word} on the ${uiCopy.library.pages.dashboardThemes} page`;
+            case "editor-theme":
+              return `${word} on the ${uiCopy.library.pages.appThemes} page`;
+            default:
+              return `${word} from its own page`;
+          }
+        },
+      },
+      /** A press that re-read a different plan rather than installing the one
+       *  on screen. The ids are what moved; the sentence says nothing landed. */
+      changed: (change: {
+        readonly added: readonly string[];
+        readonly removed: readonly string[];
+        readonly updated: readonly string[];
+      }): string => {
+        const parts: string[] = [];
+        if (change.added.length > 0) {
+          parts.push(`Added: ${change.added.join(", ")}.`);
+        }
+        if (change.removed.length > 0) {
+          parts.push(`No longer included: ${change.removed.join(", ")}.`);
+        }
+        if (change.updated.length > 0) {
+          parts.push(`Changed: ${change.updated.join(", ")}.`);
+        }
+        return `This collection changed since the sheet opened. ${parts.join(
+          " ",
+        )} Nothing was installed; the sheet shows the new plan.`;
+      },
+      /** A collection update that asked a plugin for more than it held. The
+       *  review lives in Settings, which this states rather than duplicating. */
+      held: "The collection's update was held for review. Review it in Settings.",
+      install: "Install",
+      busy: "Installing…",
+      cancel: "Cancel",
+      /** The dialog's top-right way out. Distinct from `cancel`, which answers
+       *  the sheet, so the two controls do not share one accessible name. */
+      close: "Close",
+      done: "Done",
+      /** After a write, the code members the installed listing did not name and
+       *  the ones whose grant the host refused. Never counted as granted. */
+      notGranted: (names: readonly string[]): string =>
+        `Installed, but consent was not granted for: ${names.join(", ")}.`,
+    },
     /** The library half's submission, whose sentence the client composes only
      *  where the host answers a state and no sentence exists: the wait for the
      *  sign-in, the status a landed submission carries, and the busy label.

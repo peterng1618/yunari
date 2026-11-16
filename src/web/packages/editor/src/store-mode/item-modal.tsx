@@ -7,6 +7,7 @@ import type {
 import type * as React from "react";
 import { useEffect, useState } from "react";
 import { collectionStateOf, type StoreCard } from "../library-mode/cards.js";
+import { CollectionSheet } from "../library-mode/collection-sheet.js";
 import type { ExtensionRow } from "../library-mode/sources.js";
 import { uiCopy } from "../ui-copy.js";
 import { collectionsOf } from "./cell-actions.js";
@@ -148,6 +149,12 @@ export function ItemModal(props: {
   /** A failed plan is retryable: changing this re-runs the read without
    *  reopening the modal. */
   const [planAttempt, setPlanAttempt] = useState(0);
+  /** The collection install sheet, opened by the foot's Install or Update. The
+   *  sheet is the modal's because the plan and the register are already here. */
+  const [sheetOpen, setSheetOpen] = useState(false);
+  useEffect(() => {
+    setSheetOpen(false);
+  }, [item]);
   // **The plan is read when this surface opens**, which is the only moment a
   // collection's detail exists; a grid render never mounts the modal, so it
   // never pays for a read it cannot show.
@@ -308,6 +315,7 @@ export function ItemModal(props: {
               install={install}
               submit={submit}
               onAction={onAction}
+              onOpenSheet={() => setSheetOpen(true)}
               authorAction={authorAction}
               authorPress={authorPress}
               notice={props.actionNotice}
@@ -316,6 +324,16 @@ export function ItemModal(props: {
           </span>
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
+      {sheetOpen && plan !== undefined ? (
+        <CollectionSheet
+          item={item}
+          plan={plan}
+          origins={props.origins}
+          install={install}
+          onClose={() => setSheetOpen(false)}
+          onRetryPlan={() => setPlanAttempt((current) => current + 1)}
+        />
+      ) : null}
     </DialogPrimitive.Root>
   );
 }

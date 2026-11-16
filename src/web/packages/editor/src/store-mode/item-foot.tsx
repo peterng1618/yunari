@@ -241,11 +241,18 @@ function CollectionFooter(props: {
   readonly originsLoading: boolean;
   readonly install: InstallControl;
   readonly onAction: (action: CellAction, card: StoreCard) => void;
+  /** Opens the install sheet. A control with no collection press (a fixture,
+   *  or a surface that never wired one) keeps the direct install press. */
+  readonly onOpenSheet: () => void;
 }): React.JSX.Element {
   const { item, state, install } = props;
   const busy = install.installingIds.has(item.id);
   const refusal =
     install.refusal?.id === item.id ? install.refusal.message : undefined;
+  const press =
+    install.onInstallCollection === undefined
+      ? () => install.onInstall(item)
+      : props.onOpenSheet;
 
   return (
     <span className="flex flex-col gap-[var(--space-8)]">
@@ -282,7 +289,7 @@ function CollectionFooter(props: {
             data-yunari-store-collection-install="install"
             disabled={busy}
             aria-busy={busy}
-            onClick={() => install.onInstall(item)}
+            onClick={press}
             className={FOOTER_BUTTON}
           >
             {uiCopy.store.cell.installStates.install}
@@ -302,7 +309,7 @@ function CollectionFooter(props: {
               data-yunari-store-collection-install="update"
               disabled={busy}
               aria-busy={busy}
-              onClick={() => install.onInstall(item)}
+              onClick={press}
               className={FOOTER_BUTTON}
             >
               {uiCopy.store.cell.installStates.update}
@@ -351,6 +358,8 @@ export function PanelFoot(props: {
   readonly install: InstallControl;
   readonly submit: SubmitControl;
   readonly onAction: (action: CellAction, card: StoreCard) => void;
+  /** Opens the collection install sheet from the foot's Install press. */
+  readonly onOpenSheet: () => void;
   readonly authorAction: "unpublish" | "republish" | undefined;
   readonly authorPress: ((id: string) => void) | undefined;
   /** The inline display choice, above the actions that opened it. */
@@ -399,6 +408,7 @@ export function PanelFoot(props: {
           originsLoading={props.originsLoading}
           install={install}
           onAction={onAction}
+          onOpenSheet={props.onOpenSheet}
         />
       ) : (
         <>
