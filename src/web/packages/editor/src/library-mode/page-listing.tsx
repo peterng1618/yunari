@@ -1,7 +1,9 @@
 import type { CatalogueOrigin, CatalogueRefusal } from "@yunari/renderer-core";
 import type * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { BareSegmented } from "../components/ui/bare-segmented.js";
+import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import { AssignChoice, AssignDisplay } from "../store-mode/assign-display.js";
 import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
@@ -16,8 +18,11 @@ import {
   settledTags,
 } from "../store-mode/local-source.js";
 import { useInstall } from "../store-mode/use-install.js";
-import type { SubmitControl } from "../store-mode/use-submit.js";
-import type { ThemeLibraryClient } from "../theme-library-client.js";
+import { useSubmit } from "../store-mode/use-submit.js";
+import type {
+  ThemeLibraryClient,
+  ThemeLibraryContent,
+} from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { collectionStateOf, type StoreCard } from "./cards.js";
 import { toggleFacet } from "./facet-row.js";
@@ -143,6 +148,9 @@ export function PageListing(props: {
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onThemeRemoved?: ((id: string) => void) | undefined;
+  /** Tells the session a submission landed, so the open document's base is
+   *  advanced past the version the host published. */
+  readonly onThemePublished?: ((id: string) => void) | undefined;
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
   readonly collections: CollectionsRead;
   readonly detailOrigins: OriginsRead;
@@ -345,19 +353,98 @@ export function PageListing(props: {
       }
     },
   });
-  const submit = useMemo<SubmitControl>(
-    () => ({
-      onSubmit: () => undefined,
-      itemId: undefined,
-      state: "idle",
-      inFlight: false,
-      url: undefined,
-      version: undefined,
-      refusal: undefined,
-      status: undefined,
-    }),
-    [],
-  );
+  /** **A submission is this page's own flow.** The Library replaced the old
+   *  store region, so the theme a person publishes is the stored copy the host
+   *  holds: the crop pass writes the baked copy before the host reads it, and a
+   *  landed press restores the author's un-baked library copy beside advancing
+   *  the open document's base. */
+  const publishedBackup = useRef<
+    { readonly id: string; readonly content: ThemeLibraryContent } | undefined
+  >(undefined);
+  const submit = useSubmit({
+    // A landed submission re-reads both halves, so the card draws the version
+    // the host just wrote rather than the one this page read at mount. An open
+    // item's surface is replaced from the same read: the modal keeps drawing
+    // the item it opened, and that item's version is the listing's fact.
+    onSubmitted: () => {
+      const refreshOpenCard = (rows: readonly StoreItem[]): void => {
+        setOpenCard((current) => {
+          if (current === undefined) return current;
+          const listed = rows.find((item) => item.id === current.listing.id);
+          return listed === undefined
+            ? current
+            : { ...current, listing: listed };
+        });
+      };
+      void sources.catalogue.list().then(
+        (read) => {
+          setCatalogue(read.rows);
+          setRefused(read.refused);
+          refreshOpenCard(read.rows);
+        },
+        () => setCatalogueFailed(true),
+      );
+      void sources.library.list().then(
+        (read) => {
+          setLibrary(read.rows);
+          refreshOpenCard(read.rows);
+        },
+        () => setLibraryFailed(true),
+      );
+    },
+    beforeSubmit: async (id) => {
+      try {
+        const content = await props.client.open(id);
+        const baked = await bakeStoredThemeCrops({
+          envelope: content.envelope,
+          assets: content.assets,
+        });
+        if (baked.baked === 0) return undefined;
+        if (
+          !(await confirmOutputBake({
+            title: uiCopy.store.submit.label,
+            crops: baked.baked,
+          }))
+        ) {
+          return uiCopy.store.submit.cancelled;
+        }
+        await props.client.save(id, {
+          ...content,
+          envelope: baked.envelope,
+          assets: baked.assets,
+        });
+        publishedBackup.current = { id, content };
+        return undefined;
+      } catch {
+        return uiCopy.store.submit.prepareFailed;
+      }
+    },
+    afterSubmit: async (version) => {
+      const backup = publishedBackup.current;
+      publishedBackup.current = undefined;
+      if (backup === undefined) return;
+      const envelope =
+        version === undefined
+          ? backup.content.envelope
+          : {
+              ...backup.content.envelope,
+              metadata: { ...backup.content.envelope.metadata, version },
+            };
+      try {
+        // An overwrite, because the host advanced the base while it published
+        // the baked copy; the bytes being restored are the author's own.
+        await props.client.save(
+          backup.id,
+          { ...backup.content, envelope },
+          { overwrite: true },
+        );
+      } catch {
+        // The submission already happened. Retrying here would be a second
+        // write the author did not ask for.
+      }
+      props.onThemePublished?.(backup.id);
+    },
+  });
 
   const openCardAt = (card: StoreCard): void => {
     props.onDetailOpen();
@@ -423,6 +510,15 @@ export function PageListing(props: {
       ? undefined
       : [...(catalogue ?? []), ...(library ?? [])].find(
           (item) => item.id === assignId,
+        );
+  /** The parent an open remix credits, resolved from the two halves this page
+   *  already holds: an entry the index carries is a link to its card, and an
+   *  absent one stays the name as text. */
+  const remixParent =
+    openCard?.listing.remixOf === undefined
+      ? undefined
+      : [...(catalogue ?? []), ...(library ?? [])].find(
+          (item) => item.id === openCard?.listing.remixOf?.catalogueId,
         );
   const inlineAssign =
     openCard !== undefined && assignId === openCard.listing.id;
@@ -609,9 +705,10 @@ export function PageListing(props: {
             onAction={onAction}
             actionNotice={notice}
             install={install.control}
-            submit={submit}
+            submit={submit.control}
             onOpenItem={openCardAt}
             onOpenCollection={openCardAt}
+            {...(remixParent === undefined ? {} : { remixParent })}
             {...(props.onOpenSettings === undefined
               ? {}
               : { onOpenSettings: props.onOpenSettings })}

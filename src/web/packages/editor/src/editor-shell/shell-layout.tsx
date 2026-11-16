@@ -931,6 +931,9 @@ export function createShellLayout(
                 onThemeRemoved={(id) => {
                   store.bridge?.session.themeRemoved(id);
                 }}
+                onThemePublished={(id) => {
+                  store.bridge?.session.themePublished(id);
+                }}
               />
             ) : null}
             {/* The Host mode's region, beside the store's rather than chosen

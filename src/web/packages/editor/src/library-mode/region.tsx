@@ -158,6 +158,9 @@ export function LibraryRegion(props: {
   /** Tells the session a stored theme is gone, so the open document's base is
    *  cleared and the next save does not trust the folder the host trashed. */
   readonly onThemeRemoved?: ((id: string) => void) | undefined;
+  /** Tells the session a submission landed, so the open document's base is
+   *  advanced past the version the host published. */
+  readonly onThemePublished?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   /** Opens Settings on Extensions, the trust page a code member's detail links
    *  to. The shell owns the mode and the settings page, so the region passes
@@ -292,6 +295,9 @@ export function LibraryRegion(props: {
                 {...(props.onThemeRemoved === undefined
                   ? {}
                   : { onThemeRemoved: props.onThemeRemoved })}
+                {...(props.onThemePublished === undefined
+                  ? {}
+                  : { onThemePublished: props.onThemePublished })}
                 {...(props.onOpenSettings === undefined
                   ? {}
                   : { onOpenSettings: props.onOpenSettings })}
