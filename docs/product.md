@@ -46,9 +46,12 @@ The host also forwards `/settings` to the editor's Settings mode and serves a
   the default widget pack are committed packages; no runtime generator builds
   them. Installing a pack is a host API call in this phase: no import control
   ships yet.
-- **Theme library and store.** Themes are local first. The editor can browse a
-  Cloudflare-hosted catalogue, install a package, sign in to submit a theme and
-  see its own submissions.
+- **Library and store.** Themes are local first. The editor's Library mode is
+  one catalogue over every user-extensible kind: eight browse pages plus My
+  submissions, and one installed-state filter (`All`, `On this PC`, `Not
+  installed`). A listing is the install unit and its members are the browse
+  unit; a collection is a listing of listings that resolves each include to
+  its latest published version and installs them in one press.
 - **Sensors.** CPU load and clock, memory, GPUs, disks and network through
   `systeminformation`. Temperatures, fans, power and per-GPU detail through
   LibreHardwareMonitor when the owner runs it. Frame metrics come from RTSS or a
@@ -104,10 +107,33 @@ are not in this release.
 
 ## Store distribution
 
-The store carries five kinds: `dashboard-theme`, `editor-theme`,
-`widget-pack`, `path-preset-pack` and `plugin`. All five share one listing and
-one version ladder; a package's bytes are validated by the store when the
-version is finalized and again by the host after download.
+The store carries six kinds: `dashboard-theme`, `editor-theme`,
+`widget-pack`, `path-preset-pack`, `plugin` and `collection`. All six share one
+listing and one version ladder; a package's bytes are validated by the store
+when the version is finalized and again by the host after download.
+
+A listing is one catalogue item with one package and one version ladder; its
+**members** are the things a person browses and installs. Every listing carries
+a `members` array, derived by the store at finalize from the package it already
+validated, so a submission never declares its own members. The member kinds are
+`dashboard-theme`, `editor-theme`, `widget`, `shape`, `sensor-provider`,
+`asset-source`, `panel-driver` and `data-source`. A theme is one member, a
+widget pack one per unit, a path-preset pack one per preset, and a plugin one
+per sensor-provider, data-source, asset-source and panel-driver contribution;
+settings pages and asset categories are not members. A member kind this build
+does not ship still lists by its identifier.
+
+A **collection** is a listing whose package
+(`format: "yunari-collection-package"`, `version: 1`) names published catalogue
+ids as includes, each required or optional. Collections are one level deep: a
+collection cannot include itself or another collection, and a duplicate,
+unknown or unpublished include is refused. Members are ids, not pinned
+versions, so an include always resolves to its latest published version and a
+member update needs no collection release. Changing membership ships a new
+collection version: publishing a name that matches one of the author's own
+collections adds a `minor` version instead of a new listing. A collection's
+cover is its first include's published thumbnail; when that picture cannot be
+fetched the publish is refused. Collections are self-serve and carry no review.
 
 The publisher is the store account's slug, derived from the account when an item
 is first submitted. A manifest's own `publisher` field is ignored, and reserved
@@ -123,6 +149,21 @@ or `store`; a plugin install also reports whether the package's execution
 profile requires consent. An update that adds a capability, contribution,
 device, execution profile or store publisher is held for the owner's review
 instead of installing.
+
+A collection install runs one pre-flight over every chosen include — size,
+SHA-256, the kind's own package reader, the kill list and consent — before any
+write. One killed, unpublished or refused member refuses the collection by name
+and writes nothing. Each chosen member then installs through its existing
+per-kind path, so an install part-way through reports which members landed; a
+retry skips members this PC already holds, and a member records the collection
+that installed it.
+
+A collection's install sheet lists every chosen include with its publisher,
+kind and size, locks required members and aggregates each code member's
+execution profile, capabilities and devices. The sheet asks for no consent of
+its own. Consent stays per plugin: the host revalidates each code member and
+records consent against that plugin's qualified key, and a press that wrote
+nothing grants nothing.
 
 `GET /kill-list.json` is the store's revoke list. The host caches the last good
 list and checks it before consent, so a revoked plugin does not load whatever its

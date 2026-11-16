@@ -227,11 +227,13 @@ catalogue tables. Both are safe to re-run.
 
 ### Store contents and revocations
 
-The listing serves five kinds: `dashboard-theme`, `editor-theme`,
-`widget-pack`, `path-preset-pack` and `plugin`. A non-theme version is stored in
-`item_version.metadata_json`; a dashboard theme keeps `envelope_json`. Both are
-written by the Worker from a package it read and validated, never from the
-browser's claims.
+The listing serves six kinds: `dashboard-theme`, `editor-theme`,
+`widget-pack`, `path-preset-pack`, `plugin` and `collection`. A non-theme
+version is stored in `item_version.metadata_json`; a dashboard theme keeps
+`envelope_json`. Both are written by the Worker from a package it read and
+validated, never from the browser's claims. Finalize derives each listing's
+`members` from that validated metadata (`units`, `presets`, `manifest`,
+`envelope_json`), so membership needs no column of its own.
 
 A hardware plugin — one contributing a panel family or asking for
 `usb:device`/`serial:device` — finalizes as `pending` and is published by an
@@ -242,6 +244,17 @@ curl -X POST https://<worker>/api/admin/items/<id>/review \
   -H "content-type: application/json" \
   -b "<owner session>" -d '{"decision":"approved"}'
 ```
+
+Collections are self-serve and carry no review. My submissions has a collection
+builder: the author picks published listings, marks each optional or required,
+then names, versions and describes the set. The host packages it — it
+revalidates every include, builds the `yunari-collection-package` manifest with
+the shared writer, hashes it and forwards it — and a name matching one of the
+author's own collections adds a `minor` version instead of minting a listing.
+The cover is the first include's published thumbnail; when that picture cannot
+be fetched the publish is refused and the member is named. Finalize refuses an
+unknown, unpublished, duplicate or self include and any nested collection, so
+collections stay one level deep.
 
 A revocation is one `publisher/id` key with an optional https advisory link:
 
@@ -266,6 +279,20 @@ shipped catalogue origin when unset), verifies the listing's `sha256` and
 `bytes`, and dispatches by kind. Editor themes land in
 `<settingsDir>/editor-themes/<catalogueId>.yunari-theme` and are read back
 through `GET /api/editor-themes/:id` for the Settings import control.
+`POST /api/store/collection/plan` runs the same verification for a collection
+and answers the verified member list and each code member's consent summary
+without writing.
+
+A collection install verifies every chosen include — size, SHA-256, its
+package reader, the kill list and consent — before the first write. One killed,
+unpublished or refused member blocks the collection by name and nothing is
+written; each chosen member that verifies then installs through its existing
+per-kind path, and a part-way failure reports which members landed. A retry
+skips members already recorded, so `settings/catalogue-origins.json` is the one
+record of what a collection installed: it holds `{ kind, catalogueId, version,
+installedAt, collections? }` per object keyed `<kind>:<installed id>`, and a
+member written by a collection names it in `collections`. Rows in a legacy
+`theme-origins.json` are read as dashboard themes and never dropped.
 
 The Free plan allows 10 ms CPU per invocation; the runbook's step 11 describes
 the measurement and the Paid-plan threshold.

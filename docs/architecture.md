@@ -400,6 +400,63 @@ pack is a host API call in this phase; no import control ships yet.
   unchanged, and Fabric JSON in the envelope remains the only persisted scene
   model.
 
+## Catalogue, members and collections
+
+One catalogue wire serves every Library page. `renderer-core`'s
+`catalogue-index.ts` owns `STORE_ITEM_KINDS` (the six listing kinds),
+`MEMBER_KINDS` (the eight member kinds) and `CatalogueEntry.members`. A
+collection entry additionally carries `includes`, a list of catalogue ids, and
+no member of its own. The parser keeps a member kind this build does not ship
+and refuses only a malformed member; `includes` is refused on any other kind.
+The catalogue's `item.json` and `/index.json` are one projection of the same
+entry, so both carry the same fields.
+
+**Members are derived once, by the store, from the package it already
+validated.** Dashboard and editor themes are one member; a widget pack's units
+and a path-preset pack's presets are their members; a plugin's sensor-provider,
+data-source, asset-source and panel-driver contributions are its members. The
+derivation reads the metadata finalize already stores (`units`, `presets`,
+`manifest`, `envelope_json`), so no additional D1 column or table exists for
+membership. A member is never declared by a submission, and the editor derives
+an installed copy's member records with the same `renderer-core` rule, so the
+catalogue and the copy cannot disagree about an id or name.
+
+A collection is data: a bounded JSON manifest
+(`format: "yunari-collection-package"`, `version: 1`) naming catalogue ids,
+validated and hashed like every other package and never executed. Finalize and
+publish both refuse an unknown, unpublished, duplicate or self include and any
+nested collection, so collections are one level deep. Membership is read only
+from collection entries: "Part of" is a view over the index, not a reverse
+field on each member listing. The host packages a collection itself for
+publishing, revalidating the includes and building the manifest with the shared
+writer.
+
+**Install pre-flight.** `POST /api/store/collection/plan` returns the verified
+member list — version, size, publisher and each code member's consent summary —
+without writing, so the install sheet can state what a press will do. It
+fetches each member's `catalogue/<id>/item.json` from the configured store
+origin, never a client-supplied URL, and resolves that listing's latest
+published version. `POST /api/store/install` re-runs the same pre-flight and
+never trusts the plan: every chosen member's size and SHA-256 are verified, its
+reader validates it, the kill list is checked and consent is resolved before
+any write. One refused member refuses the collection by name and writes
+nothing. Each chosen member then goes through its existing per-kind install
+path; a mid-way failure reports which members landed and which did not, and a
+retry skips members already registered. That non-atomic edge is accepted.
+
+**One catalogue-origin register.** `settings/catalogue-origins.json` holds
+`{ kind, catalogueId, version, installedAt, collections? }` per installed
+object, keyed `<kind>:<installed id>`, so two kinds with one id cannot collide.
+The file is read additively: rows in the legacy `theme-origins.json` are read
+as `dashboard-theme` and are never dropped, and a write rewrites the entry in
+the new shape. Every kind's listing route (`/api/themes`, `/api/editor-themes`,
+`/api/widget-packs`, `/api/path-presets`, `/api/extensions`) spreads that
+object's origin on its rows, and `GET /api/store/origins` serves the register
+itself for the Library's state filter and a collection's installed count. A
+collection has no origin of its own; its state is counted over the origins of
+its includes, and each written member records the collection's id in
+`collections`.
+
 ## Host serving and gates
 
 The host serves HTTP and HTTPS on the same port. HTTPS uses a locally issued
@@ -429,10 +486,9 @@ The default app folder is `%USERPROFILE%\.yunari` (`~/.yunari` elsewhere):
 
 - `themes/` — one directory per local theme.
 - `settings/` — host state: displays, devices, hosting preference, active theme,
-- `settings/` — host state: displays, devices, hosting preference, active theme,
   credentials, provider settings, installed widget packs (`widget-packs/`), the
-  path-preset list (`path-presets.json`), `tls/` (root certificate and encrypted
-  root key).
+  path-preset list (`path-presets.json`), the catalogue-origin register
+  (`catalogue-origins.json`), `tls/` (root certificate and encrypted root key).
 - `settings/extensions/` — installed plugin trees, one directory per
   `local/<id>/<version>`, with `installed.json` as the live index.
 - `cache/` — downloaded media artwork and game metadata, beside `settings/`.
@@ -446,6 +502,8 @@ out of `themes/` so a theme folder is only ever a theme.
 bindings and better-auth. Routes:
 
 - `GET /api/health`
+- `GET /index.json`, `GET /catalogue/<id>/item.json` — the catalogue listing and
+  one item's header. Both carry `members`, and a collection carries `includes`.
 - `POST /migrate` — token-protected migration runner
 - `/api/auth/*`, `GET /api/me` — better-auth
 - `GET /auth/start`, `GET /auth/return` — sign-in flow for GitHub and Google
