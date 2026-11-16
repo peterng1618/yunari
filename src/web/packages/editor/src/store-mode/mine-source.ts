@@ -5,6 +5,7 @@ import {
   DASHBOARD_THEME_KIND,
   isCatalogueStatus,
   parseCatalogueIndex,
+  STORE_ITEM_KINDS,
 } from "@yunari/renderer-core";
 import type { ItemSource, StoreItem } from "./local-source.js";
 import { catalogueItemOf } from "./online-source.js";
@@ -49,9 +50,12 @@ export function mineThemeSource(
       }
 
       const rows = entriesOf(await response.json());
+      // The author's listing is every kind they own, so the whole vocabulary
+      // is parsed; the parser reports a row of a kind this build does not ship
+      // as refused rather than dropping it silently.
       const parsed = parseCatalogueIndex(
         { generatedAt: new Date().toISOString(), entries: rows },
-        [DASHBOARD_THEME_KIND],
+        STORE_ITEM_KINDS,
       );
       const states = statesOf(rows);
 

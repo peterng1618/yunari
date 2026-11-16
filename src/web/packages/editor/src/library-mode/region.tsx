@@ -29,6 +29,7 @@ import {
 } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { collectionStateOf, type StoreCard } from "./cards.js";
+import { SubmissionsPage } from "./collection-builder.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
 import { readOrigins } from "./origins.js";
 import {
@@ -395,13 +396,7 @@ export function LibraryRegion(props: {
                   : { onOpenSettings: props.onOpenSettings })}
               />
             ) : props.page === "submissions" ? (
-              // Task 12 builds the author's listing. Until then the page says
-              // only that it is not here yet: "no submissions" would be a
-              // claim the dashboard grid's Mine half disproves.
-              <Empty
-                lead={uiCopy.library.submissionsPending}
-                hint={undefined}
-              />
+              <SubmissionsPage />
             ) : (
               <PageListing
                 page={props.page}

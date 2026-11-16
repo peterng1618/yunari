@@ -178,4 +178,31 @@ describe("the author's own source", () => {
       { kind: DASHBOARD_THEME_KIND, reason: "malformed", count: 1 },
     ]);
   });
+
+  /** **The author's listing is every kind they own**, not only themes: a
+   *  submitted collection appears beside the themes it names. */
+  it("lists a submitted collection beside the other kinds", async () => {
+    const collectionId = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
+    const source = mineThemeSource({
+      fetch: mineWith([
+        ENTRY,
+        {
+          ...ENTRY,
+          id: collectionId,
+          kind: "collection",
+          name: "Acme Kit",
+          members: [],
+          includes: [ITEM_ID],
+        },
+      ]),
+    });
+
+    const items = await source.list();
+
+    expect(items.map((item) => [item.id, item.kind])).toEqual([
+      [ITEM_ID, DASHBOARD_THEME_KIND],
+      [collectionId, "collection"],
+    ]);
+    expect(items[1]?.includes).toEqual([ITEM_ID]);
+  });
 });

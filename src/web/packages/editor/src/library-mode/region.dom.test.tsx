@@ -783,13 +783,16 @@ it("states a failed collections read instead of claiming no membership", async (
   ).toBeNull();
 });
 
-it("does not claim My submissions is empty while its page is unbuilt", async () => {
+it("draws My submissions as the author's listing, not a pending sentence", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response("", { status: 404 })),
   );
   const container = await mountHarness("submissions");
 
-  expect(container.textContent).toContain(uiCopy.library.submissionsPending);
+  expect(
+    container.querySelector("[data-yunari-submissions-page]"),
+    "My submissions drew no listing",
+  ).not.toBeNull();
   expect(container.textContent).not.toContain(uiCopy.store.mine.empty);
 });

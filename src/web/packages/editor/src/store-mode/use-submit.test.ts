@@ -10,6 +10,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { collectionManifest } from "../library-mode/collection-draft.js";
 import { uiCopy } from "../ui-copy.js";
 import { DARK_GROUND, fixtureItem } from "./item-fixture.js";
 import type { StoreItem } from "./local-source.js";
@@ -370,4 +371,128 @@ it("stops polling after unmount", async () => {
     fetch.calls.filter((call) => call === "/api/store/session"),
     "a poll fired after the hook unmounted",
   ).toHaveLength(0);
+});
+
+const INCLUDE_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
+const LISTING_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
+const DRAFT = {
+  name: "Acme Kit",
+  description: "Two walls",
+  includes: [{ id: INCLUDE_ID, optional: true }],
+} as const;
+
+/** A transport that keeps each request's URL and parsed body. */
+function recordingFetch(answers: readonly Response[]): typeof fetch & {
+  readonly calls: readonly {
+    readonly url: string;
+    readonly body: unknown;
+  }[];
+} {
+  const queue = [...answers];
+  const calls: { url: string; body: unknown }[] = [];
+  const stub = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({
+      url: String(input),
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+    });
+    const answer = queue.length > 1 ? queue.shift() : queue[0];
+    return answer?.clone() ?? new Response("", { status: 500 });
+  }) as typeof fetch & { calls: typeof calls };
+  Object.defineProperty(stub, "calls", { value: calls });
+  return stub;
+}
+
+/**
+ * **A collection is submitted as its manifest's bytes**: the Worker's pack
+ * header carries the name, the size and the digest of exactly the bytes the
+ * package reader accepts, so a client-side format drift fails locally.
+ */
+it("submits a collection manifest with its bytes, size and digest", async () => {
+  const fetch = recordingFetch([
+    json({
+      ok: true,
+      status: "published",
+      version: { from: null, to: "1.0.0", level: "initial" },
+    }),
+  ]);
+  const submit = mount({ fetch });
+
+  await act(async () =>
+    submit().collection.onSubmit({ listingId: LISTING_ID, draft: DRAFT }),
+  );
+  // The digest is the platform's async work, so the post lands a macrotask
+  // after the press; waiting on the recorded call is what observes it.
+  await vi.waitFor(() =>
+    expect(fetch.calls.length, "the hook posted nothing").toBe(1),
+  );
+  await flush();
+
+  const [call, ...extra] = fetch.calls;
+  if (call === undefined) throw new Error("the hook posted nothing");
+  expect(extra, "the hook posted more than once").toHaveLength(0);
+  expect(call.url).toBe("/api/themes/submit");
+  const body = call.body as Record<string, unknown>;
+  expect(body["kind"]).toBe("collection");
+  expect(body["id"]).toBe(LISTING_ID);
+  expect((body["metadata"] as Record<string, unknown>)["name"]).toBe(
+    DRAFT.name,
+  );
+  expect(body["sha256"]).toMatch(/^[0-9a-f]{64}$/);
+  expect(body["bytes"]).toBe(
+    collectionManifest({ ...DRAFT, includes: [...DRAFT.includes] }).byteLength,
+  );
+  expect(submit().collection.state).toBe("submitted");
+  expect(submit().collection.status).toBe("published");
+});
+
+/** **A draft is refused before the host is asked**, with the reader's own
+ *  sentence, so a missing include costs no request. */
+it("refuses a collection draft locally, naming the field", async () => {
+  const fetch = recordingFetch([
+    json({
+      ok: true,
+      status: "published",
+      version: { from: null, to: "1.0.0", level: "initial" },
+    }),
+  ]);
+  const submit = mount({ fetch });
+
+  await act(async () =>
+    submit().collection.onSubmit({
+      listingId: LISTING_ID,
+      draft: { name: "Acme Kit", description: "", includes: [] },
+    }),
+  );
+  await flush();
+
+  expect(fetch.calls, "a refused draft reached the host").toHaveLength(0);
+  expect(submit().collection.state).toBe("refused");
+  expect(submit().collection.refusal).toMatch(/include/);
+});
+
+/** **Self-reference is its own check, because only the listing's own id can
+ *  answer it.** The parser stays a function of the draft alone. */
+it("refuses a collection that includes its own listing", async () => {
+  const fetch = recordingFetch([
+    json({
+      ok: true,
+      status: "published",
+      version: { from: null, to: "1.0.0", level: "initial" },
+    }),
+  ]);
+  const submit = mount({ fetch });
+
+  await act(async () =>
+    submit().collection.onSubmit({
+      listingId: INCLUDE_ID,
+      draft: DRAFT,
+    }),
+  );
+  await flush();
+
+  expect(fetch.calls, "a self-referencing draft reached the host").toHaveLength(
+    0,
+  );
+  expect(submit().collection.refusal).toMatch(/itself/);
 });

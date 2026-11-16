@@ -1,5 +1,14 @@
-import type { VersionLevel } from "@yunari/theme-package";
+import {
+  readCollectionPackage,
+  type VersionLevel,
+} from "@yunari/theme-package";
 import { useEffect, useRef, useState } from "react";
+import {
+  type CollectionDraft,
+  collectionManifest,
+  readCollectionDraft,
+  selfIncludeRefusal,
+} from "../library-mode/collection-draft.js";
 import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
@@ -68,8 +77,52 @@ export interface SignInWindow {
   close(): void;
 }
 
+/** What the collection builder hands this flow: the listing the submission
+ *  creates, and the draft it validated. Self-reference is checked here because
+ *  the draft alone cannot name the listing. */
+export interface CollectionSubmission {
+  readonly listingId: string;
+  readonly draft: CollectionDraft;
+}
+
+/** The builder's half of the submission, kept apart from the theme modal's so a
+ *  collection's answer is never drawn as a theme's. */
+export interface CollectionControl {
+  readonly onSubmit: (submission: CollectionSubmission) => void;
+  readonly state: SubmitState;
+  readonly inFlight: boolean;
+  readonly refusal: string | undefined;
+  readonly status: SubmitStatus | undefined;
+  readonly version: SubmittedVersion | undefined;
+}
+
+/** One press's target: the theme id the host reads, or the pack header a
+ *  collection posts. The sign-in flow carries it through the poll unchanged. */
+type SubmitTarget =
+  | { readonly kind: "theme"; readonly id: string }
+  | {
+      readonly kind: "collection";
+      readonly id: string;
+      readonly body: Readonly<Record<string, unknown>>;
+    };
+
+/** A collection the builder creates is new, so it publishes its first
+ *  release. Republishing an existing collection is not this surface's flow. */
+const FIRST_COLLECTION_VERSION = "1.0.0";
+
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** The lowercase hex SHA-256 of the exact bytes a submission posts. */
+async function digestOf(bytes: Uint8Array): Promise<string> {
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    bytes as unknown as BufferSource,
+  );
+  return [...new Uint8Array(hash)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /** The answer as an object, or nothing where it is not one. */
@@ -164,6 +217,7 @@ export function useSubmit(options: {
   readonly onSubmitted?: () => void;
 }): {
   readonly control: SubmitControl;
+  readonly collection: CollectionControl;
   readonly announcement: string;
 } {
   const [itemId, setItemId] = useState<string | undefined>(undefined);
@@ -177,6 +231,10 @@ export function useSubmit(options: {
   );
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<SubmitStatus | undefined>(undefined);
+  /** Which surface owns the state: a collection's answer is never drawn as a
+   *  theme's, even though both presses share the one flow. */
+  const [flow, setFlow] = useState<"theme" | "collection">("theme");
+  const activeFlow = useRef<"theme" | "collection">("theme");
 
   /** The guard a second press meets before any state has committed. */
   const busy = useRef(false);
@@ -242,7 +300,11 @@ export function useSubmit(options: {
     busy.current = false;
     prepared.current = false;
     polls.current = 0;
-    void options.afterSubmit?.().catch(() => undefined);
+    // A theme press may have replaced its library copy; a collection press has
+    // none to put back.
+    if (activeFlow.current === "theme") {
+      void options.afterSubmit?.().catch(() => undefined);
+    }
     setState("refused");
     setRefusal(message);
     setUrl(undefined);
@@ -250,15 +312,15 @@ export function useSubmit(options: {
     setStatus(undefined);
   }
 
-  function schedulePoll(id: string): void {
+  function schedulePoll(target: SubmitTarget): void {
     if (!alive.current) return;
     clearTimer();
-    timer.current = setTimeout(() => void poll(id), POLL_INTERVAL_MS);
+    timer.current = setTimeout(() => void poll(target), POLL_INTERVAL_MS);
   }
 
   /** One question to the host: does it hold the session yet? The poll is the
    *  flow's truth, and the fifth minute's answer is its last chance. */
-  async function poll(id: string): Promise<void> {
+  async function poll(target: SubmitTarget): Promise<void> {
     if (!alive.current) return;
     polls.current += 1;
     let answered: Response;
@@ -277,19 +339,19 @@ export function useSubmit(options: {
     if (jsonOf(text)?.["signedIn"] === true) {
       closeWindow();
       // The identity is stored; the submission it was missing is retried once.
-      await attempt(id, true);
+      await attempt(target, true);
       return;
     }
     if (polls.current >= POLL_ATTEMPTS) {
       refuse(uiCopy.store.submit.noSignIn);
       return;
     }
-    schedulePoll(id);
+    schedulePoll(target);
   }
 
   /** Ask the host for a sign-in address, open it, and start asking whether the
    *  session landed. **The address is the host's**, never one composed here. */
-  async function authorise(id: string): Promise<void> {
+  async function authorise(target: SubmitTarget): Promise<void> {
     if (!alive.current) return;
     setState("authorising");
     setRefusal(undefined);
@@ -306,31 +368,34 @@ export function useSubmit(options: {
       refuse(refusalOf(text));
       return;
     }
-    const target = jsonOf(text)?.["url"];
-    if (typeof target !== "string" || !isHttps(target)) {
+    const url = jsonOf(text)?.["url"];
+    if (typeof url !== "string" || !isHttps(url)) {
       refuse(refusalOf(text));
       return;
     }
-    const opened = (options.openWindow ?? defaultOpen)(target);
+    const opened = (options.openWindow ?? defaultOpen)(url);
     if (opened === null) {
       // A blocked popup is not a sign-in the author can finish.
       refuse(uiCopy.store.submit.blocked);
       return;
     }
     signInWindow.current = opened;
-    setUrl(target);
+    setUrl(url);
     polls.current = 0;
-    schedulePoll(id);
+    schedulePoll(target);
   }
 
-  async function attempt(id: string, retried: boolean): Promise<void> {
+  async function attempt(
+    target: SubmitTarget,
+    retried: boolean,
+  ): Promise<void> {
     if (!alive.current) return;
     clearTimer();
     setState("submitting");
-    if (!prepared.current) {
+    if (target.kind === "theme" && !prepared.current) {
       prepared.current = true;
       try {
-        const refusal = await options.beforeSubmit?.(id);
+        const refusal = await options.beforeSubmit?.(target.id);
         if (!alive.current) return;
         if (refusal !== undefined) {
           refuse(refusal);
@@ -343,7 +408,10 @@ export function useSubmit(options: {
     }
     let answered: Response;
     try {
-      answered = await post(SUBMIT_PATH, { id });
+      answered = await post(
+        SUBMIT_PATH,
+        target.kind === "theme" ? { id: target.id } : target.body,
+      );
     } catch (error) {
       refuse(messageOf(error));
       return;
@@ -358,7 +426,7 @@ export function useSubmit(options: {
         refuse(uiCopy.store.submit.noSignIn);
         return;
       }
-      await authorise(id);
+      await authorise(target);
       return;
     }
     if (!answered.ok) {
@@ -384,7 +452,9 @@ export function useSubmit(options: {
     clearTimer();
     busy.current = false;
     prepared.current = false;
-    void options.afterSubmit?.(published.to).catch(() => undefined);
+    if (target.kind === "theme") {
+      void options.afterSubmit?.(published.to).catch(() => undefined);
+    }
     setState("submitted");
     setStatus(word);
     setVersion(published);
@@ -398,6 +468,8 @@ export function useSubmit(options: {
     busy.current = true;
     prepared.current = false;
     clearTimer();
+    activeFlow.current = "theme";
+    setFlow("theme");
     // The whole outcome belongs to this item from the press onward.
     setItemId(item.id);
     setItemLabel(item.name === "" ? item.id : item.name);
@@ -406,7 +478,78 @@ export function useSubmit(options: {
     setUrl(undefined);
     setVersion(undefined);
     setStatus(undefined);
-    void attempt(item.id, false);
+    void attempt({ kind: "theme", id: item.id }, false);
+  };
+
+  /** One collection press, validated before the host is asked: the package
+   *  reader owns the draft's bounds and ids, and self-reference is checked here
+   *  because only this surface holds the listing's own id. */
+  async function attemptCollection(
+    submission: CollectionSubmission,
+    retried: boolean,
+  ): Promise<void> {
+    if (!alive.current) return;
+    const read = readCollectionDraft(submission.draft);
+    if (!read.ok) {
+      refuse(read.message);
+      return;
+    }
+    const own = selfIncludeRefusal(read.draft, submission.listingId);
+    if (own !== undefined) {
+      refuse(own);
+      return;
+    }
+    const bytes = collectionManifest(read.draft);
+    // The bytes posted are the bytes the reader accepts: a client-side format
+    // drift fails here rather than at the store.
+    const reread = readCollectionPackage(bytes);
+    if (!reread.ok) {
+      refuse(reread.message);
+      return;
+    }
+    const sha256 = await digestOf(bytes);
+    if (!alive.current) return;
+    await attempt(
+      {
+        kind: "collection",
+        id: submission.listingId,
+        body: {
+          id: submission.listingId,
+          kind: "collection",
+          name: read.draft.name,
+          version: FIRST_COLLECTION_VERSION,
+          metadata: {
+            name: read.draft.name,
+            description: read.draft.description,
+            includes: read.draft.includes,
+          },
+          sha256,
+          bytes: bytes.byteLength,
+        },
+      },
+      retried,
+    );
+  }
+
+  const onSubmitCollection = (submission: CollectionSubmission): void => {
+    if (busy.current) return;
+    busy.current = true;
+    prepared.current = false;
+    clearTimer();
+    activeFlow.current = "collection";
+    setFlow("collection");
+    setItemId(submission.listingId);
+    setItemLabel(
+      submission.draft.name === ""
+        ? submission.listingId
+        : submission.draft.name,
+    );
+    setState("submitting");
+    setRefusal(undefined);
+    setUrl(undefined);
+    setVersion(undefined);
+    setStatus(undefined);
+    void attemptCollection(submission, false);
   };
 
   const announcement =
@@ -422,13 +565,21 @@ export function useSubmit(options: {
   return {
     control: {
       onSubmit,
-      itemId,
-      state,
+      itemId: flow === "theme" ? itemId : undefined,
+      state: flow === "theme" ? state : "idle",
       inFlight,
-      url,
-      version,
-      refusal,
-      status,
+      url: flow === "theme" ? url : undefined,
+      version: flow === "theme" ? version : undefined,
+      refusal: flow === "theme" ? refusal : undefined,
+      status: flow === "theme" ? status : undefined,
+    },
+    collection: {
+      onSubmit: onSubmitCollection,
+      state: flow === "collection" ? state : "idle",
+      inFlight,
+      refusal: flow === "collection" ? refusal : undefined,
+      status: flow === "collection" ? status : undefined,
+      version: flow === "collection" ? version : undefined,
     },
     // **The item is named in the live region**, because the region outlives
     // the modal: an answer belonging to A must not be attributed to the item B

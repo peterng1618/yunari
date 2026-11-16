@@ -38,6 +38,10 @@ const chartFamilyLabels = {
   polarBar: "Polar bar",
 } as const satisfies Record<ChartFamily, string>;
 
+/** The author's own empty sentence, read by the dashboard grid's Mine half and
+ *  by My submissions alike: one fact, one spelling. */
+const NO_SUBMISSIONS = "You have no store submissions yet.";
+
 /**
  * What one member kind is called, keyed by `MEMBER_KINDS`, so a member kind
  * added to the vocabulary without a word fails to compile here rather than
@@ -1231,7 +1235,7 @@ export const uiCopy = {
      *  not a store with nothing published. */
     mine: {
       label: "Mine",
-      empty: "You have no store submissions yet.",
+      empty: NO_SUBMISSIONS,
     },
     /** The states a Mine row can carry, as the word beside it. `published` has
      *  no badge word because the public surface already shows it, and `draft`
@@ -1912,9 +1916,52 @@ export const uiCopy = {
      *  label is the pressed command's own word. */
     actionPending: (label: string): string =>
       `${label} is not available on this page yet.`,
-    /** My submissions until its page is built. It names that absence rather
-     *  than "no submissions", which the dashboard grid's Mine half disproves. */
-    submissionsPending: "My submissions is not available yet.",
+    /** My submissions: the author's own rows whatever their kind. A failed
+     *  read is stated rather than drawn as "nothing submitted", and the empty
+     *  sentence is the dashboard grid's own (`store.mine.empty`). */
+    submissionsUnreadable: "Your submissions could not be read.",
+    submissions: {
+      heading: "Your submissions",
+      empty: NO_SUBMISSIONS,
+      loading: "Reading your submissions…",
+      /** A row's kind, where the store has a word for it. An unknown kind
+       *  prints its identifier, the rule every listing surface follows. */
+      kind: (kind: string): string =>
+        kind === "collection"
+          ? uiCopy.library.pages.collections
+          : ((uiCopy.store.cell.kinds as Readonly<Record<string, string>>)[
+              kind
+            ] ?? kind),
+    },
+    /** The collection builder. Its search, add and optional controls each carry
+     *  a name, and every refusal says which listing could not be added. */
+    collectionBuilder: {
+      heading: "New collection",
+      lead: "Pick published listings, then mark each optional or required.",
+      name: "Collection name",
+      description: "Description",
+      search: "Search published listings",
+      noMatches: "No published listing matches that search.",
+      empty: "The store has no published listings to choose from.",
+      add: (name: string): string => `Add ${name}`,
+      alreadyAdded: (name: string): string =>
+        `${name} is already in this collection.`,
+      unpublished: (name: string): string =>
+        `${name} is not published, so it cannot be added.`,
+      unknown: "That listing has no catalogue id, so it cannot be added.",
+      nested: (name: string): string =>
+        `${name} is itself a collection; collections are one level deep.`,
+      includes: "Included listings",
+      includesEmpty: "Add at least one published listing.",
+      optionalHint:
+        "An unticked optional member may be skipped when someone installs this collection.",
+      optional: (name: string): string => `Optional: ${name}`,
+      optionalWord: "Optional",
+      requiredWord: "Required",
+      remove: (name: string): string => `Remove ${name}`,
+      publish: "Publish collection",
+      publishing: "Publishing…",
+    },
     choose: "Open a theme",
     /** The control's own name. Distinct from `choose`, which titles the
      *  dialog; a label repeating the title printed over the control. */

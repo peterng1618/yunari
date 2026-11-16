@@ -145,6 +145,10 @@ const EXEMPT: readonly (readonly [string, string])[] = [
   ],
   ["store-mode/region.tsx", "the search well: a filter, not an authored value"],
   [
+    "library-mode/collection-builder.tsx",
+    "submission form fields: Enter must not publish and Escape must not discard, so the draft/commit decision does not apply",
+  ],
+  [
     "store-mode/facet-row.tsx",
     "the popover's search is a filter, not an authored value",
   ],
