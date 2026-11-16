@@ -16,8 +16,8 @@ const EDITOR = "http://127.0.0.1:4174/";
 /**
  * **No case may reach the host or the public catalogue.**
  *
- * The preview server answers neither route, and the store region's online read
- * would otherwise ask the network. A 404 on `**\/index.json` is the honest
+ * The preview server answers neither route, and the Library's page read would
+ * otherwise ask the network. A 404 on `**\/index.json` is the honest
  * "there is no catalogue here", as `editor-rail.spec.ts` establishes — an empty
  * catalogue would be a fact the read did not answer.
  *
@@ -26,9 +26,9 @@ const EDITOR = "http://127.0.0.1:4174/";
  * the popup would then be absent for a reason this task is not about. The stub
  * is the host's shape with the LAN off, so the control exists and opens.
  *
- * `/api/themes` is stubbed empty for the same reason at the store's local half;
- * the store case reads only the mode region, so the empty catalogue changes
- * nothing it asserts.
+ * `/api/themes` is stubbed empty for the same reason at the Library's local
+ * half; the Library case reads only the mode region, so the empty listing
+ * changes nothing it asserts.
  */
 test.beforeEach(async ({ page }) => {
   await page.route("**/index.json", (route) =>

@@ -34,8 +34,6 @@
   "src/web/packages/editor/src/snap-manager/spacing.ts",
   "src/web/packages/editor/src/store-mode/gallery.dom.test.tsx",
   "src/web/packages/editor/src/store-mode/item-modal.dom.test.tsx",
-  "src/web/packages/editor/src/store-mode/region.dom.test.tsx",
-  "src/web/packages/editor/src/store-mode/region.tsx",
   "src/web/packages/editor/src/text-manager/index.dom.test.ts",
   "src/web/packages/editor/src/text-manager/index.ts",
   "src/web/packages/editor/src/ui-copy-surfaces.test.ts",

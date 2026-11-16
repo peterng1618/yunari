@@ -928,6 +928,9 @@ export function createShellLayout(
                     onModeChange("editor"),
                   );
                 }}
+                onThemeRemoved={(id) => {
+                  store.bridge?.session.themeRemoved(id);
+                }}
               />
             ) : null}
             {/* The Host mode's region, beside the store's rather than chosen

@@ -408,6 +408,53 @@ it("keeps the published sentence on screen after a collection lands", async () =
   ).not.toBeNull();
 });
 
+it("states an author row whose state could not be read", async () => {
+  const readable = {
+    id: FIRST_ID,
+    kind: "dashboard-theme",
+    name: FIRST.name,
+    version: "1.0.0",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    downloads: 0,
+    favorites: 0,
+    packageUrl: `https://store.test/catalogue/${FIRST_ID}/1.0.0.zip`,
+    thumbnail: `catalogue/${FIRST_ID}/thumbnail.png`,
+    members: [],
+    facets: FACETS,
+    status: "published",
+  };
+  // The second row is one the host sent with no state this build can name: it
+  // is refused rather than dropped, so the page cannot read as complete.
+  const unreadable = { ...readable, id: SECOND_ID, status: "future-state" };
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/store/mine")) {
+      return json({ entries: [readable, unreadable] });
+    }
+    return json({ generatedAt: "2026-11-16T00:00:00.000Z", entries: [] });
+  });
+
+  await mount(
+    createElement(SubmissionsPage, {
+      fetch: fetch as unknown as typeof fetch,
+    }),
+  );
+  await flush();
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector("[data-yunari-submissions-refusal]")
+        ?.textContent,
+      "the row the read refused was dropped with no line",
+    ).toBe(uiCopy.store.catalogueRefused("dashboard-theme", 1)),
+  );
+  expect(
+    document.body.querySelector(`[data-yunari-submission="${FIRST_ID}"]`),
+    "the readable row was not drawn beside the refused one",
+  ).not.toBeNull();
+});
+
 it("states a failed read instead of claiming nothing was submitted", async () => {
   const fetch = vi.fn(async () => new Response("", { status: 404 }));
 

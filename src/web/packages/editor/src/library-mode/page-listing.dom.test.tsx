@@ -136,6 +136,7 @@ async function mountPage(
   page: LibraryPage,
   state: LibraryState,
   client?: unknown,
+  onThemeRemoved?: (id: string) => void,
 ): Promise<HTMLDivElement> {
   await unmount();
   const container = document.createElement("div");
@@ -151,6 +152,7 @@ async function mountPage(
         state={state}
         onState={() => undefined}
         {...(client === undefined ? {} : { client: client as never })}
+        {...(onThemeRemoved === undefined ? {} : { onThemeRemoved })}
       />,
     ),
   );
@@ -255,10 +257,31 @@ function localThemeServing(): readonly (readonly [string, () => Response])[] {
   return [
     ["/index.json", () => indexOf([])],
     [
+      "/api/editor-themes",
+      () => json([{ id: "editor-theme", name: "Office" }]),
+    ],
+    [
       "/api/themes",
       () =>
         json({
           themes: [{ id: LOCAL_THEME, name: "Local theme", facets: FACETS }],
+        }),
+    ],
+    [
+      "/api/extensions",
+      () =>
+        json({
+          extensions: [
+            {
+              key: "acme/panels",
+              name: "Acme panels",
+              publisher: "acme",
+              version: "1.0.0",
+              contributions: {
+                panelFamilies: [{ id: "z-series", label: "Z series" }],
+              },
+            },
+          ],
         }),
     ],
   ];
@@ -324,7 +347,13 @@ it("exports a Dashboard theme through the host's own package writer", async () =
 it("deletes a Dashboard theme only after the confirmation", async () => {
   vi.stubGlobal("fetch", answering(localThemeServing()));
   const commands = commandClient();
-  const container = await mountPage("dashboard-themes", "all", commands.client);
+  const themeRemoved = vi.fn();
+  const container = await mountPage(
+    "dashboard-themes",
+    "all",
+    commands.client,
+    themeRemoved,
+  );
   await waitForCells(container, ["Local theme"]);
 
   await act(async () =>
@@ -350,9 +379,74 @@ it("deletes a Dashboard theme only after the confirmation", async () => {
   await vi.waitFor(() =>
     expect(commands.remove).toHaveBeenCalledWith(LOCAL_THEME),
   );
+  // The session hears it, so the open document's stored base is cleared and the
+  // next save does not trust a folder the host trashed.
+  expect(
+    themeRemoved,
+    "the removal did not reach the session",
+  ).toHaveBeenCalledWith(LOCAL_THEME);
   await vi.waitFor(() =>
     expect(cells(container), "the deleted theme is still drawn").toEqual([]),
   );
+});
+
+/** App themes live at `/api/editor-themes/:id`, and a panel driver is not a
+ *  theme at all: the dashboard-theme client's routes must not be called for
+ *  either. Every combination the page does not own stays pending. */
+it("does not route another page's kinds to the theme client", async () => {
+  const commands = commandClient();
+  vi.stubGlobal("fetch", answering(localThemeServing()));
+  const appThemes = await mountPage("app-themes", "all", commands.client);
+  await waitForCells(appThemes, ["Office"]);
+
+  for (const action of ["export", "delete"] as const) {
+    await act(async () =>
+      must(
+        appThemes.querySelector<HTMLButtonElement>(
+          `[data-yunari-store-cell-action='${action}']`,
+        ),
+        `${action} action`,
+      ).click(),
+    );
+  }
+
+  expect(
+    commands.open,
+    "an editor theme's export called the dashboard-theme client",
+  ).not.toHaveBeenCalled();
+  expect(
+    commands.remove,
+    "an editor theme's delete called the dashboard-theme client",
+  ).not.toHaveBeenCalled();
+  expect(
+    document.body.querySelector("[data-yunari-library-delete-dialog]"),
+    "an editor theme's delete opened the dashboard-theme removal",
+  ).toBeNull();
+  expect(
+    appThemes.querySelector("[data-yunari-library-action-notice]")?.textContent,
+    "an unowned command said nothing",
+  ).not.toBe("");
+
+  // A panel driver is equipment, not a theme: Assign on it must not read or
+  // write the display register's theme route.
+  const drivers = await mountPage("panel-drivers", "all");
+  await waitForCells(drivers, ["Acme panels"]);
+  await act(async () =>
+    must(
+      drivers.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-action='assign']",
+      ),
+      "driver assign action",
+    ).click(),
+  );
+  expect(
+    commands.listDisplays,
+    "a panel driver's assign read the display register",
+  ).not.toHaveBeenCalled();
+  expect(
+    drivers.querySelector("[data-yunari-library-action-notice]")?.textContent,
+    "a panel driver's assign said nothing",
+  ).not.toBe("");
 });
 
 it("states the catalogue's refusals, one line per refused kind", async () => {

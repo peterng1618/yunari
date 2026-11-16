@@ -1,4 +1,4 @@
-import { STORE_ITEM_KINDS } from "@yunari/renderer-core";
+import { type CatalogueRefusal, STORE_ITEM_KINDS } from "@yunari/renderer-core";
 import type { CollectionDraft, CollectionInclude } from "@yunari/theme-package";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -311,6 +311,9 @@ export function SubmissionsPage(props: {
   const [mine, setMine] = useState<Read<readonly StoreItem[]>>({
     state: "loading",
   });
+  /** The author rows the read refused, so a row this build cannot name is
+   *  stated rather than vanishing from a page that then looks complete. */
+  const [unreadable, setUnreadable] = useState<readonly CatalogueRefusal[]>([]);
   const [listings, setListings] = useState<Read<readonly StoreItem[]>>({
     state: "loading",
   });
@@ -322,17 +325,19 @@ export function SubmissionsPage(props: {
   useEffect(() => {
     let live = true;
     setMine({ state: "loading" });
+    setUnreadable([]);
     const options = fetcher === undefined ? {} : { fetch: fetcher };
-    void mineThemeSource({ kinds: STORE_ITEM_KINDS, ...options })
-      .list()
-      .then(
-        (rows) => {
-          if (live) setMine({ state: "read", rows });
-        },
-        () => {
-          if (live) setMine({ state: "failed" });
-        },
-      );
+    const source = mineThemeSource({ kinds: STORE_ITEM_KINDS, ...options });
+    void source.list().then(
+      (rows) => {
+        if (!live) return;
+        setMine({ state: "read", rows });
+        setUnreadable(source.refused());
+      },
+      () => {
+        if (live) setMine({ state: "failed" });
+      },
+    );
     return () => {
       live = false;
     };
@@ -470,6 +475,21 @@ export function SubmissionsPage(props: {
                       : uiCopy.store.actions.republish}
                   </button>
                 ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {unreadable.length === 0 ? null : (
+          <ul
+            data-yunari-submissions-refusals=""
+            className="flex flex-col gap-[var(--space-4)] text-xs text-faint"
+          >
+            {unreadable.map((refusal) => (
+              <li
+                key={`${refusal.reason}:${refusal.kind ?? ""}`}
+                data-yunari-submissions-refusal=""
+              >
+                {uiCopy.store.catalogueRefused(refusal.kind, refusal.count)}
               </li>
             ))}
           </ul>

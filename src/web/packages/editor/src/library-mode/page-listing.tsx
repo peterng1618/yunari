@@ -1,18 +1,7 @@
 import type { CatalogueOrigin, CatalogueRefusal } from "@yunari/renderer-core";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { BareSegmented } from "../components/ui/bare-segmented.js";
-import { ControlSelect } from "../components/ui/control-select.js";
-import { ACTION_BUTTON, Dialog } from "../components/ui/dialog.js";
-import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
-import {
-  createGridDensityPreference,
-  DEFAULT_GRID_DENSITY,
-  type GridDensityLevel,
-} from "../editor-shell/grid-density.js";
-import { fileNameFor, serializeThemePackage } from "../persist.js";
-import { downloadBytes } from "../persistence-manager/index.js";
 import { AssignChoice, AssignDisplay } from "../store-mode/assign-display.js";
 import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
@@ -31,12 +20,12 @@ import type { SubmitControl } from "../store-mode/use-submit.js";
 import type { ThemeLibraryClient } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
 import { collectionStateOf, type StoreCard } from "./cards.js";
-import { DensitySlider } from "./density-slider.js";
-import { FacetRow, toggleFacet } from "./facet-row.js";
+import { toggleFacet } from "./facet-row.js";
 import { listingFacets } from "./facets.js";
 import { Empty, Failure } from "./feedback.js";
+import { ListingToolbar, useGridDensity } from "./listing-toolbar.js";
 import { readOrigins } from "./origins.js";
-import { SORT_KEYS, SORT_ORDERS } from "./sort-orders.js";
+import { SORT_ORDERS } from "./sort-orders.js";
 import {
   type CollectionsRead,
   catalogueSourceFor,
@@ -47,6 +36,7 @@ import {
   librarySourceFor,
   type OriginsRead,
 } from "./sources.js";
+import { DeleteThemeDialog, useThemeActions } from "./theme-actions.js";
 import {
   pruneLibraryFacets,
   readLibraryFacets,
@@ -143,23 +133,6 @@ function rowsFor(
   });
 }
 
-/** The browser's own storage, or nothing where the accessor itself refuses — a
- *  private window throws on the read. */
-function browserStorage(): Storage | undefined {
-  try {
-    return window.localStorage;
-  } catch {
-    return undefined;
-  }
-}
-
-/** The host's refusal in the words it gave, or a string for nothing better. */
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-const SORT_ID = "yunari-library-sort";
-
 /** One per-type page: the listing toolbar, the joined rows, and an item's own
  *  surface. The Dashboard themes page draws its four library actions here. */
 export function PageListing(props: {
@@ -169,17 +142,13 @@ export function PageListing(props: {
   readonly clients: LibraryClients;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
+  readonly onThemeRemoved?: ((id: string) => void) | undefined;
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
   readonly collections: CollectionsRead;
   readonly detailOrigins: OriginsRead;
   readonly onDetailOpen: () => void;
 }): React.JSX.Element {
-  const [density] = useState(() =>
-    createGridDensityPreference(browserStorage()),
-  );
-  const [densityLevel, setDensityLevel] = useState<GridDensityLevel>(
-    () => density.read() ?? DEFAULT_GRID_DENSITY,
-  );
+  const density = useGridDensity();
   const [sort, setSort] = useState<string>(readLibrarySort);
   const [chosen, setChosen] = useState<FacetSelection>(readLibraryFacets);
   const [sensorKind, setSensorKind] = useState<SensorKind>("sensor-provider");
@@ -216,22 +185,34 @@ export function PageListing(props: {
     () => new Set(),
   );
   const [assignId, setAssignId] = useState<string | undefined>(undefined);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | undefined>(
-    undefined,
-  );
-  const [deleteRefusal, setDeleteRefusal] = useState<string | undefined>(
-    undefined,
-  );
-  const [exportRefusal, setExportRefusal] = useState<string | undefined>(
-    undefined,
-  );
+  const actions = useThemeActions({
+    client: props.client,
+    onDeleted: (id) => {
+      setCatalogue((current) =>
+        current === undefined
+          ? current
+          : current.filter((item) => item.id !== id),
+      );
+      setLibrary((current) =>
+        current === undefined
+          ? current
+          : current.filter((item) => item.id !== id),
+      );
+      setOpenCard((current) =>
+        current?.listing.id === id ? undefined : current,
+      );
+      setAssignId((current) => (current === id ? undefined : current));
+    },
+    ...(props.onThemeRemoved === undefined
+      ? {}
+      : { onRemoved: props.onThemeRemoved }),
+  });
 
   useEffect(() => {
     setExpanded(new Set());
     setOpenCard(undefined);
     setNotice(undefined);
     setAssignId(undefined);
-    setConfirmDeleteId(undefined);
   }, [props.page]);
 
   useEffect(() => {
@@ -336,7 +317,6 @@ export function PageListing(props: {
     () => ({
       kind: sources.catalogue.memberKind,
       list: async () => (await sources.catalogue.list()).rows,
-      refused: () => [],
     }),
     [sources],
   );
@@ -344,6 +324,9 @@ export function PageListing(props: {
     source: installSource,
     onListed: (listed) => {
       setCatalogue(listed);
+      // The install re-listed the catalogue itself, so the refusals the mount
+      // read no longer describe what is drawn: they are cleared with the rows.
+      setRefused([]);
       sources.library.list().then(
         (read) => setLibrary(read.rows),
         () => setLibraryFailed(true),
@@ -376,126 +359,57 @@ export function PageListing(props: {
     [],
   );
 
-  /**
-   * The theme's own removal, through the library client's `DELETE` route.
-   *
-   * The host moves the folder to its recycle bin, so the listing drops the item
-   * only after the host accepts it; a refusal leaves the item where it was and
-   * says why. A client that cannot delete reports that rather than removing a
-   * row it never moved.
-   */
-  const deleteTheme = (id: string): void => {
-    const remove = props.client.remove;
-    if (remove === undefined) {
-      setDeleteRefusal(uiCopy.store.deleteUnavailable);
-      return;
-    }
-    setDeleteRefusal(undefined);
-    void remove.call(props.client, id).then(
-      () => {
-        setCatalogue((current) =>
-          current === undefined
-            ? current
-            : current.filter((item) => item.id !== id),
-        );
-        setLibrary((current) =>
-          current === undefined
-            ? current
-            : current.filter((item) => item.id !== id),
-        );
-        setOpenCard((current) =>
-          current?.listing.id === id ? undefined : current,
-        );
-        setAssignId((current) => (current === id ? undefined : current));
-      },
-      (error: unknown) => {
-        setDeleteRefusal(uiCopy.store.deleteFailed(messageOf(error)));
-      },
-    );
-  };
-
-  /**
-   * The theme's package, read from the host and written by the same serialiser
-   * the document's export uses.
-   *
-   * The library is a folder rather than an archive, so there is no stored file
-   * to hand over: the page opens the stored theme and builds the package the
-   * format documents. A refusal writes nothing and says why.
-   */
-  const exportTheme = (id: string): void => {
-    setExportRefusal(undefined);
-    void props.client.open(id).then(
-      async (content) => {
-        const baked = await bakeStoredThemeCrops({
-          envelope: content.envelope,
-          assets: content.assets,
-        });
-        if (
-          baked.baked > 0 &&
-          !(await confirmOutputBake({
-            title: uiCopy.file.exportTheme,
-            crops: baked.baked,
-          }))
-        ) {
-          return;
-        }
-        const written = serializeThemePackage(
-          baked.envelope,
-          baked.assets,
-          undefined,
-          content.credits,
-        );
-        if (!written.ok) {
-          setExportRefusal(uiCopy.store.exportFailed(written.message));
-          return;
-        }
-        downloadBytes(fileNameFor(baked.envelope), written.bytes);
-      },
-      (error: unknown) => {
-        setExportRefusal(uiCopy.store.exportFailed(messageOf(error)));
-      },
-    );
-  };
-
   const openCardAt = (card: StoreCard): void => {
     props.onDetailOpen();
     setOpenCard(card);
   };
 
   /**
+   * Whether this page and this row own one of the stored-theme commands.
+   *
+   * **Only Dashboard themes owns the four**, and only for a dashboard theme:
+   * `open` needs the document's route, and Delete, Export and Assign act on the
+   * host's `/api/themes` routes, which hold editor themes nowhere and drivers
+   * never. A page that draws the gallery's shared action row for another kind
+   * reports the press as pending rather than calling a route for the wrong
+   * store.
+   */
+  const ownsThemeCommand = (card: StoreCard): boolean =>
+    props.page === "dashboard-themes" &&
+    card.listing.kind === "dashboard-theme";
+
+  /**
    * The one callback a cell's actions and the modal's footer share.
    *
-   * **Only Dashboard themes owns `open`**: the gallery draws the same four
-   * library actions on every page, and a widget or a shape is not a document.
-   * Assign, export and delete are the library's own operations on a stored
-   * theme, and every other command still waits for its handler.
+   * Every command this page does not own keeps the pending sentence, so a
+   * control stays drawn (R164) and its press says what is not wired rather than
+   * acting on the wrong kind. Assign from the item's own surface is drawn inline
+   * and stays inside the page it was opened from; from a cell there is no page
+   * to keep, so it opens as the dialog it is.
    */
   const onAction = (action: CellAction, card: StoreCard): void => {
     const id = card.listing.id;
-    if (action === "open" && props.page === "dashboard-themes") {
-      if (props.onOpenTheme !== undefined) {
+    if (ownsThemeCommand(card)) {
+      if (action === "open" && props.onOpenTheme !== undefined) {
         props.onOpenTheme(id);
         return;
       }
-    }
-    if (action === "delete") {
-      if (props.client.remove === undefined) {
-        setDeleteRefusal(uiCopy.store.deleteUnavailable);
+      if (action === "delete") {
+        if (props.client.remove === undefined) {
+          setNotice(uiCopy.store.deleteUnavailable);
+          return;
+        }
+        actions.requestDelete(id);
         return;
       }
-      setConfirmDeleteId(id);
-      return;
-    }
-    if (action === "export") {
-      exportTheme(id);
-      return;
-    }
-    if (action === "assign") {
-      // **The choice stays inside the page it was opened from**: from the
-      // item's own surface it is drawn inline; from a cell there is no page to
-      // keep, so it opens as the dialog it is.
-      setAssignId(id);
-      return;
+      if (action === "export") {
+        actions.exportTheme(id);
+        return;
+      }
+      if (action === "assign") {
+        setAssignId(id);
+        return;
+      }
     }
     setNotice(
       uiCopy.library.actionPending(
@@ -531,39 +445,22 @@ export function PageListing(props: {
         </div>
       ) : null}
 
-      <div
-        data-yunari-library-toolbar=""
-        className="flex flex-none flex-wrap items-center gap-[var(--space-12)] px-[var(--space-16)] pt-[var(--space-12)] pb-[var(--space-8)]"
-      >
-        <FacetRow
-          facets={facets}
-          chosen={chosen}
-          onToggle={(facetId, optionId) => {
-            const next = toggleFacet(chosen, facetId, optionId);
-            setChosen(next);
-            rememberLibraryFacets(next);
-          }}
-        />
-        <ControlSelect
-          id={SORT_ID}
-          label={uiCopy.store.sort.label}
-          data={{ "data-yunari-library-sort": "" }}
-          value={sort}
-          options={SORT_KEYS}
-          onChange={(id) => {
-            if (!SORT_KEYS.some((key) => key.id === id)) return;
-            setSort(id);
-            rememberLibrarySort(id);
-          }}
-        />
-        <DensitySlider
-          level={densityLevel}
-          onChange={(next) => {
-            setDensityLevel(next);
-            density.write(next);
-          }}
-        />
-      </div>
+      <ListingToolbar
+        facets={facets}
+        chosen={chosen}
+        onToggle={(facetId, optionId) => {
+          const next = toggleFacet(chosen, facetId, optionId);
+          setChosen(next);
+          rememberLibraryFacets(next);
+        }}
+        sort={sort}
+        onSort={(id) => {
+          setSort(id);
+          rememberLibrarySort(id);
+        }}
+        densityLevel={density.level}
+        onDensity={density.set}
+      />
 
       <div
         data-yunari-library-listing=""
@@ -602,26 +499,26 @@ export function PageListing(props: {
             {notice}
           </p>
         )}
-        {deleteRefusal === undefined ? null : (
+        {actions.deleteRefusal === undefined ? null : (
           <p
             data-yunari-library-delete-refusal=""
             className="text-xs text-warn"
           >
-            {deleteRefusal}
+            {actions.deleteRefusal}
           </p>
         )}
-        {exportRefusal === undefined ? null : (
+        {actions.exportRefusal === undefined ? null : (
           <p
             data-yunari-library-export-refusal=""
             className="text-xs text-warn"
           >
-            {exportRefusal}
+            {actions.exportRefusal}
           </p>
         )}
         {shown.length > 0 ? (
           <Gallery
             items={shown}
-            density={densityLevel}
+            density={density.level}
             origins={origins}
             expanded={expanded}
             onExpand={(key) =>
@@ -746,47 +643,11 @@ export function PageListing(props: {
         />
       )}
 
-      <Dialog
-        open={confirmDeleteId !== undefined}
-        onOpenChange={(next) => {
-          if (!next) setConfirmDeleteId(undefined);
-        }}
-        label={uiCopy.store.deleteConfirm.title}
-        closeLabel={uiCopy.store.deleteConfirm.cancel}
-        className="editor-shell-dialog--delete-theme"
-      >
-        <div
-          data-yunari-library-delete-dialog=""
-          className="flex w-[var(--import-dialog-width)] flex-col gap-[var(--space-12)]"
-        >
-          <p className="m-0 text-sm text-text">
-            {uiCopy.store.deleteConfirm.note}
-          </p>
-          <div className="flex flex-wrap justify-end gap-[var(--space-6)]">
-            <button
-              type="button"
-              data-yunari-library-delete-cancel=""
-              className={ACTION_BUTTON}
-              onClick={() => setConfirmDeleteId(undefined)}
-            >
-              {uiCopy.store.deleteConfirm.cancel}
-            </button>
-            <button
-              type="button"
-              data-yunari-library-delete-confirm=""
-              data-yunari-destructive=""
-              className={ACTION_BUTTON}
-              onClick={() => {
-                const id = confirmDeleteId;
-                setConfirmDeleteId(undefined);
-                if (id !== undefined) deleteTheme(id);
-              }}
-            >
-              {uiCopy.store.deleteConfirm.confirm}
-            </button>
-          </div>
-        </div>
-      </Dialog>
+      <DeleteThemeDialog
+        open={actions.confirmDeleteId !== undefined}
+        onCancel={actions.cancelDelete}
+        onConfirm={actions.confirmDelete}
+      />
 
       <span
         data-yunari-library-install-announcement=""
@@ -794,7 +655,7 @@ export function PageListing(props: {
         aria-live="polite"
         className="sr-only"
       >
-        {deleteRefusal || exportRefusal || install.announcement}
+        {actions.deleteRefusal || actions.exportRefusal || install.announcement}
       </span>
     </div>
   );

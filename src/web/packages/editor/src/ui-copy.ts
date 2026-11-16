@@ -1243,10 +1243,6 @@ export const uiCopy = {
        *  drawn only where they do not (`collection-builder.tsx`). */
       changeRefused: (status: number): string =>
         `The store refused the change (${status}).`,
-      /** The store accepted the command but the author's rows could not be read
-       *  back: the change landed, so silence would leave a stale word on screen. */
-      unrefreshed:
-        "The change was saved, but your items could not be refreshed.",
     },
     /** The author's own two commands, drawn in the item's modal only: they act
      *  on the author's store row, where the cell's four actions act on the
