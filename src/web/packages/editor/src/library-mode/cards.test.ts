@@ -6,7 +6,7 @@
  * one pack card plus a card per member; a collection carries no members of its
  * own and draws one card from its `includes`.
  *
- * The page's row builder (`page-listing.tsx`) owns which listings a page draws. This
+ * The page's row builder (`rows.ts`) owns which listings a page draws. This
  * file owns only how each listing becomes cards, so the grid cannot draw a
  * second, differently-derived set of the same copies.
  */

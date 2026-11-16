@@ -33,7 +33,7 @@ import {
  *
  * **A store row is on this PC when it carries an origin**, and a library row is
  * installed by construction. The two are the only facts the filter reads (see
- * `rowsFor` in `page-listing.tsx`), so a page cannot disagree with the register
+ * `rowsFor` in `rows.ts`), so a page cannot disagree with the register
  * about what is installed.
  */
 export type { LibraryState } from "./sources.js";

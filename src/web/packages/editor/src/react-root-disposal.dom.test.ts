@@ -281,10 +281,11 @@ describe("the palette panel's and token inspector's React roots", () => {
  * The shipped sources, minus test files, whose tree is the test's and so has
  * no disposal path to be on:
  *
- * - `*.test.*` and `*.test-stage.*`.
+ * - `*.test.*` and `*.test-stage.*`;
+ * - `*-harness.tsx`, the DOM mount the library-mode test files share.
  *
  * Those exclusions are the ones this task enumerated, and the case below names
- * the two harness pages so the exclusion stays a judgement about them rather
+ * the harness files so the exclusion stays a judgement about them rather
  * than a pattern that happened to miss them.
  */
 function shippedSourceFiles(dir = SRC): readonly string[] {
@@ -297,6 +298,7 @@ function shippedSourceFiles(dir = SRC): readonly string[] {
     if (!/\.tsx?$/.test(name)) return [];
     if (/\.test\.tsx?$/.test(name)) return [];
     if (/\.test-stage\.tsx?$/.test(name)) return [];
+    if (/-harness\.tsx?$/.test(name)) return [];
     return [path];
   });
 }
@@ -370,16 +372,18 @@ describe("every shipped React root", () => {
     }
   });
 
-  it("does not read the dev harness pages it excludes", () => {
-    // These two do contain `createRoot`; naming them here is what makes the
+  it("does not read the harness files it excludes", () => {
+    // These files do contain `createRoot`; naming them here is what makes the
     // exclusion above a decision about them rather than an accident.
     for (const harness of [
       "chart-manager/chart-stage.test-stage.tsx",
       "selection-inspector/runs.test-stage.tsx",
+      "library-mode/page-listing-harness.tsx",
+      "library-mode/region-harness.tsx",
     ]) {
       expect(
         readFileSync(resolve(SRC, harness), "utf8"),
-        `${harness} is excluded as a dev harness page`,
+        `${harness} is excluded as a harness file`,
       ).toMatch(/createRoot\s*\(/);
     }
   });

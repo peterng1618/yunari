@@ -6,14 +6,11 @@ import type {
 import type * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeldUpdateNotice } from "../components/held-update-notice.js";
-import { confirmOutputBake } from "../components/output-bake-dialog.js";
 import { BareSegmented } from "../components/ui/bare-segmented.js";
-import { bakeStoredThemeCrops } from "../crop-manager/bake-stored.js";
 import { AssignChoice, AssignDisplay } from "../store-mode/assign-display.js";
 import { removalPath } from "../store-mode/cell-actions.js";
 import { readCollectionPlan } from "../store-mode/collection-plan.js";
 import { Gallery } from "../store-mode/gallery.js";
-import { withInstalledVersions } from "../store-mode/install-state.js";
 import { ItemModal } from "../store-mode/item-modal.js";
 import {
   type CellAction,
@@ -24,18 +21,15 @@ import {
   settledTags,
 } from "../store-mode/local-source.js";
 import { useInstall } from "../store-mode/use-install.js";
-import { useSubmit } from "../store-mode/use-submit.js";
-import type {
-  ThemeLibraryClient,
-  ThemeLibraryContent,
-} from "../theme-library-client.js";
+import type { ThemeLibraryClient } from "../theme-library-client.js";
 import { uiCopy } from "../ui-copy.js";
-import { collectionStateOf, type StoreCard } from "./cards.js";
+import type { StoreCard } from "./cards.js";
 import { toggleFacet } from "./facet-row.js";
 import { listingFacets } from "./facets.js";
 import { Empty, Failure } from "./feedback.js";
 import { ListingToolbar, useGridDensity } from "./listing-toolbar.js";
 import { readOrigins } from "./origins.js";
+import { type Row, rowsFor } from "./rows.js";
 import { SORT_ORDERS } from "./sort-orders.js";
 import {
   type CollectionsRead,
@@ -48,6 +42,7 @@ import {
   type OriginsRead,
 } from "./sources.js";
 import { DeleteThemeDialog, useThemeActions } from "./theme-actions.js";
+import { usePageSubmit } from "./use-page-submit.js";
 import {
   pruneLibraryFacets,
   readLibraryFacets,
@@ -75,83 +70,6 @@ const SENSOR_NAMES: Readonly<Partial<Record<MemberKind, string>>> = {
  *  `DESIGN.md` states the grid loads near the end, and the catalogue can be
  *  large; the scroller stays responsive without mounting everything at once. */
 const LOAD_BATCH = 24;
-
-/** One row, tagged with the half it was read from. The tag is what keeps a
- *  library row in "On this PC" whatever its origin says. */
-interface Row {
-  readonly item: StoreItem;
-  readonly half: "store" | "library";
-}
-
-/**
- * The two halves joined, then filtered by the state.
- *
- * **A library row that names a catalogue item is that item's installed copy**,
- * so the library half drops it when the catalogue listing actually carries that
- * item; the catalogue row takes the origin the library row carried. A library
- * row whose catalogue id the listing does not carry — an unpublished entry, a
- * page that stopped browsing that kind, or a catalogue half that failed — stays
- * its own row, or the installed copy would vanish with nothing left to remove.
- *
- * The rule is one function because the filter and the grid must not disagree
- * about which rows the state admits.
- *
- * **A collection's installed state is its includes'**, so the filter reads
- * `collectionStateOf` rather than the row's own origin, which a collection
- * never has. A partially installed collection is *On this PC*: it has copies on
- * this PC and reads its count with Update. Only a collection with no include
- * installed is *Not installed*.
- */
-function rowsFor(
-  catalogue: readonly StoreItem[],
-  library: readonly StoreItem[],
-  state: LibraryState,
-  origins: readonly CatalogueOrigin[] | undefined,
-): readonly Row[] {
-  const byCatalogueId = new Map<string, CatalogueOrigin>();
-  for (const item of library) {
-    if (item.origin !== undefined) {
-      byCatalogueId.set(item.origin.catalogueId, item.origin);
-    }
-  }
-  const store = withInstalledVersions(catalogue, library).map((item) => {
-    const origin = byCatalogueId.get(item.id);
-    return origin === undefined ? item : { ...item, origin };
-  });
-  const listed = new Set(store.map((item) => item.id));
-  const libraryOnly = library.filter(
-    (item) => item.origin === undefined || !listed.has(item.origin.catalogueId),
-  );
-  const rows: readonly Row[] = [
-    ...store.map((item): Row => ({ item, half: "store" })),
-    ...libraryOnly.map((item): Row => ({ item, half: "library" })),
-  ];
-
-  if (state === "all") return rows;
-
-  const collectionOf = (row: Row) =>
-    origins === undefined ? undefined : collectionStateOf(row.item, origins);
-  /** **A collection is neither side until the register answers.** Its state is
-   *  counted over the register, so an unread register would draw an installed
-   *  collection as "Not installed" and hide it from "On this PC". */
-  const unclassified = (row: Row): boolean =>
-    origins === undefined && row.item.includes !== undefined;
-
-  if (state === "on-this-pc") {
-    return rows.filter((row) => {
-      if (unclassified(row)) return false;
-      if (row.half === "library" || row.item.origin !== undefined) return true;
-      const collection = collectionOf(row);
-      return collection !== undefined && collection.state !== "absent";
-    });
-  }
-  return rows.filter((row) => {
-    if (unclassified(row)) return false;
-    const collection = collectionOf(row);
-    if (collection !== undefined) return collection.state === "absent";
-    return row.half === "store" && row.item.origin === undefined;
-  });
-}
 
 /** One per-type page: the listing toolbar, the joined rows, and an item's own
  *  surface. The Dashboard themes page draws its four library actions here. */
@@ -470,73 +388,15 @@ export function PageListing(props: {
       void relist();
     },
   });
-  /** **A submission is this page's own flow.** The Library replaced the old
-   *  store region, so the theme a person publishes is the stored copy the host
-   *  holds: the crop pass writes the baked copy before the host reads it, and a
-   *  landed press restores the author's un-baked library copy beside advancing
-   *  the open document's base. */
-  const publishedBackup = useRef<
-    { readonly id: string; readonly content: ThemeLibraryContent } | undefined
-  >(undefined);
-  const submit = useSubmit({
+  const submit = usePageSubmit({
+    client: props.client,
     // A landed submission re-reads both halves, so the card draws the version
     // the host just wrote rather than the one this page read at mount; the
     // modal's foot is refreshed from the same join (`relist`).
     onSubmitted: () => {
       void relist();
     },
-    beforeSubmit: async (id) => {
-      try {
-        const content = await props.client.open(id);
-        const baked = await bakeStoredThemeCrops({
-          envelope: content.envelope,
-          assets: content.assets,
-        });
-        if (baked.baked === 0) return undefined;
-        if (
-          !(await confirmOutputBake({
-            title: uiCopy.store.submit.label,
-            crops: baked.baked,
-          }))
-        ) {
-          return uiCopy.store.submit.cancelled;
-        }
-        await props.client.save(id, {
-          ...content,
-          envelope: baked.envelope,
-          assets: baked.assets,
-        });
-        publishedBackup.current = { id, content };
-        return undefined;
-      } catch {
-        return uiCopy.store.submit.prepareFailed;
-      }
-    },
-    afterSubmit: async (version) => {
-      const backup = publishedBackup.current;
-      publishedBackup.current = undefined;
-      if (backup === undefined) return;
-      const envelope =
-        version === undefined
-          ? backup.content.envelope
-          : {
-              ...backup.content.envelope,
-              metadata: { ...backup.content.envelope.metadata, version },
-            };
-      try {
-        // An overwrite, because the host advanced the base while it published
-        // the baked copy; the bytes being restored are the author's own.
-        await props.client.save(
-          backup.id,
-          { ...backup.content, envelope },
-          { overwrite: true },
-        );
-      } catch {
-        // The submission already happened. Retrying here would be a second
-        // write the author did not ask for.
-      }
-      props.onThemePublished?.(backup.id);
-    },
+    onPublished: props.onThemePublished,
   });
 
   const openCardAt = (card: StoreCard): void => {

@@ -33,6 +33,7 @@
   `src/web/packages/editor/src/store-mode/use-install.ts`
   `src/web/packages/editor/src/editor-shell/shell-layout.tsx`
   `src/web/packages/editor/src/editor-shell/editor-shell.css`
+  `src/web/packages/renderer-core/src/theme/catalogue-index.fixture.ts`
 
 ## Problem
 
