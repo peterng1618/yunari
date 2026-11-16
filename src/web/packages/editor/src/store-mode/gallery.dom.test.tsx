@@ -1761,6 +1761,42 @@ it("states no member count where the surface cannot expand the pack", async () =
   ).toBeNull();
 });
 
+/**
+ * **A pack the surface cannot expand keeps its own install.** The member cards
+ * live in a panel nothing can open, so the pack card is the only reachable
+ * control: without it the package could not be installed from that surface.
+ */
+it("offers install on a pack the surface cannot expand", async () => {
+  const onInstall = vi.fn();
+  const container = await mount(
+    <Gallery
+      items={[packItem({ catalogue: catalogue({ id: "ops-pack" }) })]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={{ ...NO_INSTALL, onInstall }}
+    />,
+  );
+
+  const cell = cellOf(container, "ops-pack");
+  // The member cards sit in the closed panel; the pack card's own control is
+  // the one outside it.
+  const own = [
+    ...cell.querySelectorAll<HTMLButtonElement>(
+      '[data-yunari-store-cell-install="install"]',
+    ),
+  ].filter(
+    (control) => control.closest("[data-yunari-store-members]") === null,
+  );
+  expect(own, "the pack card drew no install of its own").toHaveLength(1);
+  const button = must(own[0] ?? null, "the pack's install control");
+  await act(async () => button.click());
+  expect(
+    onInstall.mock.calls.map(([pressed]) => pressed.id),
+    "the pack's install control did not report the listing",
+  ).toEqual(["ops-pack"]);
+});
+
 /** **Two packs do not produce two identical controls**: each expand button
  *  names the listing whose members it opens. */
 it("names each pack's expand control by its listing", async () => {

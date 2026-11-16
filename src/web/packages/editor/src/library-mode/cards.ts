@@ -54,9 +54,6 @@ export function cardsOf(items: readonly StoreItem[]): readonly StoreCard[] {
   });
 }
 
-/** The catalogue ids the register names, as one membership test for the cards
- *  drawn from it. The same read feeds the update diff later, so a card never
- *  asks the host a second question to draw its count. */
 /** A collection's install state, as the card's action and the state filter both
  *  read it. */
 export type CollectionInstallState = "installed" | "partial" | "absent";

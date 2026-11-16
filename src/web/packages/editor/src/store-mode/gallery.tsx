@@ -126,9 +126,10 @@ export function Gallery(props: {
    *  a landed submission re-lists the library. Absent on a surface with no
    *  submission flow, which draws the four actions alone. */
   readonly submit?: SubmitControl | undefined;
-  /** The pack cards this surface has open. Absent where the surface draws no
-   *  packs (the store halves), which then draws no expand control at all rather
-   *  than a button that answers nothing. */
+  /** The pack cards this surface has open. Absent where the surface cannot
+   *  open one — the store halves mount this grid without an expand handler —
+   *  which draws no expand control, and keeps the pack card's own install
+   *  because its member cards are unreachable. */
   readonly expanded?: ReadonlySet<string> | undefined;
   /** Reports one pack card's press; the surface flips the key. */
   readonly onExpand?: ((key: string) => void) | undefined;
@@ -435,13 +436,15 @@ function Cell(props: {
                 );
               })}
             </>
-          ) : members.length > 0 ||
-            actionState === undefined ||
-            actionState ===
-              "none" ? // **A pack card is cover, count and expand only**: its install
-          // controls live on the member cards, where the thing being installed
-          // is named. A collection's action waits for the register rather than
-          // guessing "Install".
+          ) : actionState === undefined ||
+            actionState === "none" ||
+            (member === undefined &&
+              expandable) ? // **A pack card that can open is cover, count and expand only**:
+          // its install controls live on the member cards, where the thing
+          // being installed is named. **A pack card that cannot open keeps
+          // its own install**, because a surface without an expand handler
+          // leaves the hidden member cards unreachable. A collection's
+          // action waits for the register rather than guessing "Install".
           null : (
             <InstallAction item={item} state={actionState} install={install} />
           )}
@@ -616,8 +619,9 @@ function Cell(props: {
 /**
  * One member of an open pack, drawn as a card rather than a table row: the
  * package's picture or ground identifies it, and the member carries its name,
- * its publisher, its kind badge and the install control for the package. The
- * member row is what installs, so the pack card itself draws no install.
+ * its publisher, its kind badge and the install control for the package. Where
+ * the pack card can open, the member cards are what install and the pack card
+ * draws no install of its own.
  */
 function MemberCard(props: {
   readonly card: StoreCard;

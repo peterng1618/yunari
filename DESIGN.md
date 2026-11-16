@@ -238,22 +238,27 @@ sits at the right of the same row. Attending the card fades the day out and fade
 the card's controls in over the same space, so the row never grows and the card
 never repeats a line beneath itself. A facts band exists only for facts the name
 row cannot carry: an online item's kind and download count, or an origin pill.
+A card drawn from the catalogue also carries its publisher on a line beneath the
+foot, because the publisher is part of every card a person shops from.
 
 **A package is one card that opens in place.** A listing with several members
 draws the package's picture and name with its member count as readable text —
 never a title attribute — and a twisty button carrying `aria-expanded` whose
 name includes both the action and the package, so two packs never present two
-identical controls. The pack card is cover, member count and expand only: it
-draws no install control of its own. Its panel is labeled with the package's
+identical controls. Where the surface can open the pack, the pack card is cover,
+member count and expand only: it draws no install control of its own. Where it
+cannot — the store halves mount the grid without an expand handler — the count
+and the twisty are suppressed, and the pack card keeps its own install because
+the member cards are unreachable. Its panel is labeled with the package's
 name and opens the package's **member cards**, each with the listing's picture
 or ground, the member's name and kind, the listing's publisher and the install
 control the member press runs. A single-member listing draws the member's name
 and kind on the card itself, but only where they differ from the package's own
 name and kind — a theme whose one member is itself repeats nothing. A collection
 counts the included listings this PC already holds — *2 of 4 installed* — from
-the origin register and reads *Installed* when every include is held and
-*Update* otherwise, so its state is the register's fact rather than a fetch per
-member.
+the origin register and reads *Installed* when every include is held, *Update*
+when some are, and *Install* when none is, so its state is the register's fact
+rather than a fetch per member.
 
 **The store's item modal is 960 × 760, and its facts sit in a 270px right
 panel.** The width is not the editor dialog's 560: this surface's subject is a
