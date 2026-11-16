@@ -510,6 +510,10 @@ export function StoreRegion(props: {
    *  moved into the header; a direct mount without one keeps its own. */
   readonly tab?: StoreTab | undefined;
   readonly onTab?: ((tab: StoreTab) => void) | undefined;
+  /** Opens Settings on Extensions for the item modal's trust link. The shell
+   *  owns the mode and the settings page, so the region only reports the
+   *  press. */
+  readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
 }): React.JSX.Element {
   const [innerTab, setInnerTab] = useState<StoreTab>("local");
   const tab = props.tab ?? innerTab;
@@ -1170,6 +1174,9 @@ export function StoreRegion(props: {
             : {})}
           onUnpublish={online.onUnpublish}
           onRepublish={online.onRepublish}
+          {...(props.onOpenSettings === undefined
+            ? {}
+            : { onOpenSettings: props.onOpenSettings })}
         />
       )}
 

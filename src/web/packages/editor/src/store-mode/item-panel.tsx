@@ -1,50 +1,39 @@
+import type { InstalledExtension } from "@yunari/extension-api";
 import type * as React from "react";
 import { Fragment } from "react";
 import { ControlIconButton } from "../components/ui/control-icon-button.js";
-import { ACTION_BUTTON, ActionBox } from "../components/ui/dialog.js";
-import {
-  ASSIGN_ITEM_GLYPH,
-  CHECK_GLYPH,
-  CLOSE_GLYPH,
-  DELETE_ITEM_GLYPH,
-  EXPORT_ITEM_GLYPH,
-  Glyph,
-  type LucideIcon,
-  PENCIL_GLYPH,
-} from "../editor-shell/icons.js";
+import { CLOSE_GLYPH, Glyph } from "../editor-shell/icons.js";
 import { uiCopy } from "../ui-copy.js";
-import { CELL_ACTION_REASONS } from "./cell-actions.js";
-import type { InstallControl } from "./install-item.js";
-import { type InstallState, installStateOf } from "./install-state.js";
-import type { CellAction, StoreItem } from "./local-source.js";
+import {
+  canShowTrust,
+  type DetailPlanState,
+  extensionTrustOf,
+  isCodeKind,
+  MemberList,
+  memberRowsOf,
+  PlanStateNote,
+  planTrust,
+  TrustBlock,
+} from "./item-detail.js";
+import type { StoreItem } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
-import type { SubmitControl } from "./use-submit.js";
 
 /**
- * The panel foot's four commands, in the order. Each is one glyph and
- * one word, and the words are this surface's short set
- * (`uiCopy.store.item.actions`): four boxes share 270px, and the cell keeps its
- * longer words. Delete is the one that destroys; the mark paints its glyph and
- * word `--hot` and the shell's own selector refuses to paint it when disabled.
+ * A member's facts panel: its head and its scrolling body. The foot is
+ * `item-foot.tsx`, because the commands a kind offers are a different reading
+ * from the facts it carries.
  *
- * **`open` leaves this surface alone.** It loads the stored theme as the editor's
- * document, which is a fact about the document rather than about the item: the
- * region's `openId` is what says whether this modal is on screen.
+ * **It is a viewer first.** The box is 960 × 760 against the settings sheet's
+ * 560, with no title bar: the stage takes every pixel the 270px facts panel does
+ * not, and the theme is contained in it rather than the stage being sized to the
+ * theme. The box therefore keeps one height as a person steps between items — the
+ * one thing a viewer must not do — and a portrait artboard is still seen
+ * uncropped.
+ *
+ * **The facts and the commands are a right panel, not a band.** A band under the
+ * stage spends the theme's own height on four words; a 270px column spends width
+ * the preview can spare.
  */
-const ACTION_BOXES = [
-  { action: "delete", icon: DELETE_ITEM_GLYPH, destructive: true },
-  { action: "export", icon: EXPORT_ITEM_GLYPH, destructive: false },
-  { action: "assign", icon: ASSIGN_ITEM_GLYPH, destructive: false },
-  { action: "open", icon: PENCIL_GLYPH, destructive: false },
-] as const satisfies readonly {
-  readonly action: CellAction;
-  readonly icon: LucideIcon;
-  readonly destructive: boolean;
-}[];
-
-/** The dialog button, for the foot's wider controls (Install, Submit, the
- *  author's command). The four boxes are `ActionBox`. */
-const FOOTER_BUTTON = `${ACTION_BUTTON} disabled:text-faint`;
 
 /** The counts' reader: `en-US` because `uiCopy` is one English table — the
  *  UI's `1,204`, not the machine's. */
@@ -181,6 +170,8 @@ function styleReadings(
  *  join that pair — facts about the item rather than about any facet. */
 export function PanelHeader(props: {
   readonly item: StoreItem;
+  /** The member's kind when the card is one, otherwise the listing's. */
+  readonly kind: string;
   readonly onClose: () => void;
 }): React.JSX.Element {
   const { item } = props;
@@ -237,8 +228,11 @@ export function PanelHeader(props: {
           data-yunari-store-item-kind=""
           className="flex-none rounded-full border border-edge px-[var(--space-8)] py-[var(--space-4)] text-2xs font-medium text-muted"
         >
-          {/* A kind this build does not know prints its own identifier. */}
-          {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
+          {/* A member's own kind word, then the listing kind's word, then the
+              identifier itself for a kind this build does not ship. */}
+          {uiCopy.store.cell.memberKinds[props.kind] ??
+            uiCopy.store.cell.kinds[props.kind] ??
+            props.kind}
         </span>
         <span className="flex-1" />
         <span className="flex-none">
@@ -294,17 +288,35 @@ function statusNoteOf(item: StoreItem): string | undefined {
     : `${item.statusReason} ${uiCopy.store.status.removedPermanent}`;
 }
 
-/** The panel's scrolling body: the three pill groups, the remix credit, the
- *  state's sentence and the provenance under a hairline. */
+/** The panel's scrolling body: the pill groups, the member links, the
+ *  collections the item belongs to, a code member's trust block, the remix
+ *  credit, the state's sentence and the provenance under a hairline. */
 export function PanelBody(props: {
   readonly item: StoreItem;
+  readonly kind: string;
   readonly vocabulary: readonly string[];
   readonly remixParent: StoreItem | undefined;
   readonly onOpenItem: ((id: string) => void) | undefined;
+  readonly plan: DetailPlanState | undefined;
+  readonly extension: InstalledExtension | undefined;
+  readonly collections: readonly StoreItem[];
+  readonly onOpenSettings: ((page: "extensions") => void) | undefined;
 }): React.JSX.Element {
-  const { item, remixParent, onOpenItem } = props;
+  const { item, kind, remixParent, onOpenItem, plan, extension } = props;
   const remixOf = item.remixOf;
   const statusNote = statusNoteOf(item);
+  const rows = memberRowsOf(item, kind, plan);
+  // A theme is one member of itself, so the list would print the item's own
+  // name under its own name. A package or a collection has members worth
+  // naming; a single-member listing is already the header's name.
+  const showMembers =
+    kind === "collection" || (rows !== undefined && rows.length > 1);
+  const planEntries = planTrust(plan);
+  const trustEntries =
+    planEntries ??
+    (extension === undefined ? undefined : [extensionTrustOf(extension)]);
+  const showsTrust =
+    kind === "collection" || isCodeKind(kind) || item.kind === "plugin";
   return (
     <span className="flex min-h-0 flex-1 flex-col gap-[var(--space-12)] overflow-auto px-[var(--space-16)] py-[var(--space-12)]">
       <PillGroup
@@ -331,6 +343,79 @@ export function PanelBody(props: {
         name={uiCopy.store.pillGroups.style}
         pills={styleReadings(item, props.vocabulary)}
       />
+      {kind === "collection" ? <PlanStateNote plan={plan} /> : null}
+      {!showMembers || rows === undefined ? null : <MemberList rows={rows} />}
+      {kind === "collection" &&
+      plan?.status === "ready" &&
+      plan.plan.missing.length > 0 ? (
+        <span
+          data-yunari-store-detail-missing=""
+          className="flex flex-col gap-[var(--space-4)]"
+        >
+          {plan.plan.missing.map((member) => (
+            <span key={member.id} className="text-xs text-warn">
+              {uiCopy.store.detail.plan.missingMember(member.id, member.reason)}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {props.collections.length === 0 ? null : (
+        <span
+          data-yunari-store-detail-part-of=""
+          className="flex flex-col gap-[var(--space-6)]"
+        >
+          <span className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
+            {uiCopy.store.detail.partOf}
+          </span>
+          <span className="flex flex-wrap gap-[var(--space-6)]">
+            {props.collections.map((collection) => (
+              <span
+                key={collection.id}
+                data-yunari-store-detail-collection={collection.id}
+                className="text-xs text-muted"
+              >
+                {onOpenItem === undefined ? (
+                  collection.name
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onOpenItem(collection.id)}
+                    className="underline hover:text-text"
+                  >
+                    {collection.name}
+                  </button>
+                )}
+              </span>
+            ))}
+          </span>
+        </span>
+      )}
+      {showsTrust && canShowTrust(kind, plan) ? (
+        <span className="flex flex-col gap-[var(--space-6)]">
+          {trustEntries === undefined || trustEntries.length === 0 ? (
+            <span
+              data-yunari-store-detail-trust-state="none"
+              className="text-xs text-muted"
+            >
+              {kind === "collection"
+                ? uiCopy.store.detail.trust.noCode
+                : uiCopy.store.detail.trust.unavailable}
+            </span>
+          ) : (
+            <TrustBlock entries={trustEntries} />
+          )}
+          {props.onOpenSettings === undefined ? null : (
+            <button
+              type="button"
+              data-yunari-store-detail-settings=""
+              onClick={() => props.onOpenSettings?.("extensions")}
+              className="self-start text-xs text-muted underline hover:text-text"
+            >
+              {uiCopy.store.detail.trust.settings}
+            </button>
+          )}
+        </span>
+      ) : null}
       {/* The credit a remixed item carries: a control only when the listing
           resolved the parent, plain text otherwise. */}
       {remixOf === undefined ? null : (
@@ -392,230 +477,6 @@ export function PanelBody(props: {
             item.origin.version,
           ].join(uiCopy.store.readingSeparator)}
         </span>
-      )}
-    </span>
-  );
-}
-
-/**
- * The online half's foot reading: one of the three answers in place of
- * the library's four boxes.
- *
- * **Installed is a mark, not a control** — there is nothing to do. The check
- * carries the rationed accent and the word stays `--muted`, as the cell draws
- * it. **Install and Update post the item to the host**, disable themselves while
- * the press is in flight, and state the host's refusal beside the control.
- */
-function InstallFooter(props: {
-  readonly item: StoreItem;
-  readonly state: Exclude<InstallState, "none">;
-  readonly install: InstallControl;
-}): React.JSX.Element {
-  const { item, state, install } = props;
-
-  if (state === "installed") {
-    return (
-      <span
-        data-yunari-store-item-install={state}
-        className="flex items-center gap-[var(--space-6)] text-sm text-muted"
-      >
-        <span className="flex-none text-accent">
-          <Glyph icon={CHECK_GLYPH} size={14} />
-        </span>
-        {uiCopy.store.cell.installStates.installed}
-      </span>
-    );
-  }
-
-  const busy = install.installingIds.has(item.id);
-  const refusal =
-    install.refusal?.id === item.id ? install.refusal.message : undefined;
-  return (
-    <Fragment>
-      <button
-        type="button"
-        id="yunari-store-item-install"
-        data-yunari-store-item-install={state}
-        disabled={busy}
-        aria-busy={busy}
-        onClick={() => install.onInstall(item)}
-        className={FOOTER_BUTTON}
-      >
-        {uiCopy.store.cell.installStates[state]}
-      </button>
-      {refusal === undefined ? null : (
-        <span
-          data-yunari-store-item-install-refusal=""
-          className="max-w-[40ch] text-xs text-warn"
-        >
-          {refusal}
-        </span>
-      )}
-    </Fragment>
-  );
-}
-
-/**
- * The library half's submission: the one control that hands the theme to the
- * store, beside the four actions that keep it on this PC.
- *
- * **The flow can be longer than a press**, so the control states what a person
- * has to do next: finish signing in, the status and version once it lands, and
- * the host's own refusal otherwise.
- */
-function SubmitFooter(props: {
-  readonly item: StoreItem;
-  readonly submit: SubmitControl;
-}): React.JSX.Element {
-  const { item, submit } = props;
-  // **Only this item's own answer is drawn**, on the same rule the install
-  // footer follows: the flow lives on the region and outlives the modal.
-  const mine = submit.itemId === item.id;
-  const state = mine ? submit.state : "idle";
-  const version = mine ? submit.version : undefined;
-  const refusal = mine ? submit.refusal : undefined;
-  const status = mine ? submit.status : undefined;
-  // **A flow on another item disables this one too.** The region holds one flow
-  // at a time, and a press here would meet that guard and do nothing.
-  const busy =
-    submit.inFlight || state === "submitting" || state === "authorising";
-  const submitted = state === "submitted";
-  return (
-    <Fragment>
-      <button
-        type="button"
-        id="yunari-store-item-submit"
-        data-yunari-store-item-submit={state}
-        disabled={busy || submitted}
-        aria-busy={busy}
-        onClick={() => submit.onSubmit(item)}
-        className={FOOTER_BUTTON}
-      >
-        {state === "authorising"
-          ? uiCopy.store.submit.authorising
-          : busy
-            ? uiCopy.store.submit.busy
-            : uiCopy.store.submit.label}
-      </button>
-      {submitted && status !== undefined ? (
-        <span className="flex max-w-[40ch] flex-col gap-[var(--space-4)] text-xs text-muted">
-          <span>{uiCopy.store.submit.submitted(status)}</span>
-          {/* **The version and the state it landed in**: the level is the host's
-              answer to what changed, the status word the store's answer to what
-              happens next. */}
-          <span className="flex flex-wrap items-center gap-[var(--space-4)]">
-            {version === undefined ? null : (
-              <span data-yunari-store-item-submit-version="">
-                {uiCopy.store.submit.version(version)}
-              </span>
-            )}
-            <span
-              data-yunari-store-item-submit-status={status}
-              className="font-medium"
-            >
-              {status === "pending"
-                ? uiCopy.store.status.pending
-                : uiCopy.store.status.published}
-            </span>
-          </span>
-        </span>
-      ) : null}
-      {state === "refused" && refusal !== undefined ? (
-        <span
-          data-yunari-store-item-submit-refusal=""
-          className="max-w-[40ch] text-xs text-warn"
-        >
-          {refusal}
-        </span>
-      ) : null}
-    </Fragment>
-  );
-}
-
-/** The panel's foot: the author's command and the submission above the library's
- *  2×2 boxes, or the online half's install reading in their place. The box a
- *  build does not run is drawn disabled (R164) with its reason in the tree
- *  beside it: a disabled control is one the pointer cannot ask, so a tooltip
- *  would reach nobody. */
-export function PanelFoot(props: {
-  readonly item: StoreItem;
-  readonly install: InstallControl;
-  readonly submit: SubmitControl;
-  readonly onAction: (action: CellAction, id: string) => void;
-  readonly authorAction: "unpublish" | "republish" | undefined;
-  readonly authorPress: ((id: string) => void) | undefined;
-  /** The inline display choice, above the actions that opened it. */
-  readonly assign?: React.ReactNode;
-}): React.JSX.Element {
-  const { item, install, submit, onAction, authorAction, authorPress } = props;
-  const installState = installStateOf(item);
-  const hasCommands = authorAction !== undefined || installState === "none";
-  return (
-    <span className="flex flex-none flex-col gap-[var(--space-8)] border-t border-edge px-[var(--space-16)] py-[var(--space-12)]">
-      {props.assign === undefined ? null : (
-        <span
-          data-yunari-store-item-assign=""
-          className="flex flex-col gap-[var(--space-8)]"
-        >
-          {props.assign}
-        </span>
-      )}
-      {hasCommands ? (
-        <span className="flex flex-wrap items-center gap-[var(--space-8)]">
-          {authorAction === undefined ? null : (
-            <button
-              type="button"
-              id={`yunari-store-item-${authorAction}`}
-              data-yunari-store-item-status-action={authorAction}
-              onClick={() => authorPress?.(item.id)}
-              className={FOOTER_BUTTON}
-            >
-              {uiCopy.store.actions[authorAction]}
-            </button>
-          )}
-          {installState === "none" ? (
-            <SubmitFooter item={item} submit={submit} />
-          ) : null}
-        </span>
-      ) : null}
-      {installState !== "none" ? (
-        <InstallFooter item={item} state={installState} install={install} />
-      ) : (
-        <>
-          <span className="grid grid-cols-2 gap-[var(--space-6)]">
-            {ACTION_BOXES.map((box) => {
-              const reason = CELL_ACTION_REASONS[box.action];
-              const controlId = `yunari-store-item-${box.action}`;
-              return (
-                <ActionBox
-                  key={box.action}
-                  id={controlId}
-                  data={{ "data-yunari-store-item-action": box.action }}
-                  icon={box.icon}
-                  label={uiCopy.store.item.actions[box.action]}
-                  {...(box.destructive ? { destructive: true } : {})}
-                  disabled={reason !== undefined}
-                  {...(reason === undefined
-                    ? {}
-                    : { describedById: `${controlId}-reason` })}
-                  onClick={() => onAction(box.action, item.id)}
-                />
-              );
-            })}
-          </span>
-          {ACTION_BOXES.map((box) => {
-            const reason = CELL_ACTION_REASONS[box.action];
-            return reason === undefined ? null : (
-              <span
-                key={box.action}
-                id={`yunari-store-item-${box.action}-reason`}
-                className="sr-only"
-              >
-                {reason}
-              </span>
-            );
-          })}
-        </>
       )}
     </span>
   );

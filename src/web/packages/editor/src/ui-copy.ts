@@ -20,7 +20,7 @@ import { BUILTIN_PATH_PRESETS, type VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
 import type { ShortcutPrefix } from "./shortcut-manager/display.js";
 import type { InstallState } from "./store-mode/install-state.js";
-import type { CellAction } from "./store-mode/local-source.js";
+import type { CellAction, ThemeAction } from "./store-mode/local-source.js";
 
 /**
  * The one name per chart family, hoisted so the layer role vocabulary can
@@ -1485,11 +1485,86 @@ export const uiCopy = {
         assign: "Assign",
         export: "Export",
         delete: "Delete",
-      } satisfies Record<CellAction, string>,
+      } satisfies Record<ThemeAction, string>,
       /** The credit a remixed item carries. The name is the snapshot the
        *  document recorded, so the sentence is stable whether or not the parent
        *  is still in the index. */
       remixedFrom: (name: string): string => `Remixed from ${name}`,
+    },
+    /** The generalized detail surface: the sections a member card's item modal
+     *  adds beyond the theme's facts. One table because the words describe one
+     *  surface, whichever kind opened it. */
+    detail: {
+      members: "Members",
+      /** A collection member the author marked skippable at install. */
+      optional: "Optional",
+      partOf: "Part of",
+      /** A member row's publisher where the listing has none: a fact stated as
+       *  absent rather than an empty cell that reads as a load failure. */
+      noPublisher: "Publisher not recorded",
+      /** A collection's members and its trust block are the plan's. The loading
+       *  sentence is drawn where the plan has not answered, and a failure is
+       *  the host's own words rather than an empty list. */
+      plan: {
+        loading: "Reading members…",
+        failed: (reason: string): string =>
+          `The members could not be read: ${reason}`,
+        unavailable:
+          "This collection cannot be planned from its catalogue record.",
+        unusable: "The host answered a plan this build cannot read.",
+        /** A member the plan could not resolve. It is named rather than
+         *  dropped: an install would refuse for this member, so a detail that
+         *  omitted it would promise a collection that cannot land. */
+        missingMember: (id: string, reason: string): string =>
+          `Unavailable: ${id} — ${reason}`,
+      },
+      trust: {
+        execution: "Execution",
+        capabilities: "Capabilities",
+        devices: "Devices",
+        /** An empty wire list, which is a declaration of nothing rather than a
+         *  reading this surface could not obtain. */
+        none: "none declared",
+        /** A plan that resolved with no code member. A collection is data and
+         *  asks for no consent of its own; this is that fact, not an empty
+         *  capability list. */
+        noCode: "This collection asks for no code consent.",
+        /** A plugin whose key the extension listing does not name. The listing
+         *  is what this PC has, so the absence is stated rather than drawn as
+         *  an empty trust block. */
+        unavailable:
+          "This item's trust details are not on this PC's extension listing.",
+        /** The link into the one surface where consent and provider order
+         *  change. */
+        settings: "Manage extensions in Settings",
+      },
+      /** The wider actions' words. The four theme commands keep their own short
+       *  table (`item.actions`), and `remove` is per kind because each kind
+       *  names what leaves. */
+      actions: {
+        apply: "Apply to editor",
+        insert: "Insert",
+        enable: "Enable",
+        configure: "Configure",
+        status: "Device status",
+      } satisfies Record<Exclude<CellAction, ThemeAction | "remove">, string>,
+      remove: {
+        widget: "Remove pack",
+        shape: "Remove pack",
+        "widget-pack": "Remove pack",
+        "path-preset-pack": "Remove pack",
+        "sensor-provider": "Remove plugin",
+        "data-source": "Remove plugin",
+        "asset-source": "Remove plugin",
+        "panel-driver": "Remove plugin",
+        plugin: "Remove plugin",
+        collection: "Remove members",
+        fallback: "Remove",
+      } as Readonly<Record<string, string>>,
+      /** A collection's install state is count over its includes; a register
+       *  that has not answered is stated rather than read as "not installed". */
+      collectionStateUnavailable:
+        "This collection's install state could not be read.",
     },
     /** The modal's pill groups, which are the facet's own content under the name
      *  the surface gives it: the row names what a filter narrows by (*Sensors*,
@@ -1589,7 +1664,7 @@ export const uiCopy = {
         assign: "Assign to display",
         export: "Export theme package",
         delete: "Delete",
-      } satisfies Record<CellAction, string>,
+      } satisfies Record<ThemeAction, string>,
       /** The online half's three answers, keyed by `InstallState` less `none`
        *  — a library item has no catalogue to be installed from, so it draws
        *  the local half's four actions rather than one of these. */

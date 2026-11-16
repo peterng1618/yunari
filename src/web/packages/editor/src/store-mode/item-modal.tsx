@@ -1,8 +1,20 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+import type { InstalledExtension } from "@yunari/extension-api";
+import type {
+  CatalogueOrigin,
+  CollectionPlan,
+  MemberRecord,
+} from "@yunari/renderer-core";
 import type * as React from "react";
+import { useEffect, useState } from "react";
+import { collectionStateOf } from "../library-mode/cards.js";
 import { uiCopy } from "../ui-copy.js";
+import { collectionsOf } from "./cell-actions.js";
+import { readCollectionPlan } from "./collection-plan.js";
 import type { InstallControl } from "./install-item.js";
-import { PanelBody, PanelFoot, PanelHeader } from "./item-panel.js";
+import type { DetailPlanState } from "./item-detail.js";
+import { PanelFoot } from "./item-foot.js";
+import { PanelBody, PanelHeader } from "./item-panel.js";
 import type { CellAction, StoreItem } from "./local-source.js";
 import type { SubmitControl } from "./use-submit.js";
 
@@ -36,8 +48,37 @@ function stageReading(item: StoreItem): string | undefined {
   return `${width} × ${height}${uiCopy.store.readingSeparator}${uiCopy.assets.preview.fit}`;
 }
 
+/** The sentence a rejection carries, or the value's own text when it is not an
+ *  `Error`. A plan failure is the host's words where it gave them, and this is
+ *  the seam that keeps a `TypeError` from becoming an empty trust list. */
+function messageOf(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
 export function ItemModal(props: {
   readonly item: StoreItem;
+  /** The member card that opened this modal, or `undefined` when the card is
+   *  the listing's own. The member's kind is what selects the actions and the
+   *  word its badge carries; the listing's kind answers only when there is no
+   *  member. */
+  readonly member?: MemberRecord;
+  /** The catalogue listing, for the collections an item belongs to. "Part of"
+   *  is derived from each collection's `includes`, never from a field on the
+   *  item. */
+  readonly catalogue?: readonly StoreItem[];
+  /** This PC's installed extensions. A code member's trust block reads what is
+   *  actually installed, not what a package would ask for. */
+  readonly extensions?: readonly InstalledExtension[];
+  /** This PC's origin register, for a collection's installed count. */
+  readonly origins?: readonly CatalogueOrigin[];
+  /** The collection plan read. The modal calls it when it opens, never while a
+   *  grid renders; a case can hand its own reader to keep the wire out of a
+   *  DOM test. */
+  readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
+  /** Opens Settings on the Extensions page — the one place consent and provider
+   *  order change. Absent on a surface that wired no door, which draws no link
+   *  rather than a dead one. */
+  readonly onOpenSettings?: (page: "extensions") => void;
   /** The style tags the vocabulary holds, built from the listing by the surface
    *  that owns it (`settledTags`) — this modal reads the set and never the
    *  listing, so it cannot become a second source of truth about the library. */
@@ -70,6 +111,45 @@ export function ItemModal(props: {
   readonly onRepublish?: (id: string) => void;
 }): React.JSX.Element {
   const { item, onClose, onAction, install, submit } = props;
+  const kind = props.member?.kind ?? item.kind;
+  const readPlan = props.readPlan ?? readCollectionPlan;
+  const [plan, setPlan] = useState<DetailPlanState | undefined>(
+    kind === "collection" ? { status: "loading" } : undefined,
+  );
+  // **The plan is read when this surface opens**, which is the only moment a
+  // collection's detail exists; a grid render never mounts the modal, so it
+  // never pays for a read it cannot show.
+  useEffect(() => {
+    if (kind !== "collection") {
+      setPlan(undefined);
+      return undefined;
+    }
+    let live = true;
+    setPlan({ status: "loading" });
+    readPlan(item).then(
+      (answer) => {
+        if (live) setPlan({ status: "ready", plan: answer });
+      },
+      (failure: unknown) => {
+        if (live) setPlan({ status: "failed", message: messageOf(failure) });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [kind, item, readPlan]);
+  const collections = collectionsOf(
+    props.catalogue ?? [],
+    item.origin?.catalogueId ?? item.id,
+  );
+  const extension = props.extensions?.find(
+    (candidate) => candidate.key === item.id,
+  );
+  const collectionState =
+    kind === "collection" && props.origins !== undefined
+      ? collectionStateOf(item, props.origins)
+      : undefined;
+  const collectionStateRead = props.origins !== undefined;
   // The one command a state allows, only where the region wired it.
   const authorAction =
     item.status === "published" && props.onUnpublish !== undefined
@@ -157,15 +237,23 @@ export function ItemModal(props: {
             data-yunari-store-item-panel=""
             className="flex w-[var(--store-item-panel-width)] flex-none flex-col border-l border-edge bg-panel"
           >
-            <PanelHeader item={item} onClose={onClose} />
+            <PanelHeader item={item} kind={kind} onClose={onClose} />
             <PanelBody
               item={item}
+              kind={kind}
               vocabulary={props.vocabulary}
               remixParent={props.remixParent}
               onOpenItem={props.onOpenItem}
+              plan={plan}
+              extension={extension}
+              collections={collections}
+              onOpenSettings={props.onOpenSettings}
             />
             <PanelFoot
               item={item}
+              kind={kind}
+              collectionState={collectionState}
+              collectionStateRead={collectionStateRead}
               install={install}
               submit={submit}
               onAction={onAction}

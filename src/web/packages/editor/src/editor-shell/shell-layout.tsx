@@ -921,6 +921,10 @@ export function createShellLayout(
                 state={libraryState}
                 onState={onLibraryState}
                 onStatus={setStoreStatus}
+                onOpenSettings={(page) => {
+                  setSettingsPage(page);
+                  onModeChange("settings");
+                }}
                 onOpenTheme={(id) => {
                   void store.bridge?.session.openLibraryTheme(id, () =>
                     onModeChange("editor"),

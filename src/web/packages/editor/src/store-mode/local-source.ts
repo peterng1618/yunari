@@ -118,14 +118,33 @@ export interface ItemSource {
 }
 
 /**
- * The four things a cell can do, and the one callback they travel through.
+ * The commands a card and the item's own surface can offer.
  *
- * One callback rather than four props, and rather than an `onOpen`: the cell
- * draws four actions, so a callback per action would be four props a caller can
- * half-wire, and an `onOpen` alone cannot express the other three. The plan's
- * Step 3 requires all four, and the facts band carries all four.
+ * **One union for every kind**, because the action id is the seam a surface
+ * reports through and the kind decides which subset it draws
+ * (`actionsFor`). A per-kind union would make the callback's parameter the
+ * item's kind rather than the act.
+ *
+ * `remove` is the one removal, whatever the kind calls it: a widget pack, a
+ * plugin and a collection all take the same id, and the copy table names the
+ * word each kind reads.
  */
-export type CellAction = "open" | "assign" | "export" | "delete";
+export type CellAction =
+  | "open"
+  | "assign"
+  | "export"
+  | "delete"
+  | "apply"
+  | "insert"
+  | "enable"
+  | "configure"
+  | "status"
+  | "remove";
+
+/** The four commands a theme's card and foot drew before the modal covered
+ *  every kind. Their copy records stay total over this narrower set, because
+ *  their words are the theme surface's and not the generalized foot's. */
+export type ThemeAction = "open" | "assign" | "export" | "delete";
 
 /** What the facets are narrowed by: one facet id, and the values chosen in it.
  *  A facet that is absent, or present with nothing chosen, is "any". */

@@ -31,7 +31,7 @@ import { CELL_ACTION_REASONS } from "./cell-actions.js";
 import type { InstallControl } from "./install-item.js";
 import { type InstallState, installStateOf } from "./install-state.js";
 import { justifiedRows } from "./justified-rows.js";
-import type { CellAction, StoreItem } from "./local-source.js";
+import type { CellAction, StoreItem, ThemeAction } from "./local-source.js";
 import { StoreStatusBadge } from "./status-badge.js";
 import type { SubmitControl } from "./use-submit.js";
 
@@ -60,9 +60,10 @@ const CELL_ACTIONS = [
 const cellActionId = (itemId: string, action: CellAction): string =>
   `yunari-store-cell-${itemId}-${action}`;
 
-/** One glyph per action, as a **total** lookup: an action added to `CellAction`
- *  without a mark fails to compile here rather than drawing a nameless square. */
-const CELL_ACTION_GLYPHS: Readonly<Record<CellAction, LucideIcon>> = {
+/** One glyph per theme action, as a **total** lookup: an action added to the
+ *  theme vocabulary without a mark fails to compile here rather than drawing a
+ *  nameless square. The wider kinds' marks live on the item panel. */
+const CELL_ACTION_GLYPHS: Readonly<Record<ThemeAction, LucideIcon>> = {
   open: OPEN_ITEM_GLYPH,
   assign: ASSIGN_ITEM_GLYPH,
   export: EXPORT_ITEM_GLYPH,

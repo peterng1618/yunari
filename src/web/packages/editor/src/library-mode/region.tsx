@@ -237,6 +237,10 @@ export function LibraryRegion(props: {
   readonly client?: ThemeLibraryClient | undefined;
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  /** Opens Settings on Extensions, the trust page a code member's detail links
+   *  to. The shell owns the mode and the settings page, so the region passes
+   *  the press through rather than moving either. */
+  readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
   readonly onThemeDeleted?: ((id: string) => void) | undefined;
   readonly onThemePublished?: ((id: string) => void) | undefined;
 }): React.JSX.Element {
@@ -303,6 +307,9 @@ export function LibraryRegion(props: {
                 {...(props.onThemePublished === undefined
                   ? {}
                   : { onThemePublished: props.onThemePublished })}
+                {...(props.onOpenSettings === undefined
+                  ? {}
+                  : { onOpenSettings: props.onOpenSettings })}
               />
             ) : props.page === "submissions" ? (
               // Task 12 builds the author's listing. Until then the page says

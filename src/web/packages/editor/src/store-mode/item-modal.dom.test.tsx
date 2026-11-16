@@ -18,9 +18,12 @@
  * A.4's review made for the facet predicate, which the plan had put in the
  * gallery's file.
  */
+import type { InstalledExtension } from "@yunari/extension-api";
 import {
   type CatalogueOrigin,
+  type CollectionPlan,
   DASHBOARD_THEME_KIND,
+  type MemberRecord,
 } from "@yunari/renderer-core";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -554,10 +557,10 @@ it("names the item in the panel and writes its actions in the short words", asyn
     actions.map((action) => action.textContent?.trim()),
     "the actions are not the short words in its own order",
   ).toEqual([
-    uiCopy.store.item.actions.delete,
-    uiCopy.store.item.actions.export,
-    uiCopy.store.item.actions.assign,
     uiCopy.store.item.actions.open,
+    uiCopy.store.item.actions.assign,
+    uiCopy.store.item.actions.export,
+    uiCopy.store.item.actions.delete,
   ]);
 });
 
@@ -590,7 +593,11 @@ it("gives Delete the destructive marker and leaves it live", async () => {
     expect(
       action.querySelector("span")?.textContent,
       `${name}: the box does not hold one word`,
-    ).toBe(uiCopy.store.item.actions[name as CellAction]);
+    ).toBe(
+      uiCopy.store.item.actions[
+        name as "open" | "assign" | "export" | "delete"
+      ],
+    );
     expect(
       action.className,
       `${name}: the box takes an accent fill`,
@@ -654,15 +661,15 @@ it("runs the footer's four actions", async () => {
     );
   }
 
-  for (const action of ["delete", "export", "assign", "open"] as const) {
+  for (const action of ["open", "assign", "export", "delete"] as const) {
     await act(async () => actionButton(action).click());
   }
 
   expect(ran, "the four actions did not all report").toEqual([
-    "delete",
-    "export",
-    "assign",
     "open",
+    "assign",
+    "export",
+    "delete",
   ]);
 });
 
@@ -1387,4 +1394,471 @@ it("states a removed item's permanence even when the store gave no reason", asyn
     document.body.textContent,
     "a removed item with no reason does not say it cannot come back",
   ).toContain(uiCopy.store.status.removedPermanent);
+});
+
+/** One listing of another kind: the theme fixture with the fields that kind
+ *  reads overridden. A case that is about widgets, a plugin or a collection
+ *  varies only the fields that make it one. */
+function kindItem(kind: string, overrides: Partial<StoreItem> = {}): StoreItem {
+  return { ...fixtureItem(LANDSCAPE), kind, ...overrides };
+}
+
+/** What the detail surface needs beyond the library item it already took. */
+interface DetailOptions {
+  readonly member?: MemberRecord;
+  readonly catalogue?: readonly StoreItem[];
+  readonly extensions?: readonly InstalledExtension[];
+  readonly origins?: readonly CatalogueOrigin[];
+  readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
+  readonly onOpenSettings?: (page: "extensions") => void;
+  readonly onAction?: (action: CellAction, id: string) => void;
+}
+
+/** The item modal over a non-theme item, with the facts each section reads. */
+function detailModal(
+  item: StoreItem,
+  options: DetailOptions = {},
+): ReactElement {
+  return (
+    <ItemModal
+      item={item}
+      vocabulary={[]}
+      onClose={() => {}}
+      onAction={options.onAction ?? (() => {})}
+      install={NO_INSTALL}
+      submit={NO_SUBMIT}
+      {...options}
+    />
+  );
+}
+
+/** Let the plan read's promise settle inside React's act scope. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+/** The action ids the foot drew, in its own order. */
+function actionNames(): readonly string[] {
+  return Array.from(
+    document.body.querySelectorAll<HTMLElement>(
+      "[data-yunari-store-item-action]",
+    ),
+  ).map((action) => action.getAttribute("data-yunari-store-item-action") ?? "");
+}
+
+/** One node by its marker, or a failure naming what was missing. */
+function detailNode(selector: string, what: string): HTMLElement {
+  return must(document.body.querySelector<HTMLElement>(selector), what);
+}
+
+/** The member rows' names and publishers, as the detail lists them. */
+function memberRows(): readonly {
+  readonly name: string;
+  readonly publisher: string;
+}[] {
+  return Array.from(
+    document.body.querySelectorAll<HTMLElement>(
+      "[data-yunari-store-detail-member]",
+    ),
+  ).map((row) => ({
+    name:
+      row
+        .querySelector("[data-yunari-store-detail-member-name]")
+        ?.textContent?.trim() ?? "",
+    publisher:
+      row
+        .querySelector("[data-yunari-store-detail-member-publisher]")
+        ?.textContent?.trim() ?? "",
+  }));
+}
+
+/** One installed plugin, as the extension listing serves it. The wire values
+ *  are the ones the trust block must print verbatim. */
+const EXTENSION: InstalledExtension = {
+  key: "acme/hwinfo",
+  name: "HWiNFO bridge",
+  publisher: "acme",
+  version: "2.1.0",
+  execution: "trusted-worker",
+  capabilities: ["sensor:provide", "usb:device"],
+  contributions: {
+    sensorProviders: [{ id: "hwinfo", label: "HWiNFO" }],
+  },
+  devices: ["1c2d:3e4f"],
+  consent: "granted",
+  fingerprint: "a1b2c3",
+};
+
+/** A collection's plan: one data member and one code member, whose consent is
+ *  the plugin's own declaration. */
+const PLAN: CollectionPlan = {
+  members: [
+    {
+      id: "theme-uuid",
+      kind: DASHBOARD_THEME_KIND,
+      name: "Office wall",
+      version: "1.3.0",
+      bytes: 1024,
+      publisher: "huyng",
+      optional: false,
+    },
+    {
+      id: "plugin-uuid",
+      kind: "plugin",
+      name: "HWiNFO bridge",
+      version: "2.1.0",
+      bytes: 2048,
+      publisher: "acme",
+      optional: false,
+      consent: {
+        key: "local/hwinfo",
+        name: "HWiNFO bridge",
+        execution: "trusted-worker",
+        capabilities: ["sensor:provide", "usb:device"],
+        devices: ["1c2d:3e4f"],
+      },
+    },
+  ],
+  missing: [],
+  totalBytes: 3072,
+};
+
+/** A collection listing with the catalogue facts the plan route needs. */
+function collectionItem(overrides: Partial<StoreItem> = {}): StoreItem {
+  return kindItem("collection", {
+    id: "collection-uuid",
+    name: "Starter kit",
+    members: [],
+    includes: ["theme-uuid", "plugin-uuid"],
+    author: "huyng",
+    catalogue: catalogueFacts({
+      id: "collection-uuid",
+      publisher: "huyng",
+      sha256: "a".repeat(64),
+      bytes: 4096,
+    }),
+    ...overrides,
+  });
+}
+
+/** A widget pack with two members, published by one account. */
+function widgetPack(): StoreItem {
+  return kindItem("widget-pack", {
+    id: "pack-uuid",
+    name: "System pack",
+    author: undefined,
+    members: [
+      { id: "cpu", kind: "widget", name: "CPU gauge" },
+      { id: "ram", kind: "widget", name: "RAM gauge" },
+    ],
+    catalogue: catalogueFacts({ id: "pack-uuid", publisher: "huyng" }),
+  });
+}
+
+/** A plugin item, with the contribution the open card names. */
+function pluginItem(): StoreItem {
+  return kindItem("plugin", {
+    id: EXTENSION.key,
+    name: EXTENSION.name,
+    author: EXTENSION.publisher,
+    members: [{ id: "hwinfo", kind: "sensor-provider", name: "HWiNFO" }],
+  });
+}
+
+const WIDGET: MemberRecord = { id: "cpu", kind: "widget", name: "CPU gauge" };
+const PANEL_DRIVER: MemberRecord = {
+  id: "z-panel",
+  kind: "panel-driver",
+  name: "Z panel",
+};
+const SENSOR_PROVIDER: MemberRecord = {
+  id: "hwinfo",
+  kind: "sensor-provider",
+  name: "HWiNFO",
+};
+
+/**
+ * **The foot draws the actions the open member's kind allows, and no others.**
+ * A widget inserts; a panel driver assigns and reports its device's status; a
+ * sensor provider is enabled and configured. A collection is the one kind whose
+ * install press replaces the library actions (the next case).
+ */
+it("draws only the actions its member kind allows", async () => {
+  await mount(detailModal(widgetPack(), { member: WIDGET }));
+  expect(
+    actionNames(),
+    "a widget does not draw Insert and Remove pack",
+  ).toEqual(["insert", "remove"]);
+  expect(
+    actionNames(),
+    "a widget drew the library's open action",
+  ).not.toContain("open");
+
+  const driver = kindItem("plugin", {
+    id: "acme/panel",
+    name: "Panel bridge",
+    members: [PANEL_DRIVER],
+  });
+  await mount(detailModal(driver, { member: PANEL_DRIVER }));
+  expect(
+    actionNames(),
+    "a panel driver does not assign and report its device's status",
+  ).toEqual(["assign", "status", "remove"]);
+
+  await mount(detailModal(pluginItem(), { member: SENSOR_PROVIDER }));
+  for (const action of ["enable", "configure", "remove"]) {
+    expect(
+      actionNames(),
+      `a sensor provider does not draw ${action}`,
+    ).toContain(action);
+  }
+
+  await mount(detailModal(collectionItem(), { readPlan: async () => PLAN }));
+  await settle();
+  expect(
+    actionNames(),
+    "a collection drew the library's open action",
+  ).not.toContain("open");
+});
+
+/**
+ * **A member is named with its real publisher**, so a collection can never
+ * imply endorsement by one of its members. A pack's members carry the pack's
+ * publisher; a collection's plan carries each member's own.
+ */
+it("lists members and their publishers", async () => {
+  await mount(detailModal(widgetPack(), { member: WIDGET }));
+  expect(
+    memberRows(),
+    "the pack's members are not listed with a publisher",
+  ).toEqual([
+    { name: "CPU gauge", publisher: "@huyng" },
+    { name: "RAM gauge", publisher: "@huyng" },
+  ]);
+
+  await mount(detailModal(collectionItem(), { readPlan: async () => PLAN }));
+  await settle();
+  expect(
+    memberRows(),
+    "a collection's members are not listed with each member's own publisher",
+  ).toEqual([
+    { name: "Office wall", publisher: "@huyng" },
+    { name: "HWiNFO bridge", publisher: "@acme" },
+  ]);
+});
+
+/**
+ * **"Part of" is derived from the catalogue's collection entries**, never a
+ * reverse field a package would have to carry: an item is in a collection when
+ * that collection's `includes` names it.
+ */
+it("lists the collections an item belongs to", async () => {
+  const collection = kindItem("collection", {
+    id: "collection-uuid",
+    name: "Starter kit",
+    members: [],
+    includes: ["item-uuid"],
+  });
+  await mount(
+    detailModal(
+      { ...onlineItem(), id: "item-uuid" },
+      { catalogue: [collection] },
+    ),
+  );
+
+  expect(
+    detailNode(
+      "[data-yunari-store-detail-collection]",
+      "collection membership",
+    ).textContent?.trim(),
+    "the item does not name the collection that includes it",
+  ).toBe("Starter kit");
+});
+
+/**
+ * **A code member's trust block prints the wire's own words**: the execution
+ * profile, the capabilities and the device ids. An installed plugin's block
+ * reads the extension listing, because that is what this PC actually has.
+ */
+it("draws a code member's execution, capabilities and devices", async () => {
+  await mount(
+    detailModal(pluginItem(), {
+      member: SENSOR_PROVIDER,
+      extensions: [EXTENSION],
+    }),
+  );
+  const installed = detailNode(
+    "[data-yunari-store-detail-trust]",
+    "installed plugin trust block",
+  );
+  expect(installed.textContent, "the execution profile is missing").toContain(
+    EXTENSION.execution,
+  );
+  for (const capability of EXTENSION.capabilities) {
+    expect(
+      installed.textContent,
+      `the ${capability} capability is missing`,
+    ).toContain(capability);
+  }
+  for (const device of EXTENSION.devices) {
+    expect(
+      installed.textContent,
+      `the ${device} device id is missing`,
+    ).toContain(device);
+  }
+
+  await mount(detailModal(collectionItem(), { readPlan: async () => PLAN }));
+  await settle();
+  const planConsent = detailNode(
+    "[data-yunari-store-detail-trust]",
+    "collection trust block",
+  );
+  expect(
+    planConsent.textContent,
+    "a collection's code member does not carry its execution profile",
+  ).toContain("trusted-worker");
+  expect(
+    planConsent.textContent,
+    "a collection's code member does not carry its capabilities",
+  ).toContain("sensor:provide");
+  expect(
+    planConsent.textContent,
+    "a collection's code member does not carry its device ids",
+  ).toContain("1c2d:3e4f");
+});
+
+/**
+ * **The trust block links to Settings → Extensions**, the only place consent
+ * and provider order change. The link is a real button and reports the page it
+ * opens; a surface that wired no setting door draws no link at all rather than
+ * one that does nothing.
+ */
+it("links the trust block to Settings Extensions", async () => {
+  const opened: string[] = [];
+  await mount(
+    detailModal(pluginItem(), {
+      member: SENSOR_PROVIDER,
+      extensions: [EXTENSION],
+      onOpenSettings: (page) => opened.push(page),
+    }),
+  );
+
+  const link = detailNode(
+    "[data-yunari-store-detail-settings]",
+    "Settings Extensions link",
+  );
+  expect(link.tagName, "the trust block's link is not a real button").toBe(
+    "BUTTON",
+  );
+  await act(async () => link.click());
+  expect(opened, "the link does not open the Extensions page").toEqual([
+    "extensions",
+  ]);
+
+  await mount(
+    detailModal(pluginItem(), {
+      member: SENSOR_PROVIDER,
+      extensions: [EXTENSION],
+    }),
+  );
+  expect(
+    document.body.querySelector("[data-yunari-store-detail-settings]"),
+    "a surface with no setting door drew a link that does nothing",
+  ).toBeNull();
+});
+
+/**
+ * **A collection's install state is its includes', so its foot draws Install or
+ * Update in place of the four library actions.** A partial install reads its
+ * count and offers Update; no include installed offers Install.
+ */
+it("draws Collection Install and Update instead of the four library actions", async () => {
+  const collection = collectionItem();
+
+  await mount(
+    detailModal(collection, { origins: [], readPlan: async () => PLAN }),
+  );
+  await settle();
+  expect(actionNames(), "a collection drew the four library actions").toEqual([
+    "remove",
+  ]);
+  expect(
+    detailNode(
+      '[data-yunari-store-collection-install="install"]',
+      "collection Install control",
+    ).textContent?.trim(),
+    "an absent collection does not offer Install",
+  ).toBe(uiCopy.store.cell.installStates.install);
+
+  await mount(
+    detailModal(collection, {
+      origins: [
+        {
+          kind: DASHBOARD_THEME_KIND,
+          catalogueId: "theme-uuid",
+          version: "1.3.0",
+          installedAt: "2026-10-14T00:00:00.000Z",
+        },
+      ],
+      readPlan: async () => PLAN,
+    }),
+  );
+  await settle();
+  expect(
+    detailNode(
+      '[data-yunari-store-collection-install="update"]',
+      "collection Update control",
+    ).textContent?.trim(),
+    "a partial collection does not offer Update",
+  ).toBe(uiCopy.store.cell.installStates.update);
+  expect(
+    document.body.textContent,
+    "a partial collection does not read how many members it holds",
+  ).toContain(uiCopy.store.cell.pack.installed(1, 2));
+  expect(
+    document.body.querySelector('[data-yunari-store-item-action="open"]'),
+    "a collection drew the library's open action",
+  ).toBeNull();
+});
+
+/**
+ * **A collection's trust block reads lazily and states what it does not know.**
+ * The plan is read when the modal opens, never while a grid renders; a failure
+ * is the host's sentence rather than an empty capability list.
+ */
+it("states a collection plan's loading and failure instead of an empty trust list", async () => {
+  await mount(
+    detailModal(collectionItem(), {
+      readPlan: () => new Promise<CollectionPlan>(() => {}),
+    }),
+  );
+  expect(
+    detailNode(
+      '[data-yunari-store-detail-plan="loading"]',
+      "collection plan loading state",
+    ).textContent,
+    "a plan still in flight reads as an empty member list",
+  ).toContain(uiCopy.store.detail.plan.loading);
+
+  await mount(
+    detailModal(collectionItem(), {
+      readPlan: async () => {
+        throw new Error("The host answered 500.");
+      },
+    }),
+  );
+  await settle();
+  expect(
+    detailNode(
+      '[data-yunari-store-detail-plan="failed"]',
+      "collection plan failure",
+    ).textContent,
+    "a failed plan is not stated in the host's own words",
+  ).toContain(uiCopy.store.detail.plan.failed("The host answered 500."));
+  expect(
+    document.body.querySelector("[data-yunari-store-detail-capability]"),
+    "a failed plan fabricated a capability list",
+  ).toBeNull();
 });
