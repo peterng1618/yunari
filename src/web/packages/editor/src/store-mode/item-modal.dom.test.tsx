@@ -1408,7 +1408,12 @@ function kindItem(kind: string, overrides: Partial<StoreItem> = {}): StoreItem {
 /** What the detail surface needs beyond the library item it already took. */
 interface DetailOptions {
   readonly member?: MemberRecord;
-  readonly catalogue?: readonly StoreItem[];
+  readonly collections?: readonly StoreItem[];
+  readonly collectionsFailure?: {
+    readonly message: string;
+    readonly onRetry: () => void;
+  };
+  readonly collectionsLoading?: boolean;
   readonly extensions?: readonly ExtensionRow[];
   readonly extensionsFailure?: { readonly onRetry: () => void };
   readonly origins?: readonly CatalogueOrigin[];
@@ -1668,7 +1673,7 @@ it("lists the collections an item belongs to", async () => {
   await mount(
     detailModal(
       { ...onlineItem(), id: "item-uuid" },
-      { catalogue: [collection] },
+      { collections: [collection] },
     ),
   );
 
@@ -1679,6 +1684,44 @@ it("lists the collections an item belongs to", async () => {
     ).textContent?.trim(),
     "the item does not name the collection that includes it",
   ).toBe("Starter kit");
+});
+
+/**
+ * **A failed collections read is not "belongs to none."** The section states
+ * the read failed and offers it again; drawing nothing would assert a
+ * membership the surface never obtained.
+ */
+it("states a failed collections read instead of drawing no membership", async () => {
+  const retried: number[] = [];
+  await mount(
+    detailModal(onlineItem(), {
+      collectionsFailure: {
+        message: uiCopy.store.detail.partOfFailed,
+        onRetry: () => retried.push(1),
+      },
+    }),
+  );
+
+  const failure = detailNode(
+    '[data-yunari-store-detail-part-of-state="failed"]',
+    "collections failure",
+  );
+  expect(
+    failure.textContent,
+    "a failed collections read is not stated",
+  ).toContain(uiCopy.store.detail.partOfFailed);
+  expect(
+    document.body.querySelector("[data-yunari-store-detail-part-of]"),
+    "a failed collections read drew an empty Part of section",
+  ).toBeNull();
+
+  await act(async () =>
+    detailNode(
+      "[data-yunari-store-detail-collections-retry]",
+      "collections retry",
+    ).click(),
+  );
+  expect(retried, "the failure's retry did not report the press").toEqual([1]);
 });
 
 /**

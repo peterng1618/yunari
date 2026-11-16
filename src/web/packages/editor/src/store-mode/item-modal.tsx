@@ -62,10 +62,16 @@ export function ItemModal(props: {
    *  word its badge carries; the listing's kind answers only when there is no
    *  member. */
   readonly member?: MemberRecord;
-  /** The catalogue listing, for the collections an item belongs to. "Part of"
-   *  is derived from each collection's `includes`, never from a field on the
-   *  item. */
-  readonly catalogue?: readonly StoreItem[];
+  /** The catalogue's collection entries. "Part of" is derived from each
+   *  collection's `includes`, never from a field on the item. */
+  readonly collections?: readonly StoreItem[];
+  /** The collections read did not answer. Degraded membership is stated rather
+   *  than drawn as an item that belongs to none. */
+  readonly collectionsFailure?:
+    | { readonly message: string; readonly onRetry: () => void }
+    | undefined;
+  /** The collections read is in flight. */
+  readonly collectionsLoading?: boolean | undefined;
   /** This PC's installed extensions. A code member's trust block reads what is
    *  actually installed, not what a package would ask for. Rows carry the
    *  catalogue id an installed copy recorded, which is how an online plugin's
@@ -151,8 +157,8 @@ export function ItemModal(props: {
       live = false;
     };
   }, [kind, item, readPlan, planAttempt]);
-  const collections = collectionsOf(
-    props.catalogue ?? [],
+  const partOf = collectionsOf(
+    props.collections ?? [],
     item.origin?.catalogueId ?? item.id,
   );
   /** **An installed catalogue copy is keyed by its plugin key, not by the
@@ -272,7 +278,9 @@ export function ItemModal(props: {
               onRetryPlan={() => setPlanAttempt((current) => current + 1)}
               extension={extension}
               trustFailure={props.extensionsFailure}
-              collections={collections}
+              collections={partOf}
+              collectionsFailure={props.collectionsFailure}
+              collectionsLoading={props.collectionsLoading ?? false}
               onOpenSettings={props.onOpenSettings}
             />
             <PanelFoot

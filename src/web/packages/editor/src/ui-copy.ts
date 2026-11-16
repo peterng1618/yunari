@@ -1500,6 +1500,10 @@ export const uiCopy = {
       /** A collection member the author marked skippable at install. */
       optional: "Optional",
       partOf: "Part of",
+      /** Membership reads the session's collection entries; a read in flight or
+       *  refused is stated rather than drawn as an item that belongs to none. */
+      partOfLoading: "Reading collections…",
+      partOfFailed: "The collections this item belongs to could not be read.",
       /** A member row's publisher where the listing has none: a fact stated as
        *  absent rather than an empty cell that reads as a load failure. */
       noPublisher: "Publisher not recorded",

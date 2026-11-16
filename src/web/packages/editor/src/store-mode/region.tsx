@@ -18,6 +18,7 @@ import {
 } from "../editor-shell/grid-density.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
 import type { StoreCard } from "../library-mode/cards.js";
+import type { CollectionsRead } from "../library-mode/sources.js";
 import { fileNameFor, serializeThemePackage } from "../persist.js";
 import { downloadBytes } from "../persistence-manager/index.js";
 import {
@@ -515,6 +516,10 @@ export function StoreRegion(props: {
    *  owns the mode and the settings page, so the region only reports the
    *  press. */
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
+  /** The Library session's collection entries, for the modal's "Part of". */
+  readonly collections?: CollectionsRead | undefined;
+  /** A detail is opening, so a session-scoped read it needs may start. */
+  readonly onDetailOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [innerTab, setInnerTab] = useState<StoreTab>("local");
   const tab = props.tab ?? innerTab;
@@ -1075,7 +1080,10 @@ export function StoreRegion(props: {
             items={body.items}
             density={level}
             onAction={onAction}
-            onOpenItem={(card) => setOpenId(card.listing.id)}
+            onOpenItem={(card) => {
+              props.onDetailOpen?.();
+              setOpenId(card.listing.id);
+            }}
             install={install.control}
             submit={submit.control}
           />
@@ -1149,6 +1157,16 @@ export function StoreRegion(props: {
       {openItem === undefined ? null : (
         <ItemModal
           item={openItem}
+          collections={props.collections?.entries ?? []}
+          collectionsLoading={props.collections?.loading ?? false}
+          {...(props.collections?.failed === true
+            ? {
+                collectionsFailure: {
+                  message: uiCopy.store.detail.partOfFailed,
+                  onRetry: props.collections.retry,
+                },
+              }
+            : {})}
           // The vocabulary is the listing's, built here because the listing is
           // this surface's: the modal reads the set and never the items.
           vocabulary={settledTags(listed ?? [], openItem)}
@@ -1160,7 +1178,12 @@ export function StoreRegion(props: {
           install={install.control}
           submit={submit.control}
           {...(tab === "online"
-            ? { onOpenItem: (card: StoreCard) => setOpenId(card.listing.id) }
+            ? {
+                onOpenItem: (card: StoreCard) => {
+                  props.onDetailOpen?.();
+                  setOpenId(card.listing.id);
+                },
+              }
             : {})}
           {...(remixParent === undefined ? {} : { remixParent })}
           {...(inlineAssign

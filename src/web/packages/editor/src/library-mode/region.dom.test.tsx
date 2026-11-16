@@ -615,6 +615,112 @@ it("opens a member's detail from its card", async () => {
   ).toContain("Insert in canvas");
 });
 
+/**
+ * **"Part of" reads the session's collection entries, not the page's rows.**
+ * The Widgets page filters collections out of its own listing, so membership
+ * can only be answered by the collections source the region reads when a
+ * detail first opens.
+ */
+it("lists a collection an item belongs to from another page", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [
+        CATALOGUE,
+        () =>
+          indexOf([
+            entry(
+              "widget-pack",
+              "11111111-1111-4111-8111-111111111111",
+              "System pack",
+              [{ id: "cpu", kind: "widget", name: "CPU gauge" }],
+            ),
+            entry(
+              "collection",
+              "22222222-2222-4222-8222-222222222222",
+              "Starter kit",
+              [],
+              { includes: ["11111111-1111-4111-8111-111111111111"] },
+            ),
+          ]),
+      ],
+      ["/api/widget-packs", () => json({ packs: [] })],
+    ]),
+  );
+  const container = await mountHarness("widgets");
+  await waitForCells(container, ["System pack"]);
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "cell name press",
+    ).click(),
+  );
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector(
+        '[data-yunari-store-detail-collection="22222222-2222-4222-8222-222222222222"]',
+      )?.textContent,
+      "the item does not name the collection that includes it",
+    ).toBe("Starter kit"),
+  );
+});
+
+/**
+ * **A failed collections read is stated, not read as no membership.** The
+ * page's own catalogue read answered, so the modal opens; the session's
+ * collection read did not, and the Part of section says so with a retry.
+ */
+it("states a failed collections read instead of claiming no membership", async () => {
+  let catalogueReads = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith(CATALOGUE)) {
+        catalogueReads += 1;
+        if (catalogueReads === 1) {
+          return indexOf([
+            entry("widget-pack", "pack-uuid", "System pack", [
+              { id: "cpu", kind: "widget", name: "CPU gauge" },
+            ]),
+          ]);
+        }
+        return new Response("", { status: 500 });
+      }
+      if (url.startsWith("/api/widget-packs")) return json({ packs: [] });
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch,
+  );
+  const container = await mountHarness("widgets");
+  await waitForCells(container, ["System pack"]);
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "cell name press",
+    ).click(),
+  );
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector(
+        '[data-yunari-store-detail-part-of-state="failed"]',
+      )?.textContent,
+      "a failed collections read is not stated",
+    ).toContain(uiCopy.store.detail.partOfFailed),
+  );
+  expect(
+    document.body.querySelector("[data-yunari-store-detail-part-of]"),
+    "a failed collections read drew an empty Part of section",
+  ).toBeNull();
+});
+
 it("does not claim My submissions is empty while its page is unbuilt", async () => {
   vi.stubGlobal(
     "fetch",

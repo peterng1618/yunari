@@ -305,6 +305,11 @@ export function PanelBody(props: {
    *  installed", so the block states it and offers the read again. */
   readonly trustFailure: { readonly onRetry: () => void } | undefined;
   readonly collections: readonly StoreItem[];
+  /** The collections read failed, so membership is unknown rather than empty. */
+  readonly collectionsFailure:
+    | { readonly message: string; readonly onRetry: () => void }
+    | undefined;
+  readonly collectionsLoading: boolean;
   readonly onOpenSettings: ((page: "extensions") => void) | undefined;
 }): React.JSX.Element {
   const { item, kind, remixParent, onOpenItem, plan, extension } = props;
@@ -366,41 +371,65 @@ export function PanelBody(props: {
           ))}
         </span>
       ) : null}
-      {props.collections.length === 0 ? null : (
+      {props.collectionsFailure === undefined ? (
+        props.collectionsLoading ? (
+          <span
+            data-yunari-store-detail-part-of-state="loading"
+            className="text-xs text-muted"
+          >
+            {uiCopy.store.detail.partOfLoading}
+          </span>
+        ) : props.collections.length === 0 ? null : (
+          <span
+            data-yunari-store-detail-part-of=""
+            className="flex flex-col gap-[var(--space-6)]"
+          >
+            <span className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
+              {uiCopy.store.detail.partOf}
+            </span>
+            <span className="flex flex-wrap gap-[var(--space-6)]">
+              {props.collections.map((collection) => (
+                <span
+                  key={collection.id}
+                  data-yunari-store-detail-collection={collection.id}
+                  className="text-xs text-muted"
+                >
+                  {onOpenItem === undefined ? (
+                    collection.name
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenItem({
+                          key: collection.id,
+                          listing: collection,
+                          member: undefined,
+                        })
+                      }
+                      className="underline hover:text-text"
+                    >
+                      {collection.name}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </span>
+          </span>
+        )
+      ) : (
         <span
-          data-yunari-store-detail-part-of=""
-          className="flex flex-col gap-[var(--space-6)]"
+          data-yunari-store-detail-part-of-state="failed"
+          className="flex flex-col items-start gap-[var(--space-4)] text-xs text-warn"
         >
-          <span className="text-2xs font-semibold tracking-[0.11em] text-muted uppercase">
-            {uiCopy.store.detail.partOf}
-          </span>
-          <span className="flex flex-wrap gap-[var(--space-6)]">
-            {props.collections.map((collection) => (
-              <span
-                key={collection.id}
-                data-yunari-store-detail-collection={collection.id}
-                className="text-xs text-muted"
-              >
-                {onOpenItem === undefined ? (
-                  collection.name
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onOpenItem({
-                        key: collection.id,
-                        listing: collection,
-                        member: undefined,
-                      })
-                    }
-                    className="underline hover:text-text"
-                  >
-                    {collection.name}
-                  </button>
-                )}
-              </span>
-            ))}
-          </span>
+          {props.collectionsFailure.message}
+          <button
+            type="button"
+            data-yunari-store-detail-collections-retry=""
+            onClick={props.collectionsFailure.onRetry}
+            className="text-xs text-accent underline hover:text-text"
+          >
+            {uiCopy.store.retry}
+          </button>
         </span>
       )}
       {showsTrust && canShowTrust(kind, plan) ? (

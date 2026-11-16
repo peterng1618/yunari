@@ -1,7 +1,7 @@
 import { Tabs } from "@base-ui/react/tabs";
 import type { CatalogueOrigin } from "@yunari/renderer-core";
 import type * as React from "react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { BareSegmented } from "../components/ui/bare-segmented.js";
 import {
   createGridDensityPreference,
@@ -31,6 +31,7 @@ import { collectionStateOf, type StoreCard } from "./cards.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
 import { readOrigins } from "./origins.js";
 import {
+  type CollectionsRead,
   catalogueSourceFor,
   type EditorThemeRow,
   type ExtensionRow,
@@ -262,6 +263,38 @@ export function LibraryRegion(props: {
 }): React.JSX.Element {
   const [client] = useState(() => props.client ?? createThemeLibraryClient());
   const clients = useMemo(() => hostClients(client), [client]);
+  /** The catalogue's collection entries, for every page's "Part of". Read once
+   *  when a detail first opens, never while a grid renders. */
+  const collectionsSource = useMemo(
+    () => catalogueSourceFor("collections"),
+    [],
+  );
+  const [collectionEntries, setCollectionEntries] = useState<
+    readonly StoreItem[] | undefined
+  >(undefined);
+  const [collectionsFailed, setCollectionsFailed] = useState(false);
+  const [collectionsRequested, setCollectionsRequested] = useState(false);
+  const readCollections = useCallback(() => {
+    setCollectionsFailed(false);
+    collectionsSource.list().then(
+      (entries) => setCollectionEntries(entries),
+      () => setCollectionsFailed(true),
+    );
+  }, [collectionsSource]);
+  const ensureCollections = useCallback(() => {
+    if (collectionsRequested) return;
+    setCollectionsRequested(true);
+    readCollections();
+  }, [collectionsRequested, readCollections]);
+  const collections: CollectionsRead = {
+    entries: collectionEntries,
+    failed: collectionsFailed,
+    loading:
+      collectionsRequested &&
+      collectionEntries === undefined &&
+      !collectionsFailed,
+    retry: readCollections,
+  };
 
   return (
     <div data-yunari-library-region="" className="flex min-h-0 flex-1 flex-col">
@@ -311,6 +344,8 @@ export function LibraryRegion(props: {
             {props.page === "dashboard-themes" ? (
               <StoreRegion
                 client={client}
+                collections={collections}
+                onDetailOpen={ensureCollections}
                 {...(props.onOpenTheme === undefined
                   ? {}
                   : { onOpenTheme: props.onOpenTheme })}
@@ -341,6 +376,8 @@ export function LibraryRegion(props: {
                 state={props.state}
                 clients={clients}
                 onStatus={props.onStatus}
+                collections={collections}
+                onDetailOpen={ensureCollections}
                 {...(props.onOpenSettings === undefined
                   ? {}
                   : { onOpenSettings: props.onOpenSettings })}
@@ -361,6 +398,8 @@ function PageListing(props: {
   readonly clients: LibraryClients;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
+  readonly collections: CollectionsRead;
+  readonly onDetailOpen: () => void;
 }): React.JSX.Element {
   const [density] = useState<GridDensityLevel>(
     () =>
@@ -532,6 +571,12 @@ function PageListing(props: {
       ),
     );
   };
+  /** Opening or stepping to another card asks for the session's collection
+   *  entries, so every page's "Part of" can answer. */
+  const openCardAt = (card: StoreCard): void => {
+    props.onDetailOpen();
+    setOpenCard(card);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -603,7 +648,7 @@ function PageListing(props: {
               })
             }
             onAction={onAction}
-            onOpenItem={setOpenCard}
+            onOpenItem={openCardAt}
             install={install}
           />
         ) : answered && !catalogueFailed && !libraryFailed ? (
@@ -620,7 +665,16 @@ function PageListing(props: {
             {...(openCard.member === undefined
               ? {}
               : { member: openCard.member })}
-            catalogue={catalogue ?? []}
+            collections={props.collections.entries ?? []}
+            collectionsLoading={props.collections.loading}
+            {...(props.collections.failed
+              ? {
+                  collectionsFailure: {
+                    message: uiCopy.store.detail.partOfFailed,
+                    onRetry: props.collections.retry,
+                  },
+                }
+              : {})}
             {...(extensions === undefined ? {} : { extensions })}
             {...(extensionsFailed
               ? {
@@ -640,7 +694,7 @@ function PageListing(props: {
             actionNotice={notice}
             install={install}
             submit={submit}
-            onOpenItem={setOpenCard}
+            onOpenItem={openCardAt}
             {...(props.onOpenSettings === undefined
               ? {}
               : { onOpenSettings: props.onOpenSettings })}

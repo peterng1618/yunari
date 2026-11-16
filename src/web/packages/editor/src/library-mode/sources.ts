@@ -192,6 +192,23 @@ export interface LibraryClients {
   readonly extensions: () => Promise<readonly ExtensionRow[]>;
 }
 
+/**
+ * The catalogue's collection entries, read once for the Library session and
+ * handed to a detail surface when it opens. Membership is derived from these
+ * collections' `includes`, so every page can answer "Part of" without a second
+ * read per card.
+ *
+ * `entries` is `undefined` until the lazy read answers; `failed` is a read that
+ * did not answer, which is not the same fact as an item that belongs to no
+ * collection.
+ */
+export interface CollectionsRead {
+  readonly entries: readonly StoreItem[] | undefined;
+  readonly failed: boolean;
+  readonly loading: boolean;
+  readonly retry: () => void;
+}
+
 /** One listing row as the item the gallery draws. A non-theme listing has no
  *  document to derive a record from, so it takes the store's own record for the
  *  kind rather than a second spelling here. */
