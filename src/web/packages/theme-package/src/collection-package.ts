@@ -26,6 +26,15 @@ export type CollectionPackageResult =
   | { readonly ok: true; readonly package: CollectionPackage }
   | { readonly ok: false; readonly message: string };
 
+/** A collection before it is bytes: the fields the builder holds and the host
+ *  validates. It is the package's own shape, so the writer and reader cannot
+ *  disagree about a field. */
+export type CollectionDraft = CollectionPackage;
+
+export type CollectionDraftResult =
+  | { readonly ok: true; readonly draft: CollectionDraft }
+  | { readonly ok: false; readonly message: string };
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -131,4 +140,110 @@ export function readCollectionPackage(
   }
 
   return { ok: true, package: { name, description, includes } };
+}
+
+/**
+ * The collection's one writer, beside its reader.
+ *
+ * The manifest is the format's own JSON: the format's name and version, the
+ * author's fields, and each include with its optional flag spelled out. The
+ * reader is what decides whether the result is a collection, so a caller that
+ * serializes and re-reads has checked the exact bytes it will post or store.
+ */
+export function collectionManifest(draft: CollectionDraft): Uint8Array {
+  return new TextEncoder().encode(
+    JSON.stringify({
+      format: COLLECTION_PACKAGE_FORMAT,
+      version: 1,
+      name: draft.name,
+      description: draft.description,
+      includes: draft.includes.map((include) => ({
+        id: include.id,
+        optional: include.optional,
+      })),
+    }),
+  );
+}
+
+/**
+ * A draft, read through the package reader that owns the format's bounds.
+ *
+ * The shape is normalised first — a non-string name becomes `""`, an absent
+ * description `""`, and a list that is not an array `[]` — so the reader names
+ * the field it refused rather than a caller having to guard every member. The
+ * bounds, catalogue ids and the duplicate rule stay the reader's.
+ */
+export function readCollectionDraft(value: unknown): CollectionDraftResult {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      message: "A collection needs a name and its listings.",
+    };
+  }
+  const name = value["name"];
+  const description = value["description"];
+  const includes = value["includes"];
+  const read = readCollectionPackage(
+    new TextEncoder().encode(
+      JSON.stringify({
+        format: COLLECTION_PACKAGE_FORMAT,
+        version: 1,
+        name: typeof name === "string" ? name : "",
+        description: description === undefined ? "" : description,
+        includes: Array.isArray(includes) ? includes : [],
+      }),
+    ),
+  );
+  return read.ok
+    ? { ok: true, draft: read.package }
+    : { ok: false, message: read.message };
+}
+
+/** The draft, or nothing where it is not one. */
+export function parseCollectionDraft(
+  value: unknown,
+): CollectionDraft | undefined {
+  const read = readCollectionDraft(value);
+  return read.ok ? read.draft : undefined;
+}
+
+export type CollectionIncludesResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Who may be an include: the catalogue's half of collection validation.
+ *
+ * The reader owns the manifest's structure — ids, bounds and duplicates. This
+ * owns what only a catalogue can answer, and is pure so every surface that holds
+ * a published map applies one rule: each include is published, none is the
+ * collection itself, and none is another collection. `published` maps a
+ * published id to its listing kind; an id absent from it is unknown or
+ * unpublished. The host checks a draft with it before uploading, and the Worker
+ * checks the stored package with it before a version row exists.
+ */
+export function validateCollectionIncludes(
+  includes: readonly CollectionInclude[],
+  published: ReadonlyMap<string, string>,
+  selfId: string,
+): CollectionIncludesResult {
+  for (const { id } of includes) {
+    if (id === selfId) {
+      return { ok: false, message: "A collection cannot include itself." };
+    }
+    const kind = published.get(id);
+    if (kind === undefined) {
+      return {
+        ok: false,
+        message: `The collection includes "${id}", which is not a published item.`,
+      };
+    }
+    if (kind === "collection") {
+      return {
+        ok: false,
+        message: `The collection includes "${id}", which is itself a collection; collections are one level deep.`,
+      };
+    }
+  }
+  return { ok: true };
 }

@@ -10,7 +10,6 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { collectionManifest } from "../library-mode/collection-draft.js";
 import { uiCopy } from "../ui-copy.js";
 import { DARK_GROUND, fixtureItem } from "./item-fixture.js";
 import type { StoreItem } from "./local-source.js";
@@ -374,7 +373,6 @@ it("stops polling after unmount", async () => {
 });
 
 const INCLUDE_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
-const LISTING_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 const DRAFT = {
   name: "Acme Kit",
@@ -404,11 +402,11 @@ function recordingFetch(answers: readonly Response[]): typeof fetch & {
 }
 
 /**
- * **A collection is submitted as its manifest's bytes**: the Worker's pack
- * header carries the name, the size and the digest of exactly the bytes the
- * package reader accepts, so a client-side format drift fails locally.
+ * **A collection is submitted as its draft**: the host packages it with the
+ * format's one writer and holds the store token, so the browser posts no bytes,
+ * no digest and no listing id of its own.
  */
-it("submits a collection manifest with its bytes, size and digest", async () => {
+it("submits a collection draft for the host to package", async () => {
   const fetch = recordingFetch([
     json({
       ok: true,
@@ -418,11 +416,7 @@ it("submits a collection manifest with its bytes, size and digest", async () => 
   ]);
   const submit = mount({ fetch });
 
-  await act(async () =>
-    submit().collection.onSubmit({ listingId: LISTING_ID, draft: DRAFT }),
-  );
-  // The digest is the platform's async work, so the post lands a macrotask
-  // after the press; waiting on the recorded call is what observes it.
+  await act(async () => submit().collection.onSubmit({ draft: DRAFT }));
   await vi.waitFor(() =>
     expect(fetch.calls.length, "the hook posted nothing").toBe(1),
   );
@@ -432,16 +426,12 @@ it("submits a collection manifest with its bytes, size and digest", async () => 
   if (call === undefined) throw new Error("the hook posted nothing");
   expect(extra, "the hook posted more than once").toHaveLength(0);
   expect(call.url).toBe("/api/themes/submit");
-  const body = call.body as Record<string, unknown>;
-  expect(body["kind"]).toBe("collection");
-  expect(body["id"]).toBe(LISTING_ID);
-  expect((body["metadata"] as Record<string, unknown>)["name"]).toBe(
-    DRAFT.name,
-  );
-  expect(body["sha256"]).toMatch(/^[0-9a-f]{64}$/);
-  expect(body["bytes"]).toBe(
-    collectionManifest({ ...DRAFT, includes: [...DRAFT.includes] }).byteLength,
-  );
+  expect(call.body).toEqual({
+    kind: "collection",
+    name: DRAFT.name,
+    description: DRAFT.description,
+    includes: [{ id: INCLUDE_ID, optional: true }],
+  });
   expect(submit().collection.state).toBe("submitted");
   expect(submit().collection.status).toBe("published");
 });
@@ -460,7 +450,6 @@ it("refuses a collection draft locally, naming the field", async () => {
 
   await act(async () =>
     submit().collection.onSubmit({
-      listingId: LISTING_ID,
       draft: { name: "Acme Kit", description: "", includes: [] },
     }),
   );
@@ -472,7 +461,8 @@ it("refuses a collection draft locally, naming the field", async () => {
 });
 
 /** **Self-reference is its own check, because only the listing's own id can
- *  answer it.** The parser stays a function of the draft alone. */
+ *  answer it.** A new collection has no id yet, so nothing is compared; a draft
+ *  that names the existing listing it publishes to is refused here. */
 it("refuses a collection that includes its own listing", async () => {
   const fetch = recordingFetch([
     json({

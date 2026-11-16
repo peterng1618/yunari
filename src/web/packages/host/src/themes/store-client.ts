@@ -2,6 +2,7 @@ import type {
   CatalogueStatus,
   FabricThemeEnvelope,
   MineEntry,
+  StoreItemKind,
 } from "@yunari/renderer-core";
 import type { ThemeCredits } from "@yunari/theme-package";
 
@@ -40,6 +41,20 @@ export interface VersionPlan {
   readonly uploadUrl: string;
 }
 
+/** The kinds the Worker takes as a package rather than a theme envelope. */
+export type PackVersionKind = Exclude<StoreItemKind, "dashboard-theme">;
+
+/** The header a pack's version request carries: the package's own facts, plus
+ *  the digest and size the PUT must match. */
+export interface PackVersionInput {
+  readonly kind: PackVersionKind;
+  readonly name: string;
+  readonly version: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly sha256: string;
+  readonly bytes: number;
+}
+
 export interface FinalizedVersion {
   readonly ok: true;
   readonly status: CatalogueStatus;
@@ -63,6 +78,9 @@ export interface StoreClient {
       readonly credits?: ThemeCredits;
     },
   ): Promise<VersionPlan>;
+  /** Request a version for a package kind; the Worker plans the version the
+   *  same way it does a theme's. */
+  createPackVersion(id: string, input: PackVersionInput): Promise<VersionPlan>;
   /** PUT the package through the Worker's authenticated upload route. */
   upload(url: string, bytes: Uint8Array): Promise<void>;
   finalize(
@@ -158,6 +176,12 @@ export function createStoreClient(options: {
     },
 
     createVersion(id, input) {
+      return send(`${itemPath(id)}/versions`, "POST", input).then((response) =>
+        payload<VersionPlan>(response),
+      );
+    },
+
+    createPackVersion(id, input) {
       return send(`${itemPath(id)}/versions`, "POST", input).then((response) =>
         payload<VersionPlan>(response),
       );

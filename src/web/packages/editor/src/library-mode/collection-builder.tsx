@@ -1,7 +1,7 @@
 import { STORE_ITEM_KINDS } from "@yunari/renderer-core";
 import type { CollectionInclude } from "@yunari/theme-package";
 import type * as React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { StoreItem } from "../store-mode/local-source.js";
 import { mineThemeSource } from "../store-mode/mine-source.js";
 import {
@@ -52,15 +52,16 @@ function addRefusalOf(
  * The collection builder: published listings to pick from, the drafts the
  * author has added, and the one press that publishes them.
  *
- * **A new listing is created, never republished**: the id this submission
- * writes is minted lazily at the press, so a draft that somehow names it is
- * refused by the self-reference check rather than reaching the store. Every
- * refusal — the reader's, the self-reference check's, or the host's — is drawn
- * in one live region, verbatim.
+ * **A new listing is created, never republished**: its id is the host's to
+ * mint, so the browser never invents one. The builder's own press posts the
+ * draft; when the draft belongs to an existing listing, `listingId` lets the
+ * self-reference check refuse it here. Every refusal — the reader's, the
+ * self-reference check's, or the host's — is drawn in one live region, verbatim.
  */
 export function CollectionBuilder(props: {
   readonly listings: readonly StoreItem[];
-  /** The listing this submission creates. Absent mints one at the press. */
+  /** The listing an existing collection publishes to. Absent for a new one,
+   *  whose id the host mints. */
   readonly listingId?: string;
   readonly onSubmitted?: () => void;
   readonly fetch?: typeof fetch;
@@ -70,7 +71,6 @@ export function CollectionBuilder(props: {
   const [includes, setIncludes] = useState<readonly CollectionInclude[]>([]);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | undefined>(undefined);
-  const minted = useRef<string | undefined>(undefined);
 
   const submit = useSubmit({
     ...(props.fetch === undefined ? {} : { fetch: props.fetch }),
@@ -91,12 +91,6 @@ export function CollectionBuilder(props: {
 
   const nameOf = (id: string): string =>
     props.listings.find((item) => item.id === id)?.name ?? id;
-
-  const ownListingId = (): string => {
-    if (props.listingId !== undefined) return props.listingId;
-    minted.current ??= crypto.randomUUID();
-    return minted.current;
-  };
 
   const add = (item: StoreItem): void => {
     const refusal = addRefusalOf(item, includes);
@@ -120,7 +114,11 @@ export function CollectionBuilder(props: {
 
   const publish = (): void => {
     const draft: CollectionDraft = { name, description, includes };
-    collection.onSubmit({ listingId: ownListingId(), draft });
+    collection.onSubmit(
+      props.listingId === undefined
+        ? { draft }
+        : { listingId: props.listingId, draft },
+    );
   };
 
   const refusal =

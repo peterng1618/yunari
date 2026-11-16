@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   COLLECTION_PACKAGE_FORMAT,
+  collectionManifest,
   MAX_COLLECTION_INCLUDES,
+  parseCollectionDraft,
+  readCollectionDraft,
   readCollectionPackage,
+  validateCollectionIncludes,
 } from "./collection-package.js";
 
 const ITEM = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
@@ -107,5 +111,78 @@ describe("reading a collection package", () => {
       { id: ITEM, optional: false },
       { id: OTHER, optional: true },
     ]);
+  });
+});
+
+describe("writing and drafting a collection", () => {
+  const DRAFT = {
+    name: "Acme Kit",
+    description: "Two walls",
+    includes: [
+      { id: ITEM, optional: false },
+      { id: OTHER, optional: true },
+    ],
+  } as const;
+
+  it("writes bytes its own reader accepts unchanged", () => {
+    expect(readCollectionPackage(collectionManifest(DRAFT))).toEqual({
+      ok: true,
+      package: DRAFT,
+    });
+  });
+
+  it("reads a draft through the package reader, so its bounds are the format's", () => {
+    expect(parseCollectionDraft(DRAFT)).toEqual(DRAFT);
+    expect(parseCollectionDraft({ ...DRAFT, name: "" })).toBeUndefined();
+    expect(readCollectionDraft({ ...DRAFT, includes: [] })).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("refuses a draft that is not an object", () => {
+    expect(parseCollectionDraft(null)).toBeUndefined();
+    expect(parseCollectionDraft("Acme Kit")).toBeUndefined();
+  });
+});
+
+describe("who may be an include", () => {
+  const includes = [
+    { id: ITEM, optional: false },
+    { id: OTHER, optional: true },
+  ];
+  const published = new Map<string, string>([[ITEM, "dashboard-theme"]]);
+
+  it("accepts published members that are not collections or the listing itself", () => {
+    expect(
+      validateCollectionIncludes(
+        [{ id: ITEM, optional: false }],
+        published,
+        "x",
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("names an unpublished, nested or self include", () => {
+    expect(validateCollectionIncludes(includes, published, "x")).toMatchObject({
+      ok: false,
+      message: expect.stringContaining(OTHER),
+    });
+    expect(
+      validateCollectionIncludes(
+        [{ id: ITEM, optional: false }],
+        new Map([[ITEM, "collection"]]),
+        "x",
+      ),
+    ).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("one level"),
+    });
+    expect(
+      validateCollectionIncludes(
+        [{ id: ITEM, optional: false }],
+        published,
+        ITEM,
+      ),
+    ).toMatchObject({ ok: false, message: expect.stringContaining("itself") });
   });
 });

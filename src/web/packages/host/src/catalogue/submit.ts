@@ -1,7 +1,15 @@
+import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
+import { parseCatalogueIndex, STORE_ITEM_KINDS } from "@yunari/renderer-core";
+import {
+  collectionManifest,
+  readCollectionDraft,
+  validateCollectionIncludes,
+} from "@yunari/theme-package";
 import { isForeignOrigin, isLoopbackRemote, readBody } from "../server.js";
 import type { StoreSessionStore } from "../settings/store-session.js";
 import type { ThemeStore } from "../themes/store.js";
+import type { StoreClient, VersionPlan } from "../themes/store-client.js";
 import { createStoreClient, StoreClientError } from "../themes/store-client.js";
 import { submissionFiles } from "../themes/submission.js";
 import type { ThumbnailStore } from "../themes/thumbnails.js";
@@ -10,11 +18,13 @@ import type { ThumbnailStore } from "../themes/thumbnails.js";
  * The submission route, kept out of `server.ts` for the reason the store
  * sign-in routes are: that file is already past the size a reader can hold.
  *
- * The browser sends one id; the host does the rest — read the library theme,
- * bump it against the Worker's baseline, request a version, PUT the package
- * through the Worker's upload route and finalize with the thumbnail. The
- * session token reaches this module and the `Authorization` header, and
- * nothing else.
+ * The browser sends either one id or one collection draft; the host does the
+ * rest — read the library theme, bump it against the Worker's baseline, request
+ * a version, PUT the package through the Worker's upload route and finalize with
+ * the thumbnail. A collection is packaged here rather than in the browser, so
+ * the format has one writer and the store token never leaves this process.
+ * **The session token reaches this module and the `Authorization` header, and
+ * nothing else.**
  */
 
 export const SUBMIT_PATH = "/api/themes/submit";
@@ -25,6 +35,18 @@ const NOT_JSON = "That submission request is not JSON.";
 const NO_ID = "A submission needs the id of a library theme.";
 const NO_SESSION = "Sign in to the store before submitting.";
 const NO_STORE = "This host has no store to submit to.";
+const CATALOGUE_UNREADABLE =
+  "The store's catalogue could not be read, so this collection was not submitted.";
+/** A collection publication starts at the first release. Republishing an
+ *  existing collection — the membership-change rule — is not built. */
+const FIRST_COLLECTION_VERSION = "1.0.0";
+/** The Worker requires a picture on every finalize and never decodes it. A
+ *  collection has no art of its own yet, so this 1×1 transparent PNG stands in
+ *  until the builder or the storefront can supply one. */
+const COLLECTION_THUMBNAIL = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 export interface SubmitRouteDeps {
   /** The Worker's origin. Absent when this host has no store to submit to. */
@@ -117,24 +139,30 @@ export async function handleSubmitRoute(
     return text(413, TOO_LARGE);
   }
 
-  let id: string | undefined;
+  let body: Readonly<Record<string, unknown>> | undefined;
   try {
     const parsed: unknown = JSON.parse(raw);
-    const value =
+    body =
       typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)["id"]
+        ? (parsed as Readonly<Record<string, unknown>>)
         : undefined;
-    if (typeof value === "string" && value !== "") id = value;
   } catch {
     return text(400, NOT_JSON);
   }
-  if (id === undefined) return text(400, NO_ID);
 
   const client = createStoreClient({
     origin,
     token: session.token,
     fetch: deps.fetch,
   });
+
+  if (body?.["kind"] === "collection") {
+    return submitCollection(body, client, deps, origin);
+  }
+
+  const value = body?.["id"];
+  const id = typeof value === "string" && value !== "" ? value : undefined;
+  if (id === undefined) return text(400, NO_ID);
 
   let plan: Awaited<ReturnType<typeof submissionFiles>>;
   try {
@@ -177,4 +205,107 @@ export async function handleSubmitRoute(
   } catch (error) {
     return refusal(error, deps.sessionStore, true);
   }
+}
+
+/**
+ * One collection submission: the draft the builder posted, packaged here.
+ *
+ * The header is revalidated rather than trusted — every include must be a
+ * catalogue id the store currently lists as published, and the shared rule
+ * refuses a self-reference or another collection by name before a version row
+ * exists. The bytes, their digest and their size are built from the draft with
+ * the format's one writer, so what the Worker validates is what this host read.
+ */
+async function submitCollection(
+  body: Readonly<Record<string, unknown>>,
+  client: StoreClient,
+  deps: SubmitRouteDeps,
+  origin: string,
+): Promise<Response> {
+  const read = readCollectionDraft(body);
+  if (!read.ok) return json(400, { ok: false, message: read.message });
+  const draft = read.draft;
+
+  // The Worker takes the item id in the path; nothing in the pack request mints
+  // one, so the id a new collection is created with is this host's.
+  const id = randomUUID();
+  const published = await publishedKinds(origin, deps.fetch);
+  if (published === undefined) {
+    return json(502, { ok: false, message: CATALOGUE_UNREADABLE });
+  }
+  const membership = validateCollectionIncludes(draft.includes, published, id);
+  if (!membership.ok)
+    return json(400, { ok: false, message: membership.message });
+
+  const bytes = collectionManifest(draft);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+
+  let plan: VersionPlan;
+  try {
+    plan = await client.createPackVersion(id, {
+      kind: "collection",
+      name: draft.name,
+      version: FIRST_COLLECTION_VERSION,
+      metadata: {
+        name: draft.name,
+        description: draft.description,
+        includes: draft.includes,
+      },
+      sha256,
+      bytes: bytes.byteLength,
+    });
+  } catch (error) {
+    return refusal(error, deps.sessionStore, true);
+  }
+
+  try {
+    await client.upload(plan.uploadUrl, bytes);
+  } catch (error) {
+    return refusal(error, deps.sessionStore, true);
+  }
+
+  try {
+    const finalized = await client.finalize(
+      id,
+      plan.version,
+      COLLECTION_THUMBNAIL,
+      undefined,
+    );
+    return json(200, {
+      ok: true,
+      status: finalized.status,
+      version: { from: null, to: plan.version, level: "initial" },
+    });
+  } catch (error) {
+    return refusal(error, deps.sessionStore, true);
+  }
+}
+
+/**
+ * The published catalogue as id → kind, or undefined where it could not be
+ * read. Only published entries are listed, and an entry this build cannot read
+ * is left out, so an include that cannot be confirmed is refused.
+ */
+async function publishedKinds(
+  origin: string,
+  doFetch: typeof fetch,
+): Promise<Map<string, string> | undefined> {
+  let response: Response;
+  try {
+    response = await doFetch(new URL("/index.json", origin));
+  } catch {
+    return undefined;
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(await response.text());
+  } catch {
+    return undefined;
+  }
+  const index = parseCatalogueIndex(value, STORE_ITEM_KINDS);
+  return new Map(index.entries.map((entry) => [entry.id, entry.kind]));
 }

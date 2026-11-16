@@ -5,7 +5,6 @@ import {
 } from "@yunari/extension-api";
 import { isStoreItemKind, type StoreItemKind } from "@yunari/renderer-core";
 import {
-  type CollectionInclude,
   type CollectionPackage,
   MAX_ARCHIVE_BYTES,
   readCollectionPackage,
@@ -235,39 +234,10 @@ export function validateFinalizedPackage(
 }
 
 /**
- * The cross-listing half of collection validation, and pure so it is checked
- * without D1.
- *
- * The package reader owns the manifest's structure — ids, duplicates and
- * bounds. This owns what only the catalogue can answer: whether each included
- * id is published, whether it is the collection itself, and whether it is
- * another collection. `published` maps a published id to its listing kind; an
- * id absent from it is unknown or unpublished.
+ * The cross-listing half of collection validation lives with the collection
+ * format, so the host's pre-upload check and this Worker's check are one rule.
  */
-export function validateCollectionIncludes(
-  includes: readonly CollectionInclude[],
-  published: ReadonlyMap<string, string>,
-  selfId: string,
-): { readonly ok: true } | { readonly ok: false; readonly message: string } {
-  for (const { id } of includes) {
-    if (id === selfId)
-      return { ok: false, message: "A collection cannot include itself." };
-    const kind = published.get(id);
-    if (kind === undefined) {
-      return {
-        ok: false,
-        message: `The collection includes "${id}", which is not a published item.`,
-      };
-    }
-    if (kind === "collection") {
-      return {
-        ok: false,
-        message: `The collection includes "${id}", which is itself a collection; collections are one level deep.`,
-      };
-    }
-  }
-  return { ok: true };
-}
+export { validateCollectionIncludes } from "@yunari/theme-package";
 
 /** The authority-bearing contribution identities consent and review key on. */
 function contributionIdentities(manifest: PluginManifest): readonly string[] {

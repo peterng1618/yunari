@@ -77,11 +77,12 @@ export interface SignInWindow {
   close(): void;
 }
 
-/** What the collection builder hands this flow: the listing the submission
- *  creates, and the draft it validated. Self-reference is checked here because
- *  the draft alone cannot name the listing. */
+/** What the collection builder hands this flow: the draft it validated, and the
+ *  listing id when the draft belongs to a collection that already exists. A new
+ *  collection has no id yet — the host mints it — so there is nothing to compare
+ *  the includes against and self-reference stays the store's refusal. */
 export interface CollectionSubmission {
-  readonly listingId: string;
+  readonly listingId?: string;
   readonly draft: CollectionDraft;
 }
 
@@ -96,33 +97,17 @@ export interface CollectionControl {
   readonly version: SubmittedVersion | undefined;
 }
 
-/** One press's target: the theme id the host reads, or the pack header a
- *  collection posts. The sign-in flow carries it through the poll unchanged. */
+/** One press's target: the theme id the host reads, or the collection draft the
+ *  host packages. The sign-in flow carries it through the poll unchanged. */
 type SubmitTarget =
   | { readonly kind: "theme"; readonly id: string }
   | {
       readonly kind: "collection";
-      readonly id: string;
       readonly body: Readonly<Record<string, unknown>>;
     };
 
-/** A collection the builder creates is new, so it publishes its first
- *  release. Republishing an existing collection is not this surface's flow. */
-const FIRST_COLLECTION_VERSION = "1.0.0";
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** The lowercase hex SHA-256 of the exact bytes a submission posts. */
-async function digestOf(bytes: Uint8Array): Promise<string> {
-  const hash = await crypto.subtle.digest(
-    "SHA-256",
-    bytes as unknown as BufferSource,
-  );
-  return [...new Uint8Array(hash)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 /** The answer as an object, or nothing where it is not one. */
@@ -482,8 +467,9 @@ export function useSubmit(options: {
   };
 
   /** One collection press, validated before the host is asked: the package
-   *  reader owns the draft's bounds and ids, and self-reference is checked here
-   *  because only this surface holds the listing's own id. */
+   *  reader owns the draft's bounds and ids, and the writer/reader round trip
+   *  proves the draft is a package. **The host packages and posts it** — the
+   *  browser neither serializes the submission nor holds a store token. */
   async function attemptCollection(
     submission: CollectionSubmission,
     retried: boolean,
@@ -494,37 +480,28 @@ export function useSubmit(options: {
       refuse(read.message);
       return;
     }
-    const own = selfIncludeRefusal(read.draft, submission.listingId);
-    if (own !== undefined) {
-      refuse(own);
-      return;
+    if (submission.listingId !== undefined) {
+      const own = selfIncludeRefusal(read.draft, submission.listingId);
+      if (own !== undefined) {
+        refuse(own);
+        return;
+      }
     }
-    const bytes = collectionManifest(read.draft);
-    // The bytes posted are the bytes the reader accepts: a client-side format
+    // The bytes the host will build are bytes this reader accepts: a format
     // drift fails here rather than at the store.
-    const reread = readCollectionPackage(bytes);
+    const reread = readCollectionPackage(collectionManifest(read.draft));
     if (!reread.ok) {
       refuse(reread.message);
       return;
     }
-    const sha256 = await digestOf(bytes);
-    if (!alive.current) return;
     await attempt(
       {
         kind: "collection",
-        id: submission.listingId,
         body: {
-          id: submission.listingId,
           kind: "collection",
           name: read.draft.name,
-          version: FIRST_COLLECTION_VERSION,
-          metadata: {
-            name: read.draft.name,
-            description: read.draft.description,
-            includes: read.draft.includes,
-          },
-          sha256,
-          bytes: bytes.byteLength,
+          description: read.draft.description,
+          includes: read.draft.includes,
         },
       },
       retried,
@@ -538,10 +515,12 @@ export function useSubmit(options: {
     clearTimer();
     activeFlow.current = "collection";
     setFlow("collection");
+    // A new collection has no listing id until the host mints one; the answer's
+    // live region names it by the author's own name either way.
     setItemId(submission.listingId);
     setItemLabel(
       submission.draft.name === ""
-        ? submission.listingId
+        ? (submission.listingId ?? "")
         : submission.draft.name,
     );
     setState("submitting");
