@@ -1323,6 +1323,12 @@ function onlineEntry(input: {
     favorites: input.favorites,
     packageUrl: `https://catalogue.test/${input.id}.zip`,
     thumbnail: `${input.id}/thumbnail.png`,
+    // The wire requires the key on every entry. A dashboard theme is one
+    // member; any other kind here has nothing to browse.
+    members:
+      (input.kind ?? "dashboard-theme") === "dashboard-theme"
+        ? [{ id: input.id, kind: "dashboard-theme", name: input.name }]
+        : [],
     facets: { ...ONLINE_FACETS, tags: [...input.tags] },
     ...(input.remixOf === undefined ? {} : { remixOf: input.remixOf }),
   };
@@ -1538,6 +1544,10 @@ async function showOnlineStore(
     readonly generatedAt: string;
     readonly entries: readonly Record<string, unknown>[];
   } = ONLINE_CATALOGUE,
+  /** The joined rows the page draws. The default catalogue's library rows name
+   *  its items, so they merge; a catalogue the library does not name draws its
+   *  own rows beside the two library-only ones. */
+  expectedCells = 3,
 ): Promise<Locator> {
   await page.route("**/index.json", (route) =>
     route.fulfill({
@@ -1586,7 +1596,7 @@ async function showOnlineStore(
   await expect(
     region.locator("[data-yunari-store-cell]"),
     "the page does not list the catalogue's readable items",
-  ).toHaveCount(3);
+  ).toHaveCount(expectedCells);
   return region;
 }
 
@@ -2275,7 +2285,7 @@ test("a remix credits its parent, linking it when listed and naming it when not"
 }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
-  const region = await showOnlineStore(page, REMIX_CATALOGUE);
+  const region = await showOnlineStore(page, REMIX_CATALOGUE, 5);
   const open = async (id: string): Promise<Locator> => {
     await region
       .locator(

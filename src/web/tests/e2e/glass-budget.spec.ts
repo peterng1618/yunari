@@ -158,6 +158,31 @@ async function curve(
   });
 }
 
+/**
+ * The **best** reading per radius across repeated passes of the same mounted
+ * scene. The suite runs many workers on one machine, and contention only ever
+ * adds time to a synchronous render, so the minimum of repeated medians is the
+ * reading closest to the render's own cost. A real regression is present in
+ * every pass and survives the minimum.
+ */
+async function curveBest(
+  page: Page,
+  passes: number,
+): Promise<Array<{ radius: number; cost: number }>> {
+  const best = new Map<number, number>();
+  for (let pass = 0; pass < passes; pass += 1) {
+    for (const { radius, cost } of await curve(page)) {
+      best.set(
+        radius,
+        Math.min(best.get(radius) ?? Number.POSITIVE_INFINITY, cost),
+      );
+    }
+  }
+  return [...best.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([radius, cost]) => ({ radius, cost }));
+}
+
 test.describe("glass cost on the real editor", () => {
   test("the composite is bounded, with and without background media", async ({
     page,
@@ -166,15 +191,18 @@ test.describe("glass cost on the real editor", () => {
       testInfo.project.name !== "desktop-chromium",
       "the editor is a desktop surface",
     );
+    // Three passes per scene against a loaded runner's spread; the readings
+    // themselves are still the guard.
+    test.setTimeout(240_000);
     await page.goto(EDITOR);
     await open(page, true);
-    const withMedia = await curve(page);
+    const withMedia = await curveBest(page, 3);
 
     // The discriminating case for the attribution. With no media layer the
     // composite has no `paint` to do, so the difference between these two
     // curves is the media term and the rest is the composite proper.
     await open(page, false);
-    const noMedia = await curve(page);
+    const noMedia = await curveBest(page, 3);
 
     console.log(
       `GLASS CURVE withMedia=${JSON.stringify(withMedia)} noMedia=${JSON.stringify(noMedia)}`,

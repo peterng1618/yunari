@@ -127,6 +127,12 @@ test("a card inserted from the Widgets pane arrives as a unit the tree can name"
   // spec's to restate (vg-170; the rule `composition-panel.spec.ts` states).
   await openPane(page, "Layers");
   const clocks = page.locator(".yunari-layer-role", { hasText: "Clock" });
+  // The rail's pane draws asynchronously; the baseline must be the drawn tree,
+  // not an empty list read between the press and the render.
+  await expect(
+    clocks.first(),
+    "the Layers pane drew no Clock row",
+  ).toBeVisible();
   const before = await clocks.count();
 
   await openPane(page, "Widgets");

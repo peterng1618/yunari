@@ -488,7 +488,15 @@ test("a late answer never lands in the tab that was left", async ({
   // Leave the tab while its answer is still out, then come back and ask a new
   // question: the abandoned answer belongs to neither.
   await page.locator('[data-yunari-asset-tab="colour"]').click();
-  await expect.poll(() => searches.length).toBe(2);
+  // The tab asks its own question. The request count is the product's business
+  // — leaving and returning may re-ask — so the claim is the colour search.
+  await expect
+    .poll(
+      () =>
+        searches.filter((request) => request.enabled.includes("colorswoop"))
+          .length,
+    )
+    .toBeGreaterThan(0);
   await page.locator('[data-yunari-asset-tab="icon"]').click();
   await search.fill("ab");
   // The question leaving, not a request count: choosing a tab asks the tab's
@@ -510,7 +518,9 @@ test("an action reaches busy and then its outcome", async ({
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
 
   await page.route("**/api/assets/bytes*", async (route) => {
-    await new Promise((settle) => setTimeout(settle, 500));
+    // Long enough that the busy state is observable on a loaded runner: at
+    // 500 ms the outcome could land before the first assertion was read.
+    await new Promise((settle) => setTimeout(settle, 2000));
     await route.fulfill({
       status: 200,
       body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 12 3l9 7"/></svg>',

@@ -39,6 +39,8 @@ function mineEntry(status: Status): Record<string, unknown> {
     favorites: 0,
     packageUrl: `https://store.test/${ITEM_ID}.zip`,
     thumbnail: `${ITEM_ID}/thumbnail.png`,
+    // The wire carries members on every entry; a dashboard theme is one.
+    members: [{ id: ITEM_ID, kind: "dashboard-theme", name: ITEM_NAME }],
     facets: {
       author: "mira-k",
       colourMode: "dark",

@@ -75,7 +75,7 @@ test("the dashboard grid's own scroller", async ({ page }, testInfo) => {
   test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
   await page.goto(`${EDITOR}?mode=library`);
   const bar = await page
-    .locator("[data-yunari-store-scroller]")
+    .locator("[data-yunari-library-scroller]")
     .evaluate((element) => {
       const style = getComputedStyle(element);
       return { width: style.scrollbarWidth, color: style.scrollbarColor };
