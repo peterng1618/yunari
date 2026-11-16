@@ -224,10 +224,10 @@ describe("the author's own source", () => {
     expect(items[1]?.includes).toEqual([ITEM_ID]);
   });
 
-  /** **A source returns the kinds its caller draws**: the themes page asks for
-   *  themes, so a plugin row is refused rather than drawn as a theme card whose
-   *  Remove command would write the wrong store. */
-  it("refuses a kind its caller does not draw", async () => {
+  /** **A kind its caller does not draw is absent, not unreadable**: the author's
+   *  own plugin must not make the themes grid print a failure, nor hide its empty
+   *  state. Membership of the drawn kinds is the caller's list, not a refusal. */
+  it("leaves out a kind its caller does not draw, without a refusal", async () => {
     const source = mineThemeSource({
       kinds: [DASHBOARD_THEME_KIND],
       fetch: mineWith([
@@ -242,8 +242,6 @@ describe("the author's own source", () => {
     const items = await source.list();
 
     expect(items).toEqual([]);
-    expect(source.refused()).toEqual([
-      { kind: "plugin", reason: "unknown-kind", count: 1 },
-    ]);
+    expect(source.refused()).toEqual([]);
   });
 });

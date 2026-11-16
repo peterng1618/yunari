@@ -292,8 +292,14 @@ export function CollectionBuilder(props: {
  * collection builder.
  *
  * **The builder offers published listings only**, because the catalogue's index
- * is the published set; a row a future source marks unpublished is refused by
- * the builder's own add check rather than offered and then rejected.
+ * is the published set, and it refuses a candidate only for what this surface
+ * can see: a row with no catalogue id, or one already in the draft. Publication
+ * and one-level-depth belong to the store and are checked there.
+ *
+ * **An unchanged republish still bumps `minor`**: the author's own listing
+ * carries include ids but not the stored package, so a truthful no-change diff
+ * would need that package. A second press of the same draft therefore publishes a
+ * new version rather than being refused as unchanged.
  *
  * A failed read is stated and can be asked again; it is never drawn as "nothing
  * submitted", which the author's other surfaces would disprove.

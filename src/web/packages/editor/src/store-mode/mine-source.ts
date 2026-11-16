@@ -5,6 +5,7 @@ import {
   DASHBOARD_THEME_KIND,
   isCatalogueStatus,
   parseCatalogueIndex,
+  STORE_ITEM_KINDS,
   type StoreItemKind,
 } from "@yunari/renderer-core";
 import type { ItemSource, StoreItem } from "./local-source.js";
@@ -37,6 +38,12 @@ interface ItemState {
  * only themes, and My submissions draws every kind the author owns. A source
  * that listed every kind for all of them would put plugins and collections on a
  * grid whose Remove command writes the local theme library.
+ *
+ * **A kind the caller does not draw is absent, not unreadable.** The whole
+ * vocabulary is parsed — so a foreign kind is a row this build understands — and
+ * the rows are filtered afterwards. Parsing with the restricted list instead
+ * would report every other kind as `unknown-kind`, which is a failure the author
+ * did not have and which hides the empty state.
  */
 export function mineThemeSource(options: {
   readonly kinds: readonly StoreItemKind[];
@@ -59,12 +66,11 @@ export function mineThemeSource(options: {
       }
 
       const rows = entriesOf(await response.json());
-      // The parser is given the kinds this surface draws: a row of another kind
-      // is refused and counted rather than silently dropped, so the surface can
-      // say it could not read a row instead of pretending none was sent.
+      // The whole vocabulary is parsed, so a known kind this surface does not
+      // draw is a row it read and chose to leave out.
       const parsed = parseCatalogueIndex(
         { generatedAt: new Date().toISOString(), entries: rows },
-        kinds,
+        STORE_ITEM_KINDS,
       );
       const states = statesOf(rows);
 
@@ -74,6 +80,9 @@ export function mineThemeSource(options: {
       const unreadable = new Map<string, number>();
       const listed: StoreItem[] = [];
       for (const entry of parsed.entries) {
+        // The parsed kind is the vocabulary's, or an identifier this build does
+        // not ship; both are compared as strings against the caller's list.
+        if (!(kinds as readonly string[]).includes(entry.kind)) continue;
         const state = states.get(entry.id);
         if (state === undefined) {
           unreadable.set(entry.kind, (unreadable.get(entry.kind) ?? 0) + 1);

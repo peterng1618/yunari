@@ -138,6 +138,16 @@ describe("readPackSubmission", () => {
     expect(readPackSubmission(submission({ metadata: [] })).ok).toBe(false);
     expect(readPackSubmission(submission({ version: "1.0" })).ok).toBe(false);
   });
+
+  /** A pack's own vocabulary is what a wrong kind is told, and `collection` is
+   *  one of them; the theme envelope is refused by its own sentence. */
+  it("names the pack kinds in its wrong-kind sentence", () => {
+    const read = readPackSubmission(submission({ kind: "sensor-pack" }));
+    expect(read.ok).toBe(false);
+    if (read.ok) return;
+    expect(read.message).toContain("collection");
+    expect(read.message).not.toContain("dashboard-theme");
+  });
 });
 
 describe("planPackVersion", () => {

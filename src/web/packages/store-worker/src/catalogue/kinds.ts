@@ -30,6 +30,13 @@ import { isPackVersion } from "../version/plan.js";
 
 export type PackKind = Exclude<StoreItemKind, "dashboard-theme">;
 
+/** The pack vocabulary, in the shipped order: every item kind but the theme
+ *  envelope. A refusal names these, so it cannot advertise a kind the next
+ *  check refuses. */
+export const PACK_KINDS = STORE_ITEM_KINDS.filter(
+  (kind): kind is PackKind => kind !== "dashboard-theme",
+);
+
 /** The request body a non-theme submission posts: the header a version request
  *  would carry for a theme, plus the package digest the PUT must match. */
 export interface PackSubmission {
@@ -60,7 +67,7 @@ export function readPackSubmission(value: unknown): PackSubmissionResult {
   const kind = field(value, "kind");
   if (!isStoreItemKind(kind))
     return refuse(
-      `A pack submission needs a "kind" of ${STORE_ITEM_KINDS.join(", ")}.`,
+      `A pack submission needs a "kind" of ${PACK_KINDS.join(", ")}.`,
     );
   if (kind === "dashboard-theme")
     return refuse("A dashboard theme is submitted as an envelope, not a pack.");
