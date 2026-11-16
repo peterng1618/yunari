@@ -44,7 +44,8 @@ describe("listingMemberRecords", () => {
   it("marks a theme or editor theme with no readable document unreadable", () => {
     expect(listingMemberRecords("dashboard-theme", {}).unreadable).toBe(true);
     expect(
-      listingMemberRecords("editor-theme", { editorThemeName: "  " }).unreadable,
+      listingMemberRecords("editor-theme", { editorThemeName: "  " })
+        .unreadable,
     ).toBe(true);
   });
 
