@@ -6,6 +6,7 @@ import {
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { uiCopy } from "../ui-copy.js";
 import {
   applyEditorThemeTokens,
   clearEditorTheme,
@@ -36,8 +37,15 @@ afterEach(() => {
   host.remove();
 });
 
-function mount(): void {
-  act(() => root.render(<EditorThemeSettings palette="graphite" />));
+function mount(onBrowseAppThemes?: () => void): void {
+  act(() =>
+    root.render(
+      <EditorThemeSettings
+        palette="graphite"
+        {...(onBrowseAppThemes === undefined ? {} : { onBrowseAppThemes })}
+      />,
+    ),
+  );
 }
 
 function field(): HTMLInputElement {
@@ -176,5 +184,21 @@ describe("the Appearance tab's editor theme", () => {
 
     expect(message()).toBe("That file is not a readable editor theme package.");
     expect(readShellThemeTokens()).toMatchObject({ ok: false });
+  });
+
+  it("opens the App themes page from the appearance section", async () => {
+    const onBrowseAppThemes = vi.fn();
+    mount(onBrowseAppThemes);
+
+    const link = host.querySelector<HTMLButtonElement>(
+      "[data-yunari-browse-app-themes]",
+    );
+    expect(
+      link?.getAttribute("aria-label"),
+      "the link does not say where it goes",
+    ).toBe(uiCopy.library.links.browseAppThemes);
+    await act(async () => link?.click());
+
+    expect(onBrowseAppThemes).toHaveBeenCalledTimes(1);
   });
 });

@@ -11,10 +11,8 @@ import {
   type BuiltinListingCategory,
   type ChartFamily,
   type ColourMode,
-  DASHBOARD_THEME_KIND,
   MEMBER_KINDS,
   type Orientation,
-  type SemanticFamily,
 } from "@yunari/renderer-core";
 import { BUILTIN_PATH_PRESETS, type VersionLevel } from "@yunari/theme-package";
 import type { LocalAssetReference } from "./asset-manager/index.js";
@@ -1215,28 +1213,11 @@ export const uiCopy = {
     cancel: "Cancel",
   },
   /**
-   * The Library mode's own words — the store surface, whose region's header row
-   * is its own rather than the shell's.
+   * The listing vocabulary the Library's pages share: cells, install states,
+   * details, submissions and the collection sheet. The Library mode's own words
+   * are under `library` below.
    */
   store: {
-    /** The store's two halves, which the region's own `Segmented` names. The
-     *  two labels are the surfaces' tab words, and
-     *  `label` is the group's name: the two labels inside are the options, so a
-     *  group with no name announces "Your themes, pressed" with nothing saying
-     *  what is being chosen. The host's own library comes first, because it is
-     *  what an author already has. */
-    halves: {
-      label: "Theme libraries",
-      local: "Local library",
-      online: "Online store",
-    },
-    /** The author's own listing, behind a toggle in the online half's row. The
-     *  empty sentence is the surface's own: an author with nothing submitted is
-     *  not a store with nothing published. */
-    mine: {
-      label: "Mine",
-      empty: NO_SUBMISSIONS,
-    },
     /** The states a Mine row can carry, as the word beside it. `published` has
      *  no badge word because the public surface already shows it, and `draft`
      *  is not a state this surface explains yet: a badge word the surface cannot
@@ -1256,15 +1237,6 @@ export const uiCopy = {
       pendingReview: "Waiting for the owner's review.",
       removedPermanent:
         "The owner removed this item; it cannot be republished.",
-      /** The fallback for a non-2xx the host answered with no sentence of its
-       *  own. A refusal is the Worker's words where they exist, so this is
-       *  drawn only where they do not (`mine-listing.ts`). */
-      changeRefused: (status: number): string =>
-        `The store refused the change (${status}).`,
-      /** The store accepted the command but the author's rows could not be read
-       *  back: the change landed, so silence would leave a stale word on screen. */
-      unrefreshed:
-        "The change was saved, but your items could not be refreshed.",
     },
     /** The author's own two commands, drawn in the item's modal only: they act
      *  on the author's store row, where the cell's four actions act on the
@@ -1272,67 +1244,6 @@ export const uiCopy = {
     actions: {
       unpublish: "Unpublish",
       republish: "Republish",
-    },
-    /** The search well's name and the word it shows while empty, as one string:
-     *  a placeholder that could disagree with the name would be a second copy of
-     *  one fact. What a query filters and pages is A.4's and A.5's. */
-    search: "Search themes",
-    /** The five facets, in the order the row draws them. The values each
-     *  offers are derived from the items, so the only words here are the ones a
-     *  value cannot carry itself. */
-    facets: {
-      label: "Filter themes",
-      author: "Author",
-      colourMode: "Color mode",
-      sensors: "Sensors",
-      shape: "Shape",
-      style: "Style",
-      /** The Sensors facet's headings: one per family the vocabulary files a
-       *  semantic key under, so a person choosing values sees them grouped the
-       *  way `describeSemanticKey` groups them rather than in one flat list.
-       *
-       *  Typed from `SemanticFamily`, so a family added to the vocabulary
-       *  without a word fails to compile here rather than printing an identifier
-       *  at a person. A key this build does not know has no family and is drawn
-       *  under no heading at all, which is the vocabulary's own answer. */
-      sensorFamilies: {
-        cpu: "CPU",
-        ram: "RAM",
-        gpu: "GPU",
-        vram: "VRAM",
-        disk: "Disk",
-        network: "Network",
-        time: "Time",
-        date: "Date",
-      } as const satisfies Record<SemanticFamily, string>,
-      /** The Shape facet's three headings, in the surface's own order: the
-       *  orientation words, the aspect buckets and
-       *  the exact pixel sizes. */
-      shapeGroups: {
-        orientation: "Orientation",
-        aspect: "Aspect ratio",
-        size: "Pixel size",
-      },
-      /** What the Shape popover says above its three groups, because choosing
-       *  in two of them is not an "either": a theme must match every group it
-       *  is asked about, which is R115's rule and the reason the groups are
-       *  labelled at all. */
-      shapeHint: "A theme must match every group.",
-      /** A value facet's search field. One name for all four: the popover they
-       *  sit in is already named by the facet, so a sentence repeating it would
-       *  print the facet's name twice to a screen reader. */
-      search: "Search values",
-      searchPlaceholder: "Search values",
-      /** A query that matches no value, where the facet does have values. */
-      noSearchMatches: "No value matches that search.",
-      /** A facet whose values the listing does not carry; the surface says so
-       *  rather than drawing a popover that looks like a failed load. */
-      empty: "No theme declares a value for this filter.",
-      /** The colour facet's own empty sentence: a library of themes with a
-       *  picture behind the board has no background colour for the record to
-       *  classify, which is why it offers neither mode. */
-      colourModeEmpty:
-        "No theme declares a background color, so this filter has no values.",
     },
     /** The facet values that are words rather than data: the two colour modes a
      *  person can ask for, the three orientations, and the aspect bucket that is
@@ -1396,13 +1307,6 @@ export const uiCopy = {
       favorites: (count: number): string =>
         count === 1 ? "favorite" : "favorites",
     },
-    /** One line per refusal from the catalogue read, **naming the identifier the
-     *  catalogue used**: a kind this build does not ship has no display word, and
-     *  inventing one would be a word for something nothing declared. An
-     *  entry that declared no kind at all is named by nothing, so the sentence
-     *  says where it was rather than what it claimed. */
-    catalogueRefused: (kind: string | undefined, count: number): string =>
-      `${count} ${count === 1 ? "entry" : "entries"} ${kind === undefined ? "in the store" : `of kind ${kind}`} could not be read.`,
     /** The online half's install, whose sentences the client composes where the
      *  host's own words cannot reach: a library item has no package (the
      *  controls never draw for one, so this is a guard's answer), a refusal with
@@ -1706,21 +1610,6 @@ export const uiCopy = {
       shape: "Shape",
       style: "Style",
     },
-    /** The two empties, which are two sentences because they have two answers: a
-     *  library with nothing in it is not a filter that matched nothing, and
-     *  telling someone with forty themes to go and build one is a lie the
-     *  surface avoids by having both. */
-    empty: {
-      library: "No themes are saved on the Host yet.",
-      libraryHint: "Build one in the editor, or import a package.",
-      /** **The catalogue's own empty state, and not the library's** (R124):
-       *  before the store has anything published this is the normal state, so
-       *  the sentence must not tell someone with a full library that it is
-       *  empty. */
-      catalogue: "The store has nothing yet.",
-      catalogueHint: "Themes published to the store will appear here.",
-      filter: "No themes match these filters.",
-    },
     /** **A read that failed is not one of the empties.** The library and the
      *  catalogue each have an empty sentence for a successful read that held
      *  nothing; neither may be drawn when nobody answered, because saying a
@@ -1736,39 +1625,6 @@ export const uiCopy = {
     },
     /** The failure's one way forward: read the same listing again. */
     retry: "Try again",
-    /** A removal the host refused, in the host's own words where it gave
-     *  them: the theme is still in the library, so this is a PC that could not
-     *  move one to its recycle bin rather than a lost document. */
-    deleteFailed: (reason: string): string =>
-      `Could not delete the theme: ${reason}`,
-    /** A client that cannot delete is offered no deletion; the cell still
-     *  reports the press rather than failing at the moment it is made. */
-    deleteUnavailable: "This host cannot delete themes.",
-    /** The confirmation a removal asks for: the host's trash is recoverable,
-     *  and the sentence is how the author knows where the theme went. */
-    deleteConfirm: {
-      title: "Delete this theme?",
-      note: "The theme will be moved to the Recycle Bin, where you can restore it.",
-      cancel: "Cancel",
-      confirm: "Delete",
-    },
-    /** An export that could not be read back or written, in the failure's own
-     *  words: nothing was downloaded, so the sentence is the whole outcome. */
-    exportFailed: (reason: string): string =>
-      `Could not export the theme package: ${reason}`,
-    /** The sort well, whose keys are per half because the two share none: the
-     *  catalogue knows when an item was published and how often it was taken,
-     *  and the host's library knows only what the author wrote. */
-    sort: {
-      label: "Sort themes",
-      local: { name: "Name", updatedAt: "Updated" },
-      online: {
-        created: "Created",
-        updated: "Updated",
-        downloads: "Downloads",
-        favorites: "Favorites",
-      },
-    },
     /** One cell of either gallery. The actions are keyed by `CellAction`, so an
      *  action added to the cell without a word for it fails to compile rather
      *  than drawing an icon-only button nobody can name.
@@ -1798,17 +1654,11 @@ export const uiCopy = {
         update: "Update",
         install: "Install",
       } satisfies Record<Exclude<InstallState, "none">, string>,
-      /** What each kind is called, keyed by its wire identifier. The online
-       *  cell draws this badge in its facts band, and the item's own surface
-       *  draws the same word. A kind
-       *  this build does not know prints its own identifier, which is what a
-       *  client older than the kind expects. */
-      kinds: { [DASHBOARD_THEME_KIND]: "Theme" } as Readonly<
-        Record<string, string>
-      >,
       /** What a member is called, keyed by `MEMBER_KINDS`. The cell draws the
        *  word beside the member's name, and an unknown kind prints its own
-       *  identifier. */
+       *  identifier. It is the one kind vocabulary: the retired theme-only
+       *  one-entry map is gone, so a listing kind this table knows reads the
+       *  same word here. */
       memberKinds: memberKindWords,
       /** The pack card's readings. **The count is text, not a tooltip**: a
        *  package's size is what a person shops for, and a title attribute is
@@ -1852,18 +1702,6 @@ export const uiCopy = {
        *  names the display, so the confirmation is the assignment rather than
        *  a bare "done" (`assign-display.tsx`). */
       assigned: (where: string): string => `Assigned to ${where}`,
-    },
-    /** The grid's density slider. Its four levels are named rather than
-     *  numeric: the count is derived from the pane's width, so a number would
-     *  move on resize while the choice stayed still. */
-    density: {
-      label: "Density",
-      levels: {
-        compact: "Compact",
-        comfortable: "Comfortable",
-        roomy: "Roomy",
-        spacious: "Spacious",
-      },
     },
   },
   /**
@@ -1911,14 +1749,22 @@ export const uiCopy = {
      *  instead (`uiCopy.store.unreadable`), and never draws this. */
     empty: "Nothing here yet.",
     emptyHint: "Install an item from the store, or publish your own.",
+    /** The cross-links out of the editor's own surfaces. Each name says where
+     *  the press goes, so a screen reader reaching it alone knows the
+     *  destination rather than only the verb. */
+    links: {
+      browseWidgets: "Browse widgets in the Library",
+      browseShapes: "Browse shapes in the Library",
+      browseAppThemes: "Browse app themes in the Library",
+    },
     /** A per-type page's cell actions are drawn before their handlers land.
      *  The press is reported here rather than leaving a dead control; the
      *  label is the pressed command's own word. */
     actionPending: (label: string): string =>
       `${label} is not available on this page yet.`,
     /** My submissions: the author's own rows whatever their kind. A failed
-     *  read is stated rather than drawn as "nothing submitted", and the empty
-     *  sentence is the dashboard grid's own (`store.mine.empty`). */
+     *  read is stated rather than drawn as "nothing submitted"; the empty
+     *  sentence is the page's own below. */
     submissionsUnreadable: "Your submissions could not be read.",
     submissions: {
       heading: "Your submissions",
@@ -1929,9 +1775,9 @@ export const uiCopy = {
       kind: (kind: string): string =>
         kind === "collection"
           ? uiCopy.library.pages.collections
-          : ((uiCopy.store.cell.kinds as Readonly<Record<string, string>>)[
-              kind
-            ] ?? kind),
+          : ((
+              uiCopy.store.cell.memberKinds as Readonly<Record<string, string>>
+            )[kind] ?? kind),
     },
     /** The collection builder. Its search, add and optional controls each carry
      *  a name, and every refusal says which listing could not be added. */

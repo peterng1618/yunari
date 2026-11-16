@@ -1,6 +1,7 @@
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { ControlChoiceRow } from "../../components/ui/control-choice-row.js";
 import { ControlToggle } from "../../components/ui/control-toggle.js";
+import { EditorThemeSettings } from "../../editor-shell/editor-theme-settings.js";
 import {
   applyShellPalette,
   clearShellChoice,
@@ -31,6 +32,9 @@ export function AppearancePage(props: {
   readonly following: boolean;
   readonly onPalette: (next: ShellPalette) => void;
   readonly onFollowing: (next: boolean) => void;
+  /** Opens the Library on App themes. The app-theme picker below links there
+   *  rather than listing a second catalogue. */
+  readonly onBrowseAppThemes?: (() => void) | undefined;
 }): React.JSX.Element {
   return (
     <Page page="appearance">
@@ -40,6 +44,12 @@ export function AppearancePage(props: {
         following={props.following}
         onPalette={props.onPalette}
         onFollowing={props.onFollowing}
+      />
+      <EditorThemeSettings
+        palette={props.palette}
+        {...(props.onBrowseAppThemes === undefined
+          ? {}
+          : { onBrowseAppThemes: props.onBrowseAppThemes })}
       />
     </Page>
   );

@@ -794,5 +794,5 @@ it("draws My submissions as the author's listing, not a pending sentence", async
     container.querySelector("[data-yunari-submissions-page]"),
     "My submissions drew no listing",
   ).not.toBeNull();
-  expect(container.textContent).not.toContain(uiCopy.store.mine.empty);
+  expect(container.textContent).not.toContain(uiCopy.library.submissions.empty);
 });

@@ -633,13 +633,11 @@ export function createShellLayout(
               navigation make the first read as chrome rather than a choice. */}
           <ModeSwitch mode={mode} onModeChange={onModeChange} />
           {/* The Library's installed-state filter, in the header's mode-level
-              row. **Dashboard themes keeps today's store grid**, whose own
-              halves are the theme-only surface a later task replaces, and My
-              submissions is the author's listing rather than a catalogue page:
-              neither draws this filter over a listing it does not narrow. */}
-          {mode === "library" &&
-          libraryPage !== "dashboard-themes" &&
-          libraryPage !== "submissions" ? (
+              row. Every catalogue page reads it, Dashboard themes included: the
+              one filter is what replaced the retired theme-only halves. My
+              submissions is the author's listing rather than a catalogue page,
+              so it draws no filter over a listing it does not narrow. */}
+          {mode === "library" && libraryPage !== "submissions" ? (
             <LibraryStateFilter state={libraryState} onState={onLibraryState} />
           ) : null}
           {/* the header rule: the right-hand region is **per-mode**. The menus and the
@@ -930,10 +928,6 @@ export function createShellLayout(
                     onModeChange("editor"),
                   );
                 }}
-                onThemeDeleted={(id) => store.bridge?.session.themeRemoved(id)}
-                onThemePublished={(id) =>
-                  store.bridge?.session.themePublished(id)
-                }
               />
             ) : null}
             {/* The Host mode's region, beside the store's rather than chosen
@@ -954,6 +948,10 @@ export function createShellLayout(
               overrides={overrides}
               onOverrides={applyOverrides}
               releaseVersion={releaseVersion}
+              onOpenLibrary={(page) => {
+                onLibraryPage(page);
+                onModeChange("library");
+              }}
             />
           </section>
         )}

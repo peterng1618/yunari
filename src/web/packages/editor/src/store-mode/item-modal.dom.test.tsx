@@ -524,9 +524,9 @@ it("draws no Style group for a theme that declares no tags", async () => {
  * actions in the short words, in its own order.
  *
  * The kind is a badge rather than a title bar's word: what a kind is called is
- * `uiCopy.store.cell.kinds`, and a kind this build does not know prints its own
- * identifier rather than a name nobody chose. The version and the date are one
- * reading pair, `1.4.0 · 2026-10-14`, with the separator between them.
+ * `uiCopy.store.cell.memberKinds`, and a kind this build does not know prints
+ * its own identifier rather than a name nobody chose. The version and the date
+ * are one reading pair, `1.4.0 · 2026-10-14`, with the separator between them.
  */
 it("names the item in the panel and writes its actions in the short words", async () => {
   await mount(modal(LANDSCAPE));
@@ -542,7 +542,7 @@ it("names the item in the panel and writes its actions in the short words", asyn
       .querySelector("[data-yunari-store-item-kind]")
       ?.textContent?.trim(),
     "the panel does not say what kind of thing this is",
-  ).toBe(uiCopy.store.cell.kinds[DASHBOARD_THEME_KIND]);
+  ).toBe(uiCopy.store.cell.memberKinds[DASHBOARD_THEME_KIND]);
   expect(
     document.body
       .querySelector("[data-yunari-store-item-date]")
@@ -564,6 +564,37 @@ it("names the item in the panel and writes its actions in the short words", asyn
     uiCopy.store.item.actions.export,
     uiCopy.store.item.actions.delete,
   ]);
+});
+
+/**
+ * A kind this build does not ship has no word, so the badge prints the
+ * identifier the listing declared rather than an empty badge or a name nobody
+ * chose. It is the same rule the listing kinds follow.
+ */
+it("prints an unknown member kind's identifier rather than a blank badge", async () => {
+  const member: MemberRecord = {
+    id: "hologram",
+    kind: "hologram",
+    name: "Hologram",
+  };
+  await mount(
+    detailModal(
+      kindItem("plugin", {
+        id: "local/future",
+        name: "Future plugin",
+        author: undefined,
+        members: [member],
+      }),
+      { member },
+    ),
+  );
+
+  expect(
+    detailNode(
+      "[data-yunari-store-item-kind]",
+      "kind badge",
+    ).textContent?.trim(),
+  ).toBe("hologram");
 });
 
 /**

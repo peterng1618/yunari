@@ -15,6 +15,8 @@
  * the picker their type-preset panel mounts, `ui-copy-surfaces.test.ts` for the
  * landed React surfaces.
  */
+
+import { MEMBER_KINDS } from "@yunari/renderer-core";
 import { expect, it } from "vitest";
 import { THEME_TOOLBAR_ACTIONS } from "./editor-shell/shell-menu-bar.js";
 import { uiCopy } from "./ui-copy.js";
@@ -76,29 +78,56 @@ it("names each reading for the question it answers", () => {
  * and this table is not.** Every surface that prints it reads
  * `uiCopy.store.fromStore`, so a case asserting the badge says *that key* stays
  * green if the key's own value changes — and it did change once: *Installed* is
- * the **online** half's footer verb, where a theme is read against the catalogue
- * rather than against this machine's copy, while the local half badges its cells
- * *From the store*. One fact, two
- * views, two words; this is the only assertion that tells them apart.
+ * the install control's state word, where a theme is read against the catalogue
+ * rather than against this machine's copy, while a local cell is badged *From
+ * the store*. One fact, two views, two words; this is the only assertion that
+ * tells them apart.
  */
 it("words the local origin badge the way the surface does", () => {
   expect(uiCopy.store.fromStore).toBe("From the store");
 });
 
 /**
- * **The two store words the surfaces settle, pinned as literals because the
- * drawings own them and this table does not.** Both were drift: the tabs read
- * `Local`/`Online` where both drawings label them `Your themes`/`Store`, and
- * the kind badge read `Dashboard theme` where both surfaces draw `Theme`.
- * A case asserting the key would stay green through the value changing again.
+ * **The retired store surface's words are gone with it.** The Library's state
+ * filter is the one choice over what a page lists, and its pages draw the
+ * gallery rather than the store region's own header row. A key surviving in the
+ * table is the retired surface coming back through a later reader of it.
  */
-it("names the store's two halves the way the surfaces label the tabs", () => {
-  expect(uiCopy.store.halves.local).toBe("Local library");
-  expect(uiCopy.store.halves.online).toBe("Online store");
+it("no longer words the retired store surface", () => {
+  for (const key of [
+    "halves",
+    "mine",
+    "search",
+    "facets",
+    "sort",
+    "density",
+    "empty",
+    "deleteFailed",
+    "deleteUnavailable",
+    "deleteConfirm",
+    "exportFailed",
+  ]) {
+    expect(
+      uiCopy.store,
+      `retired store key "${key}" is back`,
+    ).not.toHaveProperty(key);
+  }
+  expect(uiCopy.store.cell).not.toHaveProperty("kinds");
 });
 
-it("names the dashboard theme kind the way the surfaces badge it", () => {
-  expect(uiCopy.store.cell.kinds["dashboard-theme"]).toBe("Theme");
+it("names every member kind, and a kind this build does not ship prints itself", () => {
+  const words = uiCopy.store.cell.memberKinds as Readonly<
+    Record<string, string>
+  >;
+  for (const kind of MEMBER_KINDS) {
+    expect(words[kind], `no word for member kind "${kind}"`).toBeTypeOf(
+      "string",
+    );
+  }
+  expect(words["dashboard-theme"]).toBe("Theme");
+  // A kind added by a newer listing has no word; the caller prints the
+  // identifier rather than an empty badge.
+  expect(words["unknown-kind"]).toBeUndefined();
 });
 
 /**
@@ -111,34 +140,6 @@ it("inflects each catalogue count's noun for the number it counts", () => {
   expect(uiCopy.store.counts.downloads(2)).toBe("downloads");
   expect(uiCopy.store.counts.favorites(1)).toBe("favorite");
   expect(uiCopy.store.counts.favorites(2)).toBe("favorites");
-});
-
-/**
- * **An empty catalogue is not an empty library**, and the two words are pinned
- * as literals because the pair is the claim: a case asserting the keys would
- * stay green while the catalogue's sentence was rewritten into the library's,
- * which tells someone with a full library that they have nothing.
- */
-it("says the store has nothing yet without calling the library empty", () => {
-  expect(uiCopy.store.empty.catalogue).toBe("The store has nothing yet.");
-  expect(uiCopy.store.empty.catalogueHint).toBe(
-    "Themes published to the store will appear here.",
-  );
-});
-
-/**
- * The refusal sentence is read by a person, so the identifier it carries is the
- * **wire value** and not a word this build invents: `widget-preset` is what the
- * catalogue declared and what the line must print.
- */
-it("names a skipped kind by the identifier the catalogue declared", () => {
-  expect(uiCopy.store.catalogueRefused("widget-preset", 1)).toContain(
-    "widget-preset",
-  );
-  expect(uiCopy.store.catalogueRefused("widget-preset", 1)).toContain(
-    "1 entry",
-  );
-  expect(uiCopy.store.catalogueRefused(undefined, 2)).toContain("2 entries");
 });
 
 /**

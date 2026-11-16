@@ -90,6 +90,7 @@ function editorStub() {
 function mount(
   actions?: Parameters<typeof createNewObjectPanel>[3],
   groups?: Parameters<typeof createNewObjectPanel>[4],
+  links?: Parameters<typeof createNewObjectPanel>[5],
 ): {
   readonly pane: HTMLElement;
   readonly editor: ReturnType<typeof editorStub>;
@@ -104,6 +105,7 @@ function mount(
     undefined,
     actions,
     groups,
+    links,
   );
   mounted.push(panel);
   return { pane: panel.root, editor, panel };
@@ -129,9 +131,10 @@ function groupHeadings(pane: HTMLElement): readonly (string | null)[] {
   );
 }
 
-/** Every tile the pane drew, which is every control it offers. */
+/** Every tile the pane drew, which is every insert control it offers. The
+ *  browse links are not tiles: they move to the Library rather than inserting. */
 function tileCount(pane: HTMLElement): number {
-  return pane.querySelectorAll("button").length;
+  return pane.querySelectorAll(".yunari-add-tile, .yunari-add-text").length;
 }
 
 function cardTile(pane: HTMLElement, cardId: string): HTMLButtonElement {
@@ -441,5 +444,37 @@ describe("the Add pane's insert surface", () => {
       panel.destroy();
       setActiveUserPathPresets([]);
     }
+  });
+
+  it("opens the Widgets page from the Add pane", async () => {
+    const onOpenLibrary = vi.fn();
+    const { pane } = mount(undefined, undefined, { onOpenLibrary });
+
+    const link = pane.querySelector<HTMLButtonElement>(
+      "[data-yunari-browse-widgets]",
+    );
+    expect(
+      link?.getAttribute("aria-label"),
+      "the link does not say where it goes",
+    ).toBe(uiCopy.library.links.browseWidgets);
+    await act(async () => link?.click());
+
+    expect(onOpenLibrary).toHaveBeenCalledWith("widgets");
+  });
+
+  it("opens the Shapes page from the preset list", async () => {
+    const onOpenLibrary = vi.fn();
+    const { pane } = mount(undefined, undefined, { onOpenLibrary });
+
+    const link = pane.querySelector<HTMLButtonElement>(
+      "[data-yunari-browse-shapes]",
+    );
+    expect(
+      link?.getAttribute("aria-label"),
+      "the link does not say where it goes",
+    ).toBe(uiCopy.library.links.browseShapes);
+    await act(async () => link?.click());
+
+    expect(onOpenLibrary).toHaveBeenCalledWith("shapes");
   });
 });

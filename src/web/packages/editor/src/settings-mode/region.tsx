@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Glyph, PACKAGE_GLYPH } from "../editor-shell/icons.js";
 import type { ShellPalette } from "../editor-shell/palette.js";
 import type { ShellMode } from "../editor-shell/shell-layout.js";
+import type { LibraryPage } from "../library-mode/sources.js";
 import { ExtensionsPage } from "../plugin-manager/plugin-manager.js";
 import { useExtensions } from "../plugin-manager/use-extensions.js";
 import type { ShortcutOverrides } from "../shortcut-manager/bindings.js";
@@ -75,6 +76,10 @@ export function SettingsRegion(props: {
   readonly overrides: ShortcutOverrides;
   readonly onOverrides: (next: ShortcutOverrides) => void;
   readonly releaseVersion: string | undefined;
+  /** Opens the Library on one of its pages. The Appearance page's app-theme
+   *  picker is the one caller: the Library owns the catalogue, so this surface
+   *  links to it instead of listing a second copy. */
+  readonly onOpenLibrary?: ((page: LibraryPage) => void) | undefined;
 }): React.JSX.Element | null {
   return props.mode === "settings" ? (
     <Settings
@@ -92,6 +97,9 @@ export function SettingsRegion(props: {
       overrides={props.overrides}
       onOverrides={props.onOverrides}
       releaseVersion={props.releaseVersion}
+      {...(props.onOpenLibrary === undefined
+        ? {}
+        : { onOpenLibrary: props.onOpenLibrary })}
     />
   ) : null;
 }
@@ -113,6 +121,7 @@ function Settings(props: {
   readonly overrides: ShortcutOverrides;
   readonly onOverrides: (next: ShortcutOverrides) => void;
   readonly releaseVersion: string | undefined;
+  readonly onOpenLibrary?: ((page: LibraryPage) => void) | undefined;
 }): React.JSX.Element {
   const host = useHostSettings({
     ...(props.client === undefined ? {} : { client: props.client }),
@@ -293,6 +302,12 @@ function Settings(props: {
                       following={props.following}
                       onPalette={props.onPalette}
                       onFollowing={props.onFollowing}
+                      {...(props.onOpenLibrary === undefined
+                        ? {}
+                        : {
+                            onBrowseAppThemes: () =>
+                              props.onOpenLibrary?.("app-themes"),
+                          })}
                     />
                   ) : null}
                   {page.id === "previews" ? (

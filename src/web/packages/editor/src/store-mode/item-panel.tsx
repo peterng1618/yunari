@@ -231,9 +231,7 @@ export function PanelHeader(props: {
         >
           {/* A member's own kind word, then the listing kind's word, then the
               identifier itself for a kind this build does not ship. */}
-          {uiCopy.store.cell.memberKinds[props.kind] ??
-            uiCopy.store.cell.kinds[props.kind] ??
-            props.kind}
+          {uiCopy.store.cell.memberKinds[props.kind] ?? props.kind}
         </span>
         <span className="flex-1" />
         <span className="flex-none">

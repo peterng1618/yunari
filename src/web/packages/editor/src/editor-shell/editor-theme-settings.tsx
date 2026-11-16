@@ -46,8 +46,12 @@ function download(name: string, bytes: Uint8Array): void {
  *  palette that is no longer in force would be a package nobody authored. */
 export function EditorThemeSettings({
   palette,
+  onBrowseAppThemes,
 }: {
   readonly palette: ShellPalette;
+  /** The shell's Library door: an app theme is browsed and installed there, so
+   *  this section links to the page rather than listing a second catalogue. */
+  readonly onBrowseAppThemes?: (() => void) | undefined;
 }): React.JSX.Element {
   const [name, setName] = useState("");
   const [draft, setDraft] = useState<EditorThemeDraft | undefined>(undefined);
@@ -136,6 +140,17 @@ export function EditorThemeSettings({
         {uiCopy.settings.editorThemeHeading}
       </h3>
       <p className="text-sm text-muted">{uiCopy.settings.editorThemeHint}</p>
+      {onBrowseAppThemes === undefined ? null : (
+        <button
+          type="button"
+          data-yunari-browse-app-themes=""
+          aria-label={uiCopy.library.links.browseAppThemes}
+          className="self-start text-xs text-accent underline hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          onClick={onBrowseAppThemes}
+        >
+          {uiCopy.library.links.browseAppThemes}
+        </button>
+      )}
       <div className="flex flex-wrap items-center gap-[var(--space-8)]">
         <ControlWell density="dialog" widthClassName="min-w-[6rem] flex-1">
           <input

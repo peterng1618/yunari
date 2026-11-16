@@ -475,6 +475,10 @@ export class EditorSession {
       options.shell.editor,
       this.#document.envelope.globals,
       newObjectActions,
+      undefined,
+      options.onOpenLibrary === undefined
+        ? {}
+        : { onOpenLibrary: options.onOpenLibrary },
     );
     this.#widgets = createNewObjectPanel(
       options.panelHosts.widgets,

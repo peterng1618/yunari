@@ -33,6 +33,7 @@ import {
 } from "./draft-store.js";
 import { createFavoritesClient } from "./favorites-client.js";
 import { watchDeclaredFontFaces } from "./font-face-registration.js";
+import type { LibraryPage } from "./library-mode/sources.js";
 import { createEditorSource } from "./live-source.js";
 import type { NewDocumentAnswer } from "./new-document-chooser.js";
 import {
@@ -364,6 +365,9 @@ async function start(): Promise<void> {
       onShowShortcuts: () => layout.showShortcuts(),
       onFindAssets: () => layout.showFinder(),
       onFindFontPicker: () => layout.showFinder("font"),
+      // The Add pane's browse links move the shell's mode and page together
+      // through its one door, so the Library lands on the page the press named.
+      onOpenLibrary: (page: LibraryPage) => layout.openLibrary(page),
       // The header's own chord, routed to the control it is printed beside:
       // both open the surface, and the switch inside it is the one owner of
       // whether the host is serving.

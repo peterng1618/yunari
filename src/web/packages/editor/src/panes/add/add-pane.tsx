@@ -7,7 +7,9 @@ import {
   KIND_GLYPHS,
   SHAPE_GLYPHS,
 } from "../../editor-shell/icons.js";
+import type { LibraryPage } from "../../library-mode/sources.js";
 import type { InsertableObject, InsertGroup } from "../../new-object-panel.js";
+import { uiCopy } from "../../ui-copy.js";
 import { chartFamilyGlyph } from "../composition/kind-mark.js";
 import { PathGlyph } from "./path-glyph.js";
 
@@ -40,9 +42,15 @@ import { PathGlyph } from "./path-glyph.js";
 export function AddPane({
   groups,
   onInsert,
+  onOpenLibrary,
 }: {
   readonly groups: readonly InsertGroup[];
   readonly onInsert: (object: InsertableObject) => void;
+  /** The shell's one Library door, handed only to the Add pane: the Widgets
+   *  pane is the installed card library's own surface and links nowhere, while
+   *  the Add pane's blank-slate case is exactly where a person looks for
+   *  widgets and shapes the Library holds. */
+  readonly onOpenLibrary?: ((page: LibraryPage) => void) | undefined;
 }): React.JSX.Element {
   return (
     <>
@@ -77,6 +85,28 @@ export function AddPane({
           </fieldset>
         );
       })}
+      {onOpenLibrary === undefined ? null : (
+        <div className="flex flex-wrap gap-[var(--space-8)] px-[var(--space-8)] pt-[var(--space-8)]">
+          <button
+            type="button"
+            data-yunari-browse-widgets=""
+            aria-label={uiCopy.library.links.browseWidgets}
+            className="text-xs text-accent underline hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            onClick={() => onOpenLibrary("widgets")}
+          >
+            {uiCopy.library.links.browseWidgets}
+          </button>
+          <button
+            type="button"
+            data-yunari-browse-shapes=""
+            aria-label={uiCopy.library.links.browseShapes}
+            className="text-xs text-accent underline hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            onClick={() => onOpenLibrary("shapes")}
+          >
+            {uiCopy.library.links.browseShapes}
+          </button>
+        </div>
+      )}
     </>
   );
 }

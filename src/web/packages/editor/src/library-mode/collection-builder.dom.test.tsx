@@ -421,5 +421,7 @@ it("states a failed read instead of claiming nothing was submitted", async () =>
   expect(document.body.textContent).toContain(
     uiCopy.library.submissionsUnreadable,
   );
-  expect(document.body.textContent).not.toContain(uiCopy.store.mine.empty);
+  expect(document.body.textContent).not.toContain(
+    uiCopy.library.submissions.empty,
+  );
 });

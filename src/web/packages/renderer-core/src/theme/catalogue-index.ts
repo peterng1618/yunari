@@ -12,7 +12,8 @@ import type { FacetRecord } from "./facet-record.js";
 
 /**
  * Every package kind the store exchanges, and the value each is identified by
- * on the wire. What one is *called* is `uiCopy.store.cell.kinds`.
+ * on the wire. What a member kind is *called* is
+ * `uiCopy.store.cell.memberKinds`.
  *
  * A parsed wire entry's kind stays a string: a listing written by a newer store
  * may name a kind this build does not ship, and `parseCatalogueIndex` reports

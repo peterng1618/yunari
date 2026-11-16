@@ -220,6 +220,26 @@ it("never links an advisory that is not HTTPS", () => {
   ).toBeNull();
 });
 
+it("draws Extensions as trust only, with no installed theme or pack listing", () => {
+  render({ extensions: [extension()] });
+
+  // The page's own rows are the plugins this PC holds, and its own controls
+  // are install-from-file, consent and provider order. Installed themes and
+  // packs are the Library's to list; a second listing here would be the
+  // duplicate this surface retired.
+  expect(document.querySelectorAll("[data-yunari-extension-row]")).toHaveLength(
+    1,
+  );
+  expect(document.querySelector("[data-yunari-store-cell-name]")).toBeNull();
+  expect(document.querySelector("[data-yunari-store-cell]")).toBeNull();
+  expect(document.querySelector("[data-yunari-library-listing]")).toBeNull();
+  expect(document.querySelector("[data-yunari-held-update]")).toBeNull();
+  expect(
+    document.querySelector('input[type="file"]'),
+    "install-from-file is the agent-parity control and must stay",
+  ).not.toBeNull();
+});
+
 it("draws a held update's review notice and approves it", () => {
   const onApproveUpdate = vi.fn();
   render({

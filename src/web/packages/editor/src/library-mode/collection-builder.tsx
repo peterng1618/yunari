@@ -8,10 +8,10 @@ import {
   catalogueItemOf,
   readCatalogueListing,
 } from "../store-mode/online-source.js";
-import { Empty, Failure } from "../store-mode/region.js";
 import { StoreStatusBadge } from "../store-mode/status-badge.js";
 import { useSubmit } from "../store-mode/use-submit.js";
 import { uiCopy } from "../ui-copy.js";
+import { Empty, Failure } from "./feedback.js";
 
 export {
   type CollectionDraft,

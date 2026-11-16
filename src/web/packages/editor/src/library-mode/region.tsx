@@ -20,7 +20,6 @@ import {
   type StoreItem,
   settledTags,
 } from "../store-mode/local-source.js";
-import { Empty, Failure, StoreRegion } from "../store-mode/region.js";
 import { useInstall } from "../store-mode/use-install.js";
 import type { SubmitControl } from "../store-mode/use-submit.js";
 import {
@@ -30,6 +29,7 @@ import {
 import { uiCopy } from "../ui-copy.js";
 import { collectionStateOf, type StoreCard } from "./cards.js";
 import { SubmissionsPage } from "./collection-builder.js";
+import { Empty, Failure } from "./feedback.js";
 import { LIBRARY_GROUPS, LIBRARY_PAGES } from "./nav.js";
 import { readOrigins } from "./origins.js";
 import {
@@ -243,26 +243,28 @@ function hostClients(client: ThemeLibraryClient): LibraryClients {
  * asks for another, so a later surface can move the mode and the page together
  * through `openLibrary(page)`; it keeps no copy of either.
  *
- * **Dashboard themes keeps today's store grid** for this task: that page still
- * mounts `StoreRegion`, whose own halves are the theme-only surface Tasks 9–13
- * replace. The other pages read Task 7's sources, one catalogue half and one
- * library half, and the state filter decides which rows they draw.
+ * Every page reads Task 7's sources, one catalogue half and one library half,
+ * and the state filter decides which rows it draws. Dashboard themes is one of
+ * those pages now: the theme-only store grid and its halves are gone, so the
+ * page cannot disagree with the others about what "On this PC" means.
  */
 export function LibraryRegion(props: {
   readonly page: LibraryPage;
   readonly onPage: (page: LibraryPage) => void;
   readonly state: LibraryState;
   readonly onState: (state: LibraryState) => void;
-  /** The library client, for the theme half the store grid reads. */
+  /** The library client, for the installed half each page joins against the
+   *  catalogue. */
   readonly client?: ThemeLibraryClient | undefined;
+  /** Opens a dashboard theme as the editor's document. The shell hands the
+   *  session's route; the catalogue page reports the press and the shell moves
+   *  the mode only once the session accepts the replacement. */
   readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   /** Opens Settings on Extensions, the trust page a code member's detail links
    *  to. The shell owns the mode and the settings page, so the region passes
    *  the press through rather than moving either. */
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
-  readonly onThemeDeleted?: ((id: string) => void) | undefined;
-  readonly onThemePublished?: ((id: string) => void) | undefined;
 }): React.JSX.Element {
   const [client] = useState(() => props.client ?? createThemeLibraryClient());
   const clients = useMemo(() => hostClients(client), [client]);
@@ -374,28 +376,7 @@ export function LibraryRegion(props: {
             data-yunari-library-panel={props.page}
             className="library-mode-page"
           >
-            {props.page === "dashboard-themes" ? (
-              <StoreRegion
-                client={client}
-                collections={collections}
-                onDetailOpen={ensureDetailReads}
-                {...(props.onOpenTheme === undefined
-                  ? {}
-                  : { onOpenTheme: props.onOpenTheme })}
-                {...(props.onStatus === undefined
-                  ? {}
-                  : { onStatus: props.onStatus })}
-                {...(props.onThemeDeleted === undefined
-                  ? {}
-                  : { onThemeDeleted: props.onThemeDeleted })}
-                {...(props.onThemePublished === undefined
-                  ? {}
-                  : { onThemePublished: props.onThemePublished })}
-                {...(props.onOpenSettings === undefined
-                  ? {}
-                  : { onOpenSettings: props.onOpenSettings })}
-              />
-            ) : props.page === "submissions" ? (
+            {props.page === "submissions" ? (
               <SubmissionsPage />
             ) : (
               <PageListing
@@ -406,6 +387,9 @@ export function LibraryRegion(props: {
                 collections={collections}
                 detailOrigins={detailOrigins}
                 onDetailOpen={ensureDetailReads}
+                {...(props.onOpenTheme === undefined
+                  ? {}
+                  : { onOpenTheme: props.onOpenTheme })}
                 {...(props.onOpenSettings === undefined
                   ? {}
                   : { onOpenSettings: props.onOpenSettings })}
@@ -425,6 +409,7 @@ function PageListing(props: {
   readonly state: LibraryState;
   readonly clients: LibraryClients;
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
+  readonly onOpenTheme?: ((id: string) => void) | undefined;
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
   readonly collections: CollectionsRead;
   readonly detailOrigins: OriginsRead;
@@ -617,6 +602,19 @@ function PageListing(props: {
     [],
   );
   const onAction = (action: CellAction, card: StoreCard): void => {
+    // Opening a dashboard theme is the page's own route: the shell hands the
+    // session's `openLibraryTheme`, which moves the mode only once the session
+    // accepts the replacement. **Only Dashboard themes owns that route** — the
+    // cell draws the same four library actions on every page, and a widget or a
+    // shape is not a document. Every other command still waits for its handler.
+    if (
+      action === "open" &&
+      props.page === "dashboard-themes" &&
+      props.onOpenTheme !== undefined
+    ) {
+      props.onOpenTheme(card.listing.id);
+      return;
+    }
     setNotice(
       uiCopy.library.actionPending(
         actionLabel(action, card.member?.kind ?? card.listing.kind),

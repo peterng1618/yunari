@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { EditorInteraction } from "./editor-interaction.js";
+import type { LibraryPage } from "./library-mode/sources.js";
 import {
   createNewShape,
   createNewTextDefaults,
@@ -416,6 +417,12 @@ export function createNewObjectPanel(
    *  passes `widgetGroups`, so one component draws both panes and neither
    *  holds a private copy of the other's list. */
   groups: () => readonly InsertGroup[] = insertGroups,
+  /** The Library links the Add pane draws. The Widgets pane passes none: it is
+   *  already the installed cards' own surface, and a page that links to itself
+   *  is chrome saying nothing. */
+  links: {
+    readonly onOpenLibrary?: ((page: LibraryPage) => void) | undefined;
+  } = {},
 ): NewObjectPanel {
   // Read at construction time rather than captured by the render, so a theme
   // edit that arrives through `setGlobals` reaches the next insertion — the
@@ -435,6 +442,9 @@ export function createNewObjectPanel(
         groups: groups(),
         onInsert: (object) =>
           insertObject(editor, current.globals, actions, object),
+        ...(links.onOpenLibrary === undefined
+          ? {}
+          : { onOpenLibrary: links.onOpenLibrary }),
       }),
     );
   };

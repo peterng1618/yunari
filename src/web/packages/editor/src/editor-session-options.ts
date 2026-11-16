@@ -13,6 +13,7 @@ import type {
 import type { EditorShell } from "./editor-shell.js";
 import type { FavoritesClient } from "./favorites-client.js";
 import type { IndicatorStore } from "./indicator-manager/store.js";
+import type { LibraryPage } from "./library-mode/sources.js";
 import type { NewDocumentAnswer } from "./new-document-chooser.js";
 import type { SensorCatalogue } from "./sensor-catalogue.js";
 import type { ThemeLibraryClient } from "./theme-library-client.js";
@@ -91,6 +92,11 @@ export interface EditorSessionOptions {
    *  dispatcher, so the gesture leaves through the shell's own door. Optional,
    *  like the two below, so a session built without chrome has no finder row. */
   readonly onFindAssets?: () => void;
+  /** Opens the Library on one of its pages. The Add pane's browse links are the
+   *  caller: the pane is imperative and the mode and page are the shell's, so
+   *  the press leaves through the shell's own door. Optional, like its
+   *  neighbours, so a session built without chrome draws no links. */
+  readonly onOpenLibrary?: (page: LibraryPage) => void;
   /** Opens the finder already on Fonts, which is where the catalogue browsed
    *  from the selection inspector's face field now lives. */
   readonly onFindFontPicker?: () => void;

@@ -84,7 +84,6 @@
     "src/web/packages/editor/src/ui-copy.ts",
     "src/web/packages/editor/src/copy-defects.test.ts",
     "src/web/packages/editor/src/editor-shell/editor-shell.css",
-    "src/web/packages/editor/src/store-mode/region.tsx",
     "src/web/packages/editor/src/store-mode/gallery.tsx",
     "src/web/packages/editor/src/store-mode/item-modal.tsx"
   ]

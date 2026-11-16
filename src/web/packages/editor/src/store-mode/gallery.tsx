@@ -575,7 +575,7 @@ function Cell(props: {
                 >
                   {/* A kind this build does not know prints its identifier, which
                     is the rule for a client older than the kind. */}
-                  {uiCopy.store.cell.kinds[item.kind] ?? item.kind}
+                  {uiCopy.store.cell.memberKinds[item.kind] ?? item.kind}
                 </span>
                 <span
                   data-yunari-store-cell-downloads=""

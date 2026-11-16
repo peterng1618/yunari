@@ -136,21 +136,12 @@ const EXEMPT: readonly (readonly [string, string])[] = [
     "two range inputs: a drag is the value, with no draft to compose or commit",
   ],
   [
-    "store-mode/density-slider.tsx",
-    "a range input: a discrete level is the value, with no draft to compose or commit",
-  ],
-  [
     "panes/composition/composition-pane.tsx",
     "a copy: the inline rename field is uncontrolled and keeps its own Enter, Escape and blur; only the composing guard is shared",
   ],
-  ["store-mode/region.tsx", "the search well: a filter, not an authored value"],
   [
     "library-mode/collection-builder.tsx",
     "submission form fields: Enter must not publish and Escape must not discard, so the draft/commit decision does not apply",
-  ],
-  [
-    "store-mode/facet-row.tsx",
-    "the popover's search is a filter, not an authored value",
   ],
   [
     "asset-finder/finder-controls.tsx",

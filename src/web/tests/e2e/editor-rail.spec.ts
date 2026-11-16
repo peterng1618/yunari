@@ -43,8 +43,8 @@ const HEADER_STRIP_PX = 42;
 /**
  * **No case in this spec may reach the catalogue's public URL.**
  *
- * The store region starts its online read when it mounts
- * (`online-listing.ts`), and that is true of the Local half too, so every case
+ * A catalogue page starts its online read when it mounts
+ * (`online-listing.ts`), and the installed half is read beside it, so every case
  * that opens the Library mode would otherwise ask `yunari-store.workers.dev`
  * for a catalogue that does not exist until phase E. The answer would be
  * whatever the network says that day, not what the case is measuring.
@@ -1270,915 +1270,6 @@ test("the header's mode switch moves the shell, and asks before it leaves a dirt
 });
 
 /**
- * The dashboard themes page's own header row, as a rendered row.
- *
- * the rail rule forbids a second bar under the header, so what the store draws is the
- * *region's* first row rather than a strip between the header and the content.
- * This case reads the row really drawn — both halves, the search well, five
- * facet buttons and the sort well, all inside the region — and reads the
- * editor's own body as hidden from the other side of A.1's invariant.
- *
- * **The narrow pass is the wrap.** jsdom lays nothing out, so the dom case can
- * only say that no facet is conditional; this says that a window too narrow for
- * the row takes a second line rather than losing a control — every facet is
- * still drawn, still inside the row's own box, and the row is taller than the
- * one line it draws at 1280. A row that stayed one line tall while a button fell
- * outside it would pass a drawn/not-drawn reading alone, which is why both are
- * read.
- *
- * **The asserted narrow width is 720, not the width that forces the facet row
- * itself to wrap.** That width is about 380px, which is not an arrangement this
- * shell is a desktop surface in; at 720 the row takes its second line and every
- * facet is still drawn inside it. The facet row's own wrap is read structurally
- * in `region.dom.test.tsx`, where the row's declaration is what is asserted,
- * and was measured once at 380 while this case was written: the fifth facet
- * moved to the next line and none was lost.
- */
-test("the Library draws the dashboard grid's own header row, and no width drops a facet", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  await page.goto(EDITOR);
-  await expect(
-    page.locator("#yunari-fabric-editor canvas.upper-canvas"),
-  ).toBeVisible();
-  await page
-    .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.library, exact: true })
-    .click();
-
-  const region = page.locator("[data-yunari-mode-region='library']");
-  await expect(region, "the Library renders no region").toBeVisible();
-  await expect(
-    page.locator(".editor-shell-body"),
-    "the editor's body was not hidden",
-  ).toBeHidden();
-
-  const header = region.locator("[data-yunari-store-header]");
-  await expect(header, "the region draws no header row").toBeVisible();
-
-  // The two halves, named and opening on Local. Dashboard themes keeps the
-  // theme grid's own halves inside its header row for this task; the installed
-  // state filter is the shell-level choice the catalogue pages draw instead.
-  const halves = header.locator("[data-yunari-store-halves] button");
-  await expect(halves).toHaveCount(2);
-  await expect(halves.nth(0)).toHaveText(uiCopy.store.halves.local);
-  await expect(halves.nth(1)).toHaveText(uiCopy.store.halves.online);
-  await expect(halves.nth(0)).toHaveAttribute("aria-pressed", "true");
-
-  await expect(
-    header.locator("[data-yunari-store-search]"),
-    "the region draws no search well",
-  ).toBeVisible();
-  const facets = header.locator("[data-yunari-facet]");
-  await expect(facets, "the region does not draw the five facets").toHaveCount(
-    5,
-  );
-  await expect(
-    header.locator("[data-yunari-store-sort]"),
-    "the region draws no sort well",
-  ).toBeVisible();
-
-  // Nothing sits above the region's own first row: the header row is the
-  // region element's first child, which is what makes it the region's row
-  // rather than a bar the switch was moved into.
-  expect(
-    await header.evaluate(
-      (node) => node === node.parentElement?.firstElementChild,
-    ),
-    "something sits above the region's own header row",
-  ).toBe(true);
-
-  // ── Every width the plan names ─────────────────────────────────────────────
-  // 1280 is the project's own viewport; the boundary's other two sizes are
-  // 1440×900 and the repo's model of 200% zoom, a 640×360 CSS viewport. 720 is
-  // the narrow wrap this case has always measured. Every size is read the same
-  // way: all five facets drawn inside the row, and the row inside the window.
-  /** The row and the five facets, as rendered boxes. */
-  const measure = async (): Promise<{
-    readonly row: { left: number; right: number; height: number };
-    readonly boxes: readonly {
-      left: number;
-      right: number;
-      width: number;
-      height: number;
-    }[];
-  }> => ({
-    row: await header.evaluate((node) => {
-      const rect = node.getBoundingClientRect();
-      return {
-        left: Math.round(rect.left),
-        right: Math.round(rect.right),
-        height: Math.round(rect.height),
-      };
-    }),
-    boxes: await facets.evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const rect = node.getBoundingClientRect();
-        return {
-          left: Math.round(rect.left),
-          right: Math.round(rect.right),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        };
-      }),
-    ),
-  });
-
-  const wide = await measure();
-  const sizes = [
-    { width: 1440, height: 900 },
-    { width: 720, height: 720 },
-    { width: 640, height: 360 },
-  ] as const;
-  for (const size of sizes) {
-    await page.setViewportSize(size);
-    const at = await measure();
-    const report = JSON.stringify({ size, wide, at });
-    console.log(`store-facets ${report}`);
-    testInfo.annotations.push({
-      type: "store-facets",
-      description: report,
-    });
-
-    expect(
-      at.boxes.every((box) => box.width > 0 && box.height > 0),
-      `a facet is not drawn at ${size.width}×${size.height} (${report})`,
-    ).toBe(true);
-    expect(
-      at.boxes.every(
-        (box) => box.left >= at.row.left - 1 && box.right <= at.row.right + 1,
-      ),
-      `a facet falls outside the row at ${size.width}×${size.height} (${report})`,
-    ).toBe(true);
-    expect(
-      at.row.right,
-      `the row overflows the ${size.width}px window it is drawn in (${report})`,
-    ).toBeLessThanOrEqual(size.width);
-    // A window too narrow for one line takes a second rather than losing a
-    // control. 720 and 640 are both narrower than the row's own wide line.
-    if (size.width < wide.row.right) {
-      expect(
-        at.row.height,
-        `the row did not wrap at ${size.width}×${size.height}, so a control is out of reach (${report})`,
-      ).toBeGreaterThan(wide.row.height);
-    }
-  }
-});
-
-/**
- * A stubbed library of thirty themes, as the host would answer `/api/themes`.
- *
- * **Thirty is what makes the endless scroll real**: the first batch of 24
- * leaves six for the sentinel, so the case can load a second batch. One of them
- * is portrait and in the first batch, so a landscape item can be held against it
- * in the same surface, and a second portrait item sits in the last batch.
- *
- * The record is `facetRecordOf`'s own derivation of an envelope rather than a
- * hand-written one, which is the trap A.4a's review found: a descriptor written
- * by hand answers something the host never would.
- */
-const STORE_LIBRARY = Array.from({ length: 30 }, (_unused, at) => {
-  const index = at + 1;
-  const label = String(index).padStart(2, "0");
-  const name = `Store theme ${label}`;
-  const portrait = index === 2 || index === 25;
-  // **Two authors, so the Author facet has two rows to space** (A.6's fix round
-  // 2, G1). A facet whose values are alternatives draws them as one ungrouped
-  // run, and a run of one row cannot show whether its rows are spaced at all.
-  const author = index % 3 === 0 ? "mei" : "huyng";
-  const envelope: FabricThemeEnvelope = {
-    schemaVersion: "3.0.0",
-    fabricVersion: "7.4.0",
-    id: `store-${label}`,
-    artboard: {
-      width: portrait ? 1080 : 1920,
-      height: portrait ? 1920 : 1080,
-    },
-    background: { color: { value: DARK_GROUND } },
-    metadata: { name, themeLanguage: "en", author },
-    scene: { version: "7.4.0", objects: [] },
-  };
-  return {
-    id: envelope.id,
-    name,
-    author,
-    version: "1.4.0",
-    updatedAt: "2026-10-14T00:00:00.000Z",
-    ground: DARK_GROUND,
-    facets: facetRecordOf(envelope),
-  };
-});
-
-/** The item's own surface, reached from the portalled popup rather than the
- *  region: Base UI portals it to `body`. */
-const STORE_ITEM_STAGE = "[data-yunari-store-item-stage]";
-const STORE_ITEM_PICTURE = "[data-yunari-store-item-picture]";
-
-/**
- * The store's body, as a rendered surface: the gallery, the endless scroll and
- * an item's own surface, against a stubbed library.
- *
- * **Nothing mounted any of these before A.6** — the region's body was empty — so
- * what this case proves is the wiring rather than any one part: a listing the
- * host answers reaches cells, a cell opens the item's own surface, and closing
- * it comes back to the list, filter and sort it was opened from.
- *
- * **The stage's one height is measured here because jsdom cannot measure it.**
- * The dom case reads the declarations that make it true; this reads the two
- * boxes, one landscape and one portrait, and the theme's own ratio inside them.
- *
- * **The density well's reading is here** because it is a measurement and not a
- * claim: the header's chosen count and the grid's own tracks have to agree, and
- * only a browser can say what the grid actually drew.
- */
-test("the store lists a library, opens an item, and comes back to the same list", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  // **A stub, not the real host.** The editor preview serves no `/api/themes` at
-  // all, and the local half lists through that route (`theme-library-client.ts`);
-  // `editor.spec.ts` stubs the same one for the library chooser.
-  await page.route("**/api/themes", (route) =>
-    route.fulfill({ json: { themes: STORE_LIBRARY } }),
-  );
-  await page.goto(EDITOR);
-  await expect(
-    page.locator("#yunari-fabric-editor canvas.upper-canvas"),
-  ).toBeVisible();
-  // A density another case left behind would make this case read that case's
-  // level rather than the default. The scroll position starts at the top because
-  // the sentinel is what loads the rest.
-  await page.evaluate(() =>
-    window.localStorage.removeItem("yunari.editor.store-density"),
-  );
-  await page
-    .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.library, exact: true })
-    .click();
-
-  const region = page.locator("[data-yunari-mode-region='library']");
-  await expect(region, "the Library renders no region").toBeVisible();
-
-  const cells = region.locator("[data-yunari-store-cell]");
-  const scroller = region.locator("[data-yunari-store-scroller]");
-  const search = region.locator("[data-yunari-store-search]");
-
-  // **The gallery, which nothing mounted before A.6**: the first batch of a
-  // thirty-item library. The density slider names the level the gallery is
-  // drawn at, and the first row is flush with the pane's right edge — both only
-  // a browser can say.
-  await expect(
-    cells,
-    "the region does not list the library's first batch",
-  ).toHaveCount(24);
-  const gallery = region.locator("[data-yunari-store-gallery]");
-  const density = region.locator("[data-yunari-store-density-track]");
-  await expect(density, "the store draws no density slider").toBeVisible();
-  await expect(
-    density,
-    "the density slider does not name its level",
-  ).toHaveAttribute("aria-valuetext", uiCopy.store.density.levels.comfortable);
-  const firstRow = await gallery.evaluate((node) => {
-    const laid = Array.from(
-      node.querySelectorAll<HTMLElement>("[data-yunari-store-cell]"),
-    );
-    const top = Math.round(laid[0]?.getBoundingClientRect().top ?? 0);
-    const row = laid.filter(
-      (cell) => Math.round(cell.getBoundingClientRect().top) === top,
-    );
-    const last = row[row.length - 1]?.getBoundingClientRect();
-    return {
-      width: node.clientWidth,
-      count: row.length,
-      spanned:
-        last === undefined ? 0 : last.right - node.getBoundingClientRect().left,
-    };
-  });
-  expect(
-    firstRow.count,
-    `the first row holds a single card (${JSON.stringify(firstRow)})`,
-  ).toBeGreaterThan(1);
-  expect(
-    Math.round(firstRow.spanned),
-    `the first row is not flush with the pane (${JSON.stringify(firstRow)})`,
-  ).toBe(firstRow.width);
-
-  /**
-   * The stage's height, the modal box and the caption's stamp for one item,
-   * opened from its cell and closed again — so every reading is taken the same
-   * way and the surface is not left open for the next one.
-   *
-   * **The boxes are measured because the numbers are design language now**:
-   * `DESIGN.md` fixes the modal at 960 × 760, and the stage is the box's height
-   * less its border, so a case that asserted only that two stages were equal
-   * would pass a 100px stage.
-   */
-  const drawn = async (
-    id: string,
-  ): Promise<{
-    readonly stage: number;
-    readonly width: number;
-    readonly height: number;
-    readonly stamp: string;
-    readonly picture: { readonly width: number; readonly height: number };
-  }> => {
-    // **The cell's own surface, not its `open` action**: the action names the
-    // library operation its label prints and loads a document, and the cell is
-    // what opens the item's own surface (A.7b).
-    await region
-      .locator(`[data-yunari-store-cell='${id}']`)
-      .locator("[data-yunari-store-cell-surface]")
-      .click();
-    const stage = page.locator(STORE_ITEM_STAGE);
-    await expect(stage, "a cell opens no item surface").toBeVisible();
-    const box = await stage.boundingBox();
-    const modal = await page.locator("[data-yunari-store-item]").boundingBox();
-    const picture = await page.locator(STORE_ITEM_PICTURE).boundingBox();
-    const stamp =
-      (await page.locator("[data-yunari-store-item-date]").textContent()) ?? "";
-    await page.locator("[data-yunari-store-item-close]").click();
-    await expect(stage, "the item's surface does not close").toBeHidden();
-    if (box === null || picture === null || modal === null) {
-      throw new Error(`the item's surface drew no box for ${id}`);
-    }
-    return {
-      stage: box.height,
-      width: modal.width,
-      height: modal.height,
-      stamp: stamp.trim(),
-      picture: { width: picture.width, height: picture.height },
-    };
-  };
-
-  // **The stage is one height for two different shapes**, and the theme is drawn
-  // at its own ratio inside that height: a viewer must not have the box move as
-  // a person steps between items, and a portrait board must still be seen
-  // uncropped.
-  //
-  // **The popup caps itself at `90vh`, and the project's 720px viewport caps the
-  // box at 648** — a height any declaration at or above 648 would satisfy, so
-  // the box's 760 would never be exercised. Read the geometry at a viewport
-  // tall enough for the box, then restore the project's own size for the rest of
-  // the case (the page is this test's own, but later steps read the layout too).
-  const projectViewport = page.viewportSize() ?? { width: 1280, height: 720 };
-  await page.setViewportSize({ width: projectViewport.width, height: 1000 });
-  const landscape = await drawn("store-01");
-  const portrait = await drawn("store-02");
-  await page.setViewportSize(projectViewport);
-  // **The popup's own cap, which the tall read cannot exercise.** At the
-  // project's 720px viewport `90vh` is 648, so the 760 box is capped there —
-  // the box's height would otherwise run past the fold and clip the foot.
-  const capped = await drawn("store-01");
-  expect(
-    capped.height,
-    "the modal does not cap itself to 90vh on a short viewport",
-  ).toBe(648);
-  expect(capped.stage, "the stage is not the capped box's content height").toBe(
-    648 - 2,
-  );
-
-  const itemReading = `store-item box ${landscape.width}x${landscape.height}px stage landscape ${landscape.stage} portrait ${portrait.stage}; picture ${landscape.picture.width}x${landscape.picture.height} and ${portrait.picture.width}x${portrait.picture.height}; stamp "${landscape.stamp}"`;
-  console.log(itemReading);
-  testInfo.annotations.push({ type: "store-item", description: itemReading });
-  expect(
-    portrait.stage,
-    `the stage follows the item instead of holding one height (${itemReading})`,
-  ).toBe(landscape.stage);
-  // The box's own numbers, read where the box can reach them; the stage is
-  // the box's content height — the 1px border twice.
-  expect(landscape.height, `the modal is not 760px (${itemReading})`).toBe(760);
-  // 760 less the popup's 1px border twice; written as the subtraction so the
-  // test does not mint a second design-language number for a derived height.
-  expect(
-    landscape.stage,
-    `the stage is not the box's own content height (${itemReading})`,
-  ).toBe(760 - 2);
-  expect(
-    landscape.width,
-    `the modal is not the 960px DESIGN.md fixes (${itemReading})`,
-  ).toBe(960);
-  expect(
-    landscape.stamp,
-    `the caption does not pair the version with the date (${itemReading})`,
-  ).toBe(`1.4.0${uiCopy.store.readingSeparator}2026-10-14`);
-  expect(
-    Math.abs(landscape.picture.width / landscape.picture.height - 16 / 9),
-    `the landscape theme is not drawn at its own ratio (${itemReading})`,
-  ).toBeLessThan(0.02);
-  expect(
-    Math.abs(portrait.picture.width / portrait.picture.height - 9 / 16),
-    `the portrait theme is not drawn at its own ratio (${itemReading})`,
-  ).toBeLessThan(0.02);
-  expect(
-    portrait.picture.height,
-    `the picture is not contained in the stage's height (${itemReading})`,
-  ).toBeLessThan(portrait.stage);
-
-  // **An item past the first batch**, and an item opened from it: closing the
-  // surface comes back to the list it was opened from. The sentinel is what
-  // loads the last six, so this scrolls it into the observer's half-screen.
-  await scroller.evaluate((node) => {
-    node.scrollTop = node.scrollHeight;
-  });
-  await expect(
-    cells,
-    "the sentinel does not load the rest of the library",
-  ).toHaveCount(30);
-  await drawn("store-25");
-  await expect(
-    cells,
-    "closing an item changed the list it was opened from",
-  ).toHaveCount(30);
-
-  // **A changed filter returns to the first batch**: a narrower result would
-  // otherwise leave the viewer deep in a list that no longer reaches that far.
-  await search.fill("Store theme 2");
-  await expect(cells, "the search does not narrow the listing").toHaveCount(10);
-
-  // **The filter's empty state is its own sentence**, not the first-run one: a
-  // person with thirty themes is told that their filter matched nothing.
-  await search.fill("no theme is called this");
-  await expect(cells, "an empty result still draws cells").toHaveCount(0);
-  await expect(
-    region.locator("[data-yunari-store-empty]"),
-    "an empty result says nothing at all",
-  ).toHaveText(uiCopy.store.empty.filter);
-  await search.fill("");
-  await expect(
-    cells,
-    "clearing the search does not restore the listing",
-  ).toHaveCount(24);
-
-  // **An ungrouped popover's rows are spaced, which no class assertion can
-  // show** (A.6's fix round 2, G1): F5 gave the grouped branch the gap and left
-  // the flat one without, so Author, Colour mode and Style drew flush. The two
-  // rows are read as boxes because the regression was a zero between them, and
-  // the gap is asserted non-zero rather than equal to a number so a token
-  // change is not this case's business.
-  await region.locator("[data-yunari-facet='author']").click();
-  const authorPopup = page.locator(
-    `[aria-label='${uiCopy.store.facets.author}']`,
-  );
-  await expect(authorPopup, "the Author facet opens no popover").toBeVisible();
-  const rows = await authorPopup
-    .locator("[data-yunari-facet-option]")
-    .evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const box = node.getBoundingClientRect();
-        return {
-          top: box.top,
-          bottom: box.bottom,
-          left: box.left,
-          right: box.right,
-        };
-      }),
-    );
-  const gapReading = `store-facet-rows ${JSON.stringify(rows)}`;
-  console.log(gapReading);
-  testInfo.annotations.push({
-    type: "store-facet-rows",
-    description: gapReading,
-  });
-  expect(
-    rows.length,
-    `the Author facet offers fewer than two rows (${gapReading})`,
-  ).toBeGreaterThan(1);
-  const first = rows[0];
-  const second = rows[1];
-  if (first === undefined || second === undefined) {
-    throw new Error(`the Author facet drew no second row (${gapReading})`);
-  }
-  expect(
-    second.left,
-    `the two Author rows are not stacked (${gapReading})`,
-  ).toBe(first.left);
-  expect(
-    second.top - first.bottom,
-    `an ungrouped facet's rows are drawn flush (${gapReading})`,
-  ).toBeGreaterThan(0);
-  await page.keyboard.press("Escape");
-
-  // **The Shape popover's groups, as a rendered popover** (R115). The three
-  // headings are the item's own, the sentence above them is the one that says why
-  // they matter, and the values are the items' own readings — none of which a
-  // flat list would show.
-  await region.locator("[data-yunari-facet='shape']").click();
-  const popup = page.locator(`[aria-label='${uiCopy.store.facets.shape}']`);
-  await expect(popup, "the Shape facet opens no popover").toBeVisible();
-  const groups = await popup.evaluate((node) => ({
-    hint: node.querySelector("[data-yunari-facet-hint]")?.textContent?.trim(),
-    headings: Array.from(
-      node.querySelectorAll("[data-yunari-facet-group]"),
-    ).map((group) => group.getAttribute("data-yunari-facet-group")),
-    values: Array.from(
-      node.querySelectorAll("[data-yunari-facet-option-name]"),
-    ).map((value) => value.textContent?.trim()),
-  }));
-  const groupReading = `store-facets hint "${groups.hint}" headings ${JSON.stringify(groups.headings)} values ${JSON.stringify(groups.values)}`;
-  console.log(groupReading);
-  testInfo.annotations.push({
-    type: "store-facets",
-    description: groupReading,
-  });
-  expect(
-    groups.hint,
-    `the Shape popover does not carry the facet's sentence (${groupReading})`,
-  ).toBe(uiCopy.store.facets.shapeHint);
-  const headings = uiCopy.store.facets.shapeGroups;
-  expect(
-    groups.headings,
-    `the Shape popover does not draw the three labelled groups (${groupReading})`,
-  ).toEqual([headings.orientation, headings.aspect, headings.size]);
-  expect(
-    groups.values,
-    `the Shape values are not the items' own readings (${groupReading})`,
-  ).toEqual([
-    // Both orientations, because two of the thirty themes are portrait: an
-    // option is offered for what the listing holds and not for what a fixture
-    // imagines.
-    uiCopy.store.orientations.landscape,
-    uiCopy.store.orientations.portrait,
-    "16:9",
-    // Two sizes, because each is declared by more than one theme — the rule that
-    // keeps a size exactly one theme declares out of the facet.
-    uiCopy.store.size(1920, 1080),
-    uiCopy.store.size(1080, 1920),
-  ]);
-});
-
-/**
- * The provenance and style work, read on the surfaces it lands on.
- *
- * **Every half of it was proved in jsdom, and jsdom lays nothing out.** What a
- * browser adds is the *drawn* reading — a computed edge, a grid that really
- * narrowed, a badge really inside the facts band — and two joins no unit case
- * can see:
- *
- * 1. **The badge's and the provenance line's words are asserted as literals,
- *    and that is the point.** Both are plain spans, and the copy walk reads
- *    labels, buttons, headings and paragraphs, so **this case is the only
- *    check of those words in the repo** (`vg-685`). Asserting them from
- *    `uiCopy.store.fromStore` would make the case green through the rename it
- *    exists to catch, which is how *Installed* shipped here twice: every local
- *    cell is badged *From the store* and *Installed* is the **online** half's
- *    own footer verb.
- * 2. **The region's vocabulary reaches the modal.** `settledTags` is built by
- *    the region and handed to `ItemModal`; replacing that prop with `[]` leaves
- *    every jsdom case green, because each hands the modal its own set. The pill
- *    read here is settled by *another theme's* use rather than by the shipped
- *    seed, so the listing half of the vocabulary is what the case turns on.
- *
- * **The library is its own fixture, and `STORE_LIBRARY` is untouched.**
- * Thirty is load-bearing for the endless-scroll case's two batches, so these
- * four are a second fixture: envelopes through `facetRecordOf`, which is the
- * host's own
- * derivation rather than a hand-written record — the trap A.4a's review found.
- */
-function boundaryEnvelope(input: {
-  readonly id: string;
-  readonly name: string;
-  readonly tags: readonly string[];
-  readonly width: number;
-  readonly height: number;
-}): FabricThemeEnvelope {
-  return {
-    schemaVersion: "3.0.0",
-    fabricVersion: "7.4.0",
-    id: input.id,
-    artboard: {
-      width: input.width,
-      height: input.height,
-    },
-    background: { color: { value: DARK_GROUND } },
-    metadata: {
-      name: input.name,
-      themeLanguage: "en",
-      author: "huyng",
-      tags: [...input.tags],
-    },
-    scene: { version: "7.4.0", objects: [] },
-  };
-}
-
-/** Where one copy came from, in the host's own record shape
- *  (`settings/catalogue-origins.ts`). */
-const BOUNDARY_ORIGIN: CatalogueOrigin = {
-  kind: DASHBOARD_THEME_KIND,
-  catalogueId: "cat-office-wall",
-  version: "1.2.0",
-  installedAt: "2026-10-10T09:00:00.000Z",
-};
-
-/**
- * Four themes, each carrying one fact the case turns on: a copy installed from
- * the catalogue, a theme the author made here, a theme whose tag no other theme
- * and no seed holds, and an artboard at `19.5:9` (`2340×1080`).
- *
- * **`dusk-cafe` is on two themes and `warm-lantern` on one**, which is the pair
- * the modal's two pills are read from: the first is settled by the other theme's
- * use, the second by nothing at all.
- *
- * **No `updatedAt`**, so the editor boots on the starter it always opened on and
- * no theme opens before this case's own open — the same shape `store-library.ts`
- * seeds.
- */
-const BOUNDARY_LIBRARY = (
-  [
-    {
-      envelope: boundaryEnvelope({
-        id: "boundary-origin",
-        name: "Boundary origin",
-        tags: ["futuristic", "dusk-cafe"],
-        width: 1920,
-        height: 1080,
-      }),
-      origin: BOUNDARY_ORIGIN,
-    },
-    {
-      envelope: boundaryEnvelope({
-        id: "boundary-plain",
-        name: "Boundary plain",
-        tags: [],
-        width: 1920,
-        height: 1080,
-      }),
-      origin: undefined,
-    },
-    {
-      envelope: boundaryEnvelope({
-        id: "boundary-proposed",
-        name: "Boundary proposed",
-        tags: ["dusk-cafe", "warm-lantern"],
-        width: 1920,
-        height: 1080,
-      }),
-      origin: undefined,
-    },
-    {
-      envelope: boundaryEnvelope({
-        id: "boundary-wide",
-        name: "Boundary wide",
-        tags: [],
-        width: 2340,
-        height: 1080,
-      }),
-      origin: undefined,
-    },
-  ] as const satisfies readonly {
-    readonly envelope: FabricThemeEnvelope;
-    readonly origin: CatalogueOrigin | undefined;
-  }[]
-).map(({ envelope, origin }) => ({
-  id: envelope.id,
-  name: envelope.metadata?.name,
-  author: envelope.metadata?.author,
-  version: "1.4.0",
-  ground: DARK_GROUND,
-  // Absent rather than `undefined`: the record is consumer state the host keeps
-  // beside the library, so a theme the author made here has no key at all.
-  ...(origin === undefined ? {} : { origin }),
-  facets: facetRecordOf(envelope),
-}));
-
-test("the store draws the origin badge, narrows by style and shape, and marks a proposed tag", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  await page.route("**/api/themes", (route) =>
-    route.fulfill({ json: { themes: BOUNDARY_LIBRARY } }),
-  );
-  await page.goto(EDITOR);
-  await expect(
-    page.locator("#yunari-fabric-editor canvas.upper-canvas"),
-  ).toBeVisible();
-  await page
-    .locator(".editor-shell-mode-switch")
-    .getByRole("button", { name: uiCopy.modes.library, exact: true })
-    .click();
-
-  const region = page.locator("[data-yunari-mode-region='library']");
-  await expect(region, "the Library renders no region").toBeVisible();
-
-  const cells = region.locator("[data-yunari-store-cell]");
-  await expect(
-    cells,
-    "the store does not list the whole boundary library",
-  ).toHaveCount(4);
-
-  const cellOf = (id: string) =>
-    region.locator(`[data-yunari-store-cell='${id}']`);
-  const badgeOf = (id: string) =>
-    cellOf(id).locator("[data-yunari-store-cell-origin]");
-  /** A reading worth keeping in the run's output, as the other store cases do. */
-  const record = (type: string, reading: string): void => {
-    console.log(`${type} ${reading}`);
-    testInfo.annotations.push({ type, description: reading });
-  };
-
-  // ── The origin badge, and its absence ──────────────────────────────────────
-  // **The literal, not `uiCopy.store.fromStore`** — see this case's own header:
-  // the whole value of the assertion is that a renamed word fails it.
-  const badgeWord = "From the store";
-  await expect(
-    badgeOf("boundary-origin"),
-    "a theme the host holds an origin record for draws no badge",
-  ).toHaveText(badgeWord);
-  record("store-origin-badge", `badge "${badgeWord}"`);
-
-  // **What the badge sits in is the claim** (`gallery.tsx`): the gallery puts it
-  // in the facts band rather than beside the name, so a badge that moved would
-  // change the grid while a bare existence check stayed green.
-  expect(
-    await badgeOf("boundary-origin").evaluate(
-      (node) =>
-        node.parentElement?.hasAttribute("data-yunari-store-cell-band") ===
-        true,
-    ),
-    "the origin badge is not drawn in the cell's own facts band",
-  ).toBe(true);
-
-  // **A theme the host holds no record of came from nowhere.** Showing the
-  // badge for it is a fact no record carries, which is what this reading is for.
-  await expect(
-    badgeOf("boundary-plain"),
-    "a theme with no origin record draws an origin badge",
-  ).toHaveCount(0);
-
-  // **The item's provenance line, read as a literal for the badge's reason.**
-  // It is a plain `<span>` too, so no copy reader sees it: the copy walk reads
-  // labels, buttons, headings and paragraphs (`vg-685`). The literal names the
-  // origin clause, the catalogue item and the installed version, so a rename of
-  // any of the three fails here rather than passing through a `uiCopy` lookup.
-  await cellOf("boundary-origin")
-    .locator("[data-yunari-store-cell-surface]")
-    .click();
-  const originModal = page.locator("[data-yunari-store-item]");
-  await expect(
-    originModal,
-    "the origin theme's cell opens no item's surface",
-  ).toBeVisible();
-  await expect(
-    originModal.locator("[data-yunari-store-item-origin]"),
-    "the provenance line does not name the origin the record holds",
-  ).toHaveText("From the store · cat-office-wall · 1.2.0");
-  await page.locator("[data-yunari-store-item-close]").click();
-  await expect(originModal, "the item's surface does not close").toBeHidden();
-
-  // ── The item's Style group, with a proposed tag ────────────────────────────
-  // Opened from the region's own cell, which is what joins the two halves: the
-  // vocabulary this pill is read against is the region's, not the modal's.
-  await cellOf("boundary-proposed")
-    .locator("[data-yunari-store-cell-surface]")
-    .click();
-  const modal = page.locator("[data-yunari-store-item]");
-  await expect(modal, "a cell opens no item's surface").toBeVisible();
-
-  const styleGroup = modal.locator("[data-yunari-store-item-group='style']");
-  await expect(
-    styleGroup,
-    "the item's own surface draws no Style group",
-  ).toBeVisible();
-  await expect(
-    styleGroup.locator("[data-yunari-store-item-group-name]"),
-    "the Style group sits under no eyebrow",
-  ).toHaveText(uiCopy.store.pillGroups.style);
-
-  const pillOf = (tag: string) =>
-    styleGroup.locator(`[data-yunari-store-item-pill='${tag}']`);
-  // The store's own words for a word the vocabulary does not hold yet, as a
-  // literal for the reason the badge's word is one.
-  await expect(
-    pillOf("warm-lantern"),
-    "the tag no other theme and no seed holds is not marked as proposed",
-  ).toHaveText("warm-lantern · proposed");
-  await expect(
-    pillOf("dusk-cafe"),
-    "a tag the listing's other themes settle is drawn with a proposed mark",
-  ).toHaveText("dusk-cafe");
-
-  // **The mark is a computed edge, not a class name.** The jsdom case reads the
-  // class string; only the browser says the box really draws dashed — and the
-  // two pills are read against each other, so a palette change that made them
-  // the same ink is caught without this case owning a colour.
-  const pills = await styleGroup.evaluate((group) => {
-    const read = (tag: string) => {
-      const node = group.querySelector(
-        `[data-yunari-store-item-pill='${tag}']`,
-      );
-      if (node === null) return null;
-      const style = getComputedStyle(node);
-      return {
-        edge: style.borderTopStyle,
-        width: style.borderTopWidth,
-        ink: style.color,
-      };
-    };
-    return { settled: read("dusk-cafe"), proposed: read("warm-lantern") };
-  });
-  const pillReading = `store-item pills ${JSON.stringify(pills)}`;
-  record("store-item-pills", pillReading);
-  if (pills.settled === null || pills.proposed === null) {
-    throw new Error(`the Style group drew no pill (${pillReading})`);
-  }
-  expect(
-    pills.proposed.edge,
-    `the proposed pill is not drawn on the dashed edge (${pillReading})`,
-  ).toBe("dashed");
-  expect(
-    pills.settled.edge,
-    `the settled pill is drawn on a dashed edge (${pillReading})`,
-  ).toBe("solid");
-  expect(
-    pills.proposed.ink,
-    `a proposed pill and a settled one are the same ink (${pillReading})`,
-  ).not.toBe(pills.settled.ink);
-
-  await page.locator("[data-yunari-store-item-close]").click();
-  await expect(modal, "the item's surface does not close").toBeHidden();
-
-  // ── The Style facet narrows the grid ───────────────────────────────────────
-  const styleFacet = region.locator("[data-yunari-facet='style']");
-  await expect(styleFacet, "the region draws no Style facet").toBeVisible();
-  await styleFacet.click();
-  const stylePopup = page.locator(
-    `[aria-label='${uiCopy.store.facets.style}']`,
-  );
-  await expect(stylePopup, "the Style facet opens no popover").toBeVisible();
-
-  // **The facet's values are the tags the listing carries, however few themes
-  // hold one** — the opposite of the size facet's rule, and the reason
-  // `warm-lantern` is here at all: a tag one theme declares is still a value,
-  // where a size one theme declares is not.
-  const styleOptions = stylePopup.locator("[data-yunari-facet-option-name]");
-  await expect(
-    styleOptions,
-    "the Style facet does not offer the listing's own tags",
-  ).toHaveText(["dusk-cafe", "futuristic", "warm-lantern"]);
-
-  await stylePopup.locator("[data-yunari-facet-option='warm-lantern']").click();
-  const narrowed = await cells.count();
-  await expect(
-    cells,
-    `choosing a style tag does not narrow the grid (${narrowed} cells)`,
-  ).toHaveCount(1);
-  await expect(
-    cells.first(),
-    "the style filter kept a theme that does not carry the tag",
-  ).toHaveAttribute("data-yunari-store-cell", "boundary-proposed");
-  record("store-style-filter", `warm-lantern kept ${narrowed} of 4 cells`);
-  await page.keyboard.press("Escape");
-
-  // Back to the whole library, so the shape facet below is read on its own.
-  await styleFacet.click();
-  await expect(stylePopup, "the Style facet reopens no popover").toBeVisible();
-  await stylePopup.locator("[data-yunari-facet-option='warm-lantern']").click();
-  await expect(
-    cells,
-    "unchoosing a style tag does not restore the listing",
-  ).toHaveCount(4);
-  await page.keyboard.press("Escape");
-
-  // ── The Shape popover offers the 19.5:9 bucket ─────────────────────────────
-  // Task 1 proved the bucket at record and matcher level; this is the rendered
-  // half — a 2340×1080 artboard, the bucket offered by the popover, and the
-  // grid narrowing to the one theme that is that shape.
-  await region.locator("[data-yunari-facet='shape']").click();
-  const shapePopup = page.locator(
-    `[aria-label='${uiCopy.store.facets.shape}']`,
-  );
-  await expect(shapePopup, "the Shape facet opens no popover").toBeVisible();
-  const shapeValues = shapePopup.locator("[data-yunari-facet-option-name]");
-  await expect(
-    shapeValues,
-    "the Shape popover does not offer the 19.5:9 bucket the library holds",
-  ).toHaveText([
-    uiCopy.store.orientations.landscape,
-    "16:9",
-    "19.5:9",
-    // The size facet's own rule beside it: 1920×1080 is declared by three
-    // themes and is offered, and the 2340×1080 only one theme declares is not.
-    uiCopy.store.size(1920, 1080),
-  ]);
-
-  await shapePopup.locator("[data-yunari-facet-option='19.5:9']").click();
-  const shaped = await cells.count();
-  await expect(
-    cells,
-    `choosing the 19.5:9 bucket does not narrow the grid (${shaped} cells)`,
-  ).toHaveCount(1);
-  await expect(
-    cells.first(),
-    "the shape filter kept a theme that is not that shape",
-  ).toHaveAttribute("data-yunari-store-cell", "boundary-wide");
-  record("store-shape-filter", `19.5:9 kept ${shaped} of 4 cells`);
-  await page.keyboard.press("Escape");
-});
-
-/**
  * **The online half, on a real browser** (A.8): the catalogue's items, the three
  * install answers the library's join produces, what a kind this build does not
  * ship is called, and the item's own surface.
@@ -2436,8 +1527,10 @@ const EMPTY_PICTURE_PNG = Buffer.from(
 );
 
 /**
- * The store, on its online half: the catalogue and the library both routed, the
- * region mounted and its Store segment chosen, and the readable entries listed.
+ * The dashboard themes page: the catalogue and the library both routed, the
+ * region mounted on the shell's default "All" state, and the joined rows
+ * listed. The two library rows name catalogue items the listing carries, so
+ * the join draws the three catalogue rows and no separate library rows.
  */
 async function showOnlineStore(
   page: Page,
@@ -2488,19 +1581,11 @@ async function showOnlineStore(
 
   const region = page.locator("[data-yunari-mode-region='library']");
   await expect(region, "the Library renders no region").toBeVisible();
-  // Dashboard themes keeps the theme grid's own halves inside the region for
-  // this task (`store-mode/halves.tsx`); the later state-filter task replaces
-  // them.
-  const halves = region.locator("[data-yunari-store-halves] button");
-  await expect(halves, "the region draws no halves").toHaveCount(2);
-  await halves.nth(1).click();
-  await expect(
-    halves.nth(1),
-    "the Store half is not the one chosen",
-  ).toHaveAttribute("aria-pressed", "true");
+  // The shell opens the Library on "All", which is the state that draws the
+  // catalogue's rows joined with this PC's copies.
   await expect(
     region.locator("[data-yunari-store-cell]"),
-    "the online half does not list the catalogue's readable items",
+    "the page does not list the catalogue's readable items",
   ).toHaveCount(3);
   return region;
 }
@@ -2517,9 +1602,9 @@ test("the online half lists the catalogue, its kind badge and a thousands-separa
   ).toHaveText(["Skyline", "Tide", "Ember"]);
 
   const cell = region.locator("[data-yunari-store-cell='cat-skyline']");
-  // **The literal, not `uiCopy.store.cell.kinds`**: the badge's whole value is
-  // that a renamed word fails here, the rule the origin badge's case states for
-  // its own word.
+  // **The literal, not `uiCopy.store.cell.memberKinds`**: the badge's whole
+  // value is that a renamed word fails here, the rule the origin badge's case
+  // states for its own word.
   await expect(
     cell.locator("[data-yunari-store-cell-kind]"),
     "the catalogue cell's kind badge does not read Theme",
@@ -2532,42 +1617,6 @@ test("the online half lists the catalogue, its kind badge and a thousands-separa
   ).toHaveText("1,204 downloads");
 
   await captureVisualReview(page, testInfo, "store-online-catalogue", region);
-});
-
-test("the Style facet narrows the online grid, and the tag one item holds is still offered", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  const region = await showOnlineStore(page);
-  const styleFacet = region.locator("[data-yunari-facet='style']");
-  await styleFacet.click();
-  const popup = page.locator(`[aria-label='${uiCopy.store.facets.style}']`);
-  await expect(popup, "the Style facet opens no popover").toBeVisible();
-  // `ambient` is declared by exactly one item, and is a value all the same: a
-  // tag is what a facet exists to find, where a size one item declares is not.
-  // The values are most-carried first, then by name, so `dashboard` heads the
-  // row and the single-holder tag sits among the rest.
-  await expect(
-    popup.locator("[data-yunari-facet-option-name]"),
-    "the Style facet does not offer every tag the listing carries",
-  ).toHaveText(["dashboard", "ambient", "minimal"]);
-
-  await popup.locator("[data-yunari-facet-option='ambient']").click();
-  const cells = region.locator("[data-yunari-store-cell]");
-  await expect(
-    cells,
-    "choosing a tag does not narrow the online grid",
-  ).toHaveCount(1);
-  await expect(
-    cells.first(),
-    "the tag filter kept a theme that does not hold it",
-  ).toHaveAttribute("data-yunari-store-cell", "cat-skyline");
-
-  // The popover stays open for the frame, so the image reads both halves of the
-  // claim: the tags offered, and the grid they narrowed.
-  await captureVisualReview(page, testInfo, "store-online-facet", region);
-  await page.keyboard.press("Escape");
 });
 
 test("the online half draws Installed, Update and Install for the library's three cases", async ({
@@ -2760,32 +1809,6 @@ test("a refused install leaves the cell as it was and states the host's reason",
   );
 });
 
-test("the line for a skipped kind names the identifier the catalogue declared", async ({
-  page,
-}, testInfo) => {
-  test.skip(!isDesktopSurface(testInfo), "the editor is a desktop surface");
-
-  const region = await showOnlineStore(page);
-  const line = region.locator("[data-yunari-store-refusal]");
-  await expect(
-    line,
-    "what the catalogue read left out is not named",
-  ).toHaveCount(1);
-  // **The identifier, as a literal** — `widget-preset` is a kind this build has
-  // no word for, and a display word invented here would be a name nothing
-  // declared. The rest of the sentence is the surface's own.
-  await expect(
-    line,
-    "the skipped-kind line does not name the wire identifier",
-  ).toHaveText("1 entry of kind widget-preset could not be read.");
-  await expect(
-    region.locator("[data-yunari-store-cell]"),
-    "a skipped entry is drawn or a readable one is missing",
-  ).toHaveCount(3);
-
-  await captureVisualReview(page, testInfo, "store-online-refusal", region);
-});
-
 test("the online item's own surface shows its counts and its install action", async ({
   page,
 }, testInfo) => {
@@ -2829,6 +1852,117 @@ test("the online item's own surface shows its counts and its install action", as
 
   await captureVisualReview(page, testInfo, "store-online-modal");
 });
+
+/**
+ * Four themes, each carrying one fact the submission cases turn on: an origin
+ * record, no tags, a tag pair, and a 19.5:9 artboard. **No `updatedAt`**, so the
+ * editor boots on its starter and opens nothing before a case's own open.
+ */
+function boundaryEnvelope(input: {
+  readonly id: string;
+  readonly name: string;
+  readonly tags: readonly string[];
+  readonly width: number;
+  readonly height: number;
+}): FabricThemeEnvelope {
+  return {
+    schemaVersion: "3.0.0",
+    fabricVersion: "7.4.0",
+    id: input.id,
+    artboard: {
+      width: input.width,
+      height: input.height,
+    },
+    background: { color: { value: DARK_GROUND } },
+    metadata: {
+      name: input.name,
+      themeLanguage: "en",
+      author: "huyng",
+      tags: [...input.tags],
+    },
+    scene: { version: "7.4.0", objects: [] },
+  };
+}
+
+/** Where one copy came from, in the host's own record shape
+ *  (`settings/catalogue-origins.ts`). */
+const BOUNDARY_ORIGIN: CatalogueOrigin = {
+  kind: DASHBOARD_THEME_KIND,
+  catalogueId: "cat-office-wall",
+  version: "1.2.0",
+  installedAt: "2026-10-10T09:00:00.000Z",
+};
+
+/**
+ * Four themes, each carrying one fact the case turns on: a copy installed from
+ * the catalogue, a theme the author made here, a theme whose tag no other theme
+ * and no seed holds, and an artboard at `19.5:9` (`2340×1080`).
+ *
+ * **`dusk-cafe` is on two themes and `warm-lantern` on one**, which is the pair
+ * the modal's two pills are read from: the first is settled by the other theme's
+ * use, the second by nothing at all.
+ *
+ * **No `updatedAt`**, so the editor boots on the starter it always opened on and
+ * no theme opens before this case's own open — the same shape `store-library.ts`
+ * seeds.
+ */
+const BOUNDARY_LIBRARY = (
+  [
+    {
+      envelope: boundaryEnvelope({
+        id: "boundary-origin",
+        name: "Boundary origin",
+        tags: ["futuristic", "dusk-cafe"],
+        width: 1920,
+        height: 1080,
+      }),
+      origin: BOUNDARY_ORIGIN,
+    },
+    {
+      envelope: boundaryEnvelope({
+        id: "boundary-plain",
+        name: "Boundary plain",
+        tags: [],
+        width: 1920,
+        height: 1080,
+      }),
+      origin: undefined,
+    },
+    {
+      envelope: boundaryEnvelope({
+        id: "boundary-proposed",
+        name: "Boundary proposed",
+        tags: ["dusk-cafe", "warm-lantern"],
+        width: 1920,
+        height: 1080,
+      }),
+      origin: undefined,
+    },
+    {
+      envelope: boundaryEnvelope({
+        id: "boundary-wide",
+        name: "Boundary wide",
+        tags: [],
+        width: 2340,
+        height: 1080,
+      }),
+      origin: undefined,
+    },
+  ] as const satisfies readonly {
+    readonly envelope: FabricThemeEnvelope;
+    readonly origin: CatalogueOrigin | undefined;
+  }[]
+).map(({ envelope, origin }) => ({
+  id: envelope.id,
+  name: envelope.metadata?.name,
+  author: envelope.metadata?.author,
+  version: "1.4.0",
+  ground: DARK_GROUND,
+  // Absent rather than `undefined`: the record is consumer state the host keeps
+  // beside the library, so a theme the author made here has no key at all.
+  ...(origin === undefined ? {} : { origin }),
+  facets: facetRecordOf(envelope),
+}));
 
 /**
  * The library half with one theme's own surface open — **the only half whose
