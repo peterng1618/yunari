@@ -308,9 +308,10 @@ it("filters the visible rows by the state", async () => {
 
 /**
  * **A collection's state is its includes'**, so the filter reads the register
- * the card reads. A collection whose every include is installed is *On this
- * PC*; a partial one is neither fully installed nor *Not installed*, and is
- * reachable under *All* where it reads its count and Update.
+ * the card reads. A collection with every include installed is *On this PC*,
+ * and so is a partially installed one — it has copies on this PC and reads its
+ * count with Update. Only a collection with no include installed is *Not
+ * installed*.
  */
 it("filters collections by the includes the register names", async () => {
   const includes = [
@@ -348,12 +349,7 @@ it("filters collections by the includes the register names", async () => {
 
   serve(includes.slice(0, 2));
   const partialOnThisPc = await mountHarness("collections", "on-this-pc");
-  await vi.waitFor(() =>
-    expect(
-      partialOnThisPc.querySelector("[data-yunari-library-empty]"),
-      "the partial collection was listed as installed",
-    ).not.toBeNull(),
-  );
+  await waitForCells(partialOnThisPc, ["Ops collection"]);
 
   const partialNotInstalled = await mountHarness(
     "collections",

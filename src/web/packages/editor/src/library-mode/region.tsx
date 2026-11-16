@@ -116,8 +116,9 @@ interface Row {
  *
  * **A collection's installed state is its includes'**, so the filter reads
  * `collectionStateOf` rather than the row's own origin, which a collection
- * never has. A partial collection is neither fully *On this PC* nor *Not
- * installed*: it is reachable under *All*, where its count and Update are drawn.
+ * never has. A partially installed collection is *On this PC*: it has copies
+ * on this PC and reads its count with Update. Only a collection with no
+ * include installed is *Not installed*.
  */
 function rowsFor(
   catalogue: readonly StoreItem[],
@@ -150,12 +151,11 @@ function rowsFor(
     origins === undefined ? undefined : collectionStateOf(row.item, origins);
 
   if (state === "on-this-pc") {
-    return rows.filter(
-      (row) =>
-        row.half === "library" ||
-        row.item.origin !== undefined ||
-        collectionOf(row)?.state === "installed",
-    );
+    return rows.filter((row) => {
+      if (row.half === "library" || row.item.origin !== undefined) return true;
+      const collection = collectionOf(row);
+      return collection !== undefined && collection.state !== "absent";
+    });
   }
   return rows.filter((row) => {
     const collection = collectionOf(row);
