@@ -173,6 +173,7 @@ const NO_INSTALL: InstallControl = {
   onInstall: () => undefined,
   installingIds: new Set(),
   refusal: undefined,
+  owedMembers: () => [],
   held: undefined,
   onApproveUpdate: () => undefined,
   onDismissUpdate: () => undefined,

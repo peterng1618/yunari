@@ -1515,6 +1515,11 @@ export const uiCopy = {
         `Consent was granted for: ${names.join(", ")}.`,
       consentNotGranted: (names: readonly string[]): string =>
         `Consent was not granted for: ${names.join(", ")}.`,
+      /** **The debt outlives the sheet**: a member the host already wrote whose
+       *  grant failed stays named here until a later press settles it, even
+       *  after the notice that first reported it was dismissed. */
+      consentOwed: (names: readonly string[]): string =>
+        `Consent is still owed for: ${names.join(", ")}.`,
     },
     /** The library half's submission, whose sentence the client composes only
      *  where the host answers a state and no sentence exists: the wait for the

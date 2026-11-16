@@ -97,6 +97,36 @@ export function useInstall(options: {
       }
     | undefined
   >(undefined);
+  /** **What consent each collection still owes, keyed by the id it was pressed
+   *  as.** This lives here rather than in the sheet because the sheet unmounts:
+   *  a failed grant, a Dismiss or another item's press must not erase a plugin
+   *  the host already wrote and registered. The ref is the press path's current
+   *  value; the state is what the sheet renders. */
+  const [owed, setOwed] = useState<ReadonlyMap<string, ReadonlySet<string>>>(
+    () => new Map(),
+  );
+  const owedRef = useRef(owed);
+  /** The ids a press wrote join the debt and the ids its grant settled leave
+   *  it. An empty entry is removed, so a settled collection leaves nothing
+   *  behind. */
+  const settleOwed = (
+    itemId: string,
+    written: readonly string[] | undefined,
+    consent: CollectionConsentResult | undefined,
+  ): void => {
+    const added = written ?? [];
+    const settled = consent?.grantedIds ?? [];
+    if (added.length === 0 && settled.length === 0) return;
+    const current = owedRef.current;
+    const next = new Set(current.get(itemId) ?? []);
+    for (const id of added) next.add(id);
+    for (const id of settled) next.delete(id);
+    const updated = new Map(current);
+    if (next.size === 0) updated.delete(itemId);
+    else updated.set(itemId, next);
+    owedRef.current = updated;
+    setOwed(updated);
+  };
 
   /**
    * **A refusal changes nothing but its reason**: the control's state stays the
@@ -185,7 +215,6 @@ export function useInstall(options: {
     onPlanReplaced,
     onInstalled,
     approveMember = undefined,
-    carried = undefined,
   ): void => {
     if (inFlight.current.has(item.id)) return;
     inFlight.current.add(item.id);
@@ -193,6 +222,10 @@ export function useInstall(options: {
     setRefusal(undefined);
     setInstalled(undefined);
     setHeld(undefined);
+    // **The debt this collection still owes follows it, not the sheet.** A
+    // plugin written by a stopped press is skipped by the host as already
+    // registered, so only the ids kept here can grant it on a later press.
+    const carried = [...(owedRef.current.get(item.id) ?? [])];
     const announce = (consent: CollectionConsentResult): string =>
       consent.notGranted.length === 0
         ? uiCopy.store.install.installed(item.name)
@@ -209,7 +242,7 @@ export function useInstall(options: {
         ),
       consent: options.extensions ?? createExtensionClient(),
       ...(approveMember === undefined ? {} : { approveMember }),
-      ...(carried === undefined || carried.length === 0 ? {} : { carried }),
+      ...(carried.length === 0 ? {} : { carried }),
     })
       .then(async (outcome) => {
         if (!alive.current) return;
@@ -218,6 +251,7 @@ export function useInstall(options: {
           return;
         }
         if (outcome.kind === "refused") {
+          settleOwed(item.id, outcome.written, outcome.consent);
           setRefusal({
             id: item.id,
             message: outcome.message,
@@ -237,6 +271,7 @@ export function useInstall(options: {
           });
           return;
         }
+        settleOwed(item.id, undefined, outcome.consent);
         onInstalled(outcome.consent);
         setInstalled(announce(outcome.consent));
         const listed = await options.source.list().catch(() => undefined);
@@ -281,6 +316,9 @@ export function useInstall(options: {
       onInstallCollection,
       installingIds,
       refusal,
+      /** The consent this item still owes, which outlives the sheet that
+       *  reported it: a Dismiss or a remount reads the same debt. */
+      owedMembers: (id: string): readonly string[] => [...(owed.get(id) ?? [])],
       held: held === undefined ? undefined : { id: held.id, held: held.held },
       onApproveUpdate,
       onDismissUpdate,

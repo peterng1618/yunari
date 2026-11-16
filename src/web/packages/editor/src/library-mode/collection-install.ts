@@ -181,10 +181,14 @@ export interface CollectionConsentGateway {
 }
 
 /** Who was granted its own consent, and who was not. Names are the consent
- *  block's own, so the sheet and the live region say the same thing. */
+ *  block's own, so the sheet and the live region say the same thing.
+ *  `grantedIds` names the members whose consent this PC holds once the call
+ *  returns — the ones it granted and the ones the listing already had granted —
+ *  so the install hook can settle the ids its owed set is keyed by. */
 export interface CollectionConsentResult {
   readonly granted: readonly string[];
   readonly notGranted: readonly string[];
+  readonly grantedIds: readonly string[];
 }
 
 /**
@@ -217,7 +221,7 @@ export async function grantCollectionConsent(
     if (owed !== undefined && !owed.has(member.id)) continue;
     if (!byKey.has(member.consent.key)) byKey.set(member.consent.key, member);
   }
-  if (byKey.size === 0) return { granted: [], notGranted: [] };
+  if (byKey.size === 0) return { granted: [], notGranted: [], grantedIds: [] };
 
   let listing: readonly InstalledExtension[];
   try {
@@ -229,6 +233,7 @@ export async function grantCollectionConsent(
 
   const granted: string[] = [];
   const notGranted: string[] = [];
+  const grantedIds: string[] = [];
   for (const [key, member] of byKey) {
     const name = member.consent?.name ?? member.name;
     const row = installed.get(key);
@@ -238,16 +243,22 @@ export async function grantCollectionConsent(
     }
     // **Already granted for this exact fingerprint is not granted twice.** An
     // earlier press of the sheet may have obtained it; re-posting consent would
-    // be a second call for a grant this PC already holds.
-    if (row.consent === "granted") continue;
+    // be a second call for a grant this PC already holds. It still settles the
+    // hook's debt, so it is named in `grantedIds` without a `granted` name.
+    if (row.consent === "granted") {
+      grantedIds.push(member.id);
+      continue;
+    }
     const answer = await gateway
       .grant(row.key, row.fingerprint)
       .catch(() => undefined);
-    if (answer?.ok === true) granted.push(name);
-    else notGranted.push(name);
+    if (answer?.ok === true) {
+      granted.push(name);
+      grantedIds.push(member.id);
+    } else notGranted.push(name);
   }
 
-  return { granted, notGranted };
+  return { granted, notGranted, grantedIds };
 }
 
 /**
@@ -275,9 +286,9 @@ function writtenMembers(
 
 /**
  * The ids one press owes consent: what it wrote, plus the members an earlier
- * stopped press wrote and the sheet carried. **Without per-member evidence on
- * either side this is `undefined`**, because a press that cannot say what it
- * wrote must not touch the gateway.
+ * stopped press wrote and the install hook carried. **Without per-member
+ * evidence on either side this is `undefined`**, because a press that cannot say
+ * what it wrote must not touch the gateway.
  */
 function owedMembers(
   written: ReadonlySet<string> | undefined,
@@ -303,12 +314,13 @@ export type CollectionPressOutcome =
     }
   /** The host refused the press. `members` is present for a part-way failure:
    *  the sheet names the members it could not write. `written` is the ids this
-   *  press wrote; the sheet carries them into a later approval press, because
-   *  the retry skips an already-registered member. `consent` is the grant those
-   *  written members (plus whatever the sheet carried) received before a later
-   *  member's hold stopped it, so a written plugin is never left loadable.
-   *  `held` is the update the host read and refused to write, which the sheet
-   *  renders for approval; `memberId` names the include that hold belongs to. */
+   *  press wrote; the install hook keeps them owed until a grant settles them,
+   *  because the retry skips an already-registered member. `consent` is the
+   *  grant those written members (plus whatever the hook carried) received
+   *  before a later member's hold stopped it, so a written plugin is never left
+   *  loadable. `held` is the update the host read and refused to write, which
+   *  the sheet renders for approval; `memberId` names the include that hold
+   *  belongs to. */
   | {
       readonly kind: "refused";
       readonly message: string;
@@ -335,9 +347,8 @@ export interface CollectionPressDeps {
   readonly consent: CollectionConsentGateway;
   /** The held include this press answers, if any. */
   readonly approveMember?: string;
-  /** The member ids a stopped press wrote, which the sheet carries into this
-   *  press. Read against the current plan, so a member that left is not
-   *  granted. */
+  /** The member ids an earlier press wrote and the install hook still owes.
+   *  Read against the current plan, so a member that left is not granted. */
   readonly carried?: readonly string[];
 }
 
@@ -345,7 +356,8 @@ export interface CollectionPressDeps {
  *  how a re-read plan replaces the sheet and how a write reports the consent it
  *  did or did not obtain. `approveMember` re-posts the same chosen set, naming
  *  the one held member whose notice the person saw; it is never set by the
- *  first press. */
+ *  first press. **The hook owns what earlier presses still owe**, so the sheet
+ *  carries no ids: closing it must not erase a debt the host's register keeps. */
 export interface CollectionInstallPress {
   (
     item: StoreItem,
@@ -354,9 +366,6 @@ export interface CollectionInstallPress {
     onPlanReplaced: (plan: CollectionPlan, change: PlanChange) => void,
     onInstalled: (consent: CollectionConsentResult) => void,
     approveMember?: string,
-    /** The members a stopped press wrote, whose consent this press still owes.
-     *  The sheet accumulates them from the refusals it has drawn. */
-    carried?: readonly string[],
   ): void;
 }
 
@@ -465,7 +474,11 @@ export async function pressCollection(
     }
     return {
       kind: "installed",
-      consent: { granted: [], notGranted: [...notGranted.values()] },
+      consent: {
+        granted: [],
+        notGranted: [...notGranted.values()],
+        grantedIds: [],
+      },
     };
   }
 

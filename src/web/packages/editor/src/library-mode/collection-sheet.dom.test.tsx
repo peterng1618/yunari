@@ -26,7 +26,10 @@ import type { HeldUpdate } from "../components/held-update.js";
 import type { InstallControl } from "../store-mode/install-item.js";
 import type { StoreItem } from "../store-mode/local-source.js";
 import { uiCopy } from "../ui-copy.js";
-import type { PlanChange } from "./collection-install.js";
+import type {
+  CollectionConsentResult,
+  PlanChange,
+} from "./collection-install.js";
 import { CollectionSheet } from "./collection-sheet.js";
 
 // Base UI's dialog needs the browser APIs jsdom lacks: floating-ui observes its
@@ -176,10 +179,7 @@ interface PressCapture {
   readonly plan: CollectionPlan;
   readonly approveMember: string | undefined;
   readonly replace: (plan: CollectionPlan, change: PlanChange) => void;
-  readonly installed: (consent: {
-    readonly granted: readonly string[];
-    readonly notGranted: readonly string[];
-  }) => void;
+  readonly installed: (consent: CollectionConsentResult) => void;
 }
 
 /** An install control whose collection press is captured rather than posted. */
@@ -206,6 +206,7 @@ function capturingInstall(
     },
     installingIds: new Set(),
     refusal: undefined,
+    owedMembers: () => [],
     held: undefined,
     onApproveUpdate: () => undefined,
     onDismissUpdate: () => undefined,
@@ -216,6 +217,7 @@ const NO_INSTALL: InstallControl = {
   onInstall: () => undefined,
   installingIds: new Set(),
   refusal: undefined,
+  owedMembers: () => [],
   held: undefined,
   onApproveUpdate: () => undefined,
   onDismissUpdate: () => undefined,
@@ -547,7 +549,11 @@ it("reports a code member whose consent was not granted after a write", async ()
   await act(async () => installButton(document).click());
 
   await act(async () => {
-    press?.installed({ granted: [], notGranted: ["HWiNFO bridge"] });
+    press?.installed({
+      granted: [],
+      notGranted: ["HWiNFO bridge"],
+      grantedIds: [],
+    });
   });
 
   expect(document.body.textContent).toContain(
@@ -575,7 +581,7 @@ it("states a failed re-list beside the done state", async () => {
   await mount(sheet(PLAN, { install: capturingInstall((it) => (press = it)) }));
   await act(async () => installButton(document).click());
   await act(async () => {
-    press?.installed({ granted: [], notGranted: [] });
+    press?.installed({ granted: [], notGranted: [], grantedIds: [] });
   });
 
   await rerender(

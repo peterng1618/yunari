@@ -160,7 +160,6 @@ function collectionItem(): StoreItem {
 interface PressCapture {
   readonly items: readonly string[];
   readonly approveMember: string | undefined;
-  readonly carried: readonly string[] | undefined;
 }
 
 /** An install control whose collection press is captured rather than posted. */
@@ -176,12 +175,12 @@ function capturingInstall(
       onPlanReplaced,
       onInstalled,
       approveMember,
-      carried,
     ) => {
-      capture({ items, approveMember, carried });
+      capture({ items, approveMember });
     },
     installingIds: new Set(),
     refusal: undefined,
+    owedMembers: () => [],
     held: undefined,
     onApproveUpdate: () => undefined,
     onDismissUpdate: () => undefined,
@@ -278,7 +277,11 @@ it("states the consent a stopped press granted and withheld", async () => {
           reasons: ["adds usb:device"],
         },
         memberId: "hwinfo-plugin",
-        consent: { granted: ["Office wall"], notGranted: ["HWiNFO bridge"] },
+        consent: {
+          granted: ["Office wall"],
+          notGranted: ["HWiNFO bridge"],
+          grantedIds: ["wall-theme"],
+        },
       },
     }),
   );
@@ -301,10 +304,12 @@ it("states the consent a stopped press granted and withheld", async () => {
   ).toBe(uiCopy.store.collectionSheet.consentNotGranted(["HWiNFO bridge"]));
 });
 
-/** **The approval press carries what the stopped press wrote.** The retry skips
- *  an already-registered member, so without these ids its failed grant would be
- *  forgotten when the refusal clears. */
-it("carries a stopped press's written ids into the approval press", async () => {
+/** **The debt belongs to the install hook, and the sheet only reports it.** A
+ *  written plugin whose grant failed is not forgotten when the refusal clears,
+ *  because the owed set lives in the hook that outlives the sheet. The held
+ *  member was never written, so it is `ok:false` with a reason and only the
+ *  member that landed is `written`. */
+it("reports the consent the region still owes", async () => {
   const held: HeldUpdate = {
     key: "acme/hwinfo",
     name: "HWiNFO bridge",
@@ -327,16 +332,29 @@ it("carries a stopped press's written ids into the approval press", async () => 
   await mount(
     element({
       ...base,
+      owedMembers: (id) => (id === COLLECTION_ID ? ["clock-widget"] : []),
       refusal: {
         id: COLLECTION_ID,
         message: uiCopy.store.install.reviewHeading,
         held,
         memberId: "hwinfo-plugin",
-        written: ["clock-widget", "hwinfo-plugin"],
-        consent: { granted: [], notGranted: ["HWiNFO bridge"] },
+        members: [
+          { id: "clock-widget", ok: true },
+          { id: "hwinfo-plugin", ok: false, reason: "A review is needed." },
+        ],
+        written: ["clock-widget"],
       },
     }),
   );
+
+  expect(
+    must(
+      document.querySelector<HTMLElement>(
+        "[data-yunari-collection-sheet-consent-owed]",
+      ),
+      "owed consent sentence",
+    ).textContent,
+  ).toBe(uiCopy.store.collectionSheet.consentOwed(["Clock"]));
 
   await act(async () =>
     must(
@@ -346,6 +364,5 @@ it("carries a stopped press's written ids into the approval press", async () => 
   );
 
   expect(press?.approveMember).toBe("hwinfo-plugin");
-  expect(press?.carried).toEqual(["clock-widget", "hwinfo-plugin"]);
   expect(press?.items).toEqual(["wall-theme", "clock-widget", "hwinfo-plugin"]);
 });

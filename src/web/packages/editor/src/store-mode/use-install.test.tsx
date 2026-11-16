@@ -17,6 +17,7 @@ import {
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import type { CollectionConsentResult } from "../library-mode/collection-install.js";
 import type {
   ClientAnswer,
   ExtensionClient,
@@ -188,6 +189,7 @@ interface HarnessOptions {
   readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
   readonly extensions?: Pick<ExtensionClient, "list" | "grant">;
   readonly onPlanReplaced?: (plan: CollectionPlan) => void;
+  readonly onInstalled?: (consent: CollectionConsentResult) => void;
   readonly onListed?: () => void;
 }
 
@@ -239,21 +241,20 @@ function pressWith(
   options: HarnessOptions,
   items: readonly string[],
   approveMember?: string,
-  carried?: readonly string[],
   plan: CollectionPlan = PLAN,
+  item: StoreItem = collectionItem(),
 ): void {
   const install = control;
   if (install?.onInstallCollection === undefined) {
     throw new Error("the hook returned no collection press");
   }
   install.onInstallCollection(
-    collectionItem(),
+    item,
     items,
     plan,
     (plan) => options.onPlanReplaced?.(plan),
-    () => undefined,
+    (consent) => options.onInstalled?.(consent),
     approveMember,
-    carried,
   );
 }
 
@@ -386,24 +387,127 @@ it("carries a held member and re-posts its approval with the chosen set", async 
   expect(body).not.toHaveProperty("approveUpdate");
 });
 
-/** **A member a stopped press wrote is granted on the approval press.** The
- *  retry skips it as already registered, so the sheet's carried ids are the only
- *  way its failed grant is ever retried. */
-it("grants a carried member plus the member this press wrote", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        id: COLLECTION_ID,
-        members: [
-          { id: "plugin-a", ok: true, reason: "Already installed." },
-          { id: "plugin-b", ok: true },
-        ],
-      }),
-    ),
-  );
+/** Plugin A's first grant fails, then the hook's owed set is the only record:
+ *  a Dismiss clears the refusal and the sheet may remount, but the debt stays
+ *  keyed by the collection that was pressed. The retry carries A, grants it
+ *  beside the member it wrote, and both are named in the settled consent. */
+it("grants and names a member a dismissed press wrote, on the retry", async () => {
+  const held = {
+    key: PLUGIN_CONSENT_B.key,
+    name: PLUGIN_CONSENT_B.name,
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  let calls = 0;
+  const fetch = vi.fn(async () => {
+    calls += 1;
+    return calls === 1
+      ? jsonResponse(
+          {
+            held,
+            memberId: "plugin-b",
+            members: [
+              { id: "plugin-a", ok: true },
+              { id: "plugin-b", ok: false, reason: "A review is needed." },
+            ],
+          },
+          409,
+        )
+      : jsonResponse({
+          ok: true,
+          id: COLLECTION_ID,
+          members: [
+            { id: "plugin-a", ok: true, reason: "Already installed." },
+            { id: "plugin-b", ok: true },
+          ],
+        });
+  });
+  vi.stubGlobal("fetch", fetch);
   const grant = vi.fn(granted);
+  grant.mockResolvedValueOnce({ ok: false, message: "no" });
+  const installed: CollectionConsentResult[] = [];
+  const harness: HarnessOptions = {
+    extensions: {
+      list: async () => [
+        pluginExtension("acme/a", "fp-a"),
+        pluginExtension("acme/b", "fp-b"),
+      ],
+      grant,
+    },
+    readPlan: async () => PLUGIN_PLAN,
+    onInstalled: (consent) => installed.push(consent),
+  };
+  await mount(harness);
+
+  await act(async () =>
+    pressWith(harness, ["plugin-a", "plugin-b"], undefined, PLUGIN_PLAN),
+  );
+  await vi.waitFor(() =>
+    expect(control?.refusal?.written).toEqual(["plugin-a"]),
+  );
+  expect(control?.owedMembers(COLLECTION_ID)).toEqual(["plugin-a"]);
+
+  // The sheet's Dismiss and remount: the refusal goes, the debt does not.
+  await act(async () => control?.onDismissUpdate());
+  expect(control?.refusal).toBeUndefined();
+
+  await act(async () =>
+    pressWith(harness, ["plugin-a", "plugin-b"], "plugin-b", PLUGIN_PLAN),
+  );
+  await vi.waitFor(() =>
+    expect(installed.at(-1)?.granted).toEqual(["Plugin A", "Plugin B"]),
+  );
+
+  expect(grant.mock.calls).toEqual([
+    ["acme/a", "fp-a"],
+    ["acme/a", "fp-a"],
+    ["acme/b", "fp-b"],
+  ]);
+  expect(control?.owedMembers(COLLECTION_ID)).toEqual([]);
+});
+
+/** **Another collection's press is another debt.** The owed set is keyed by the
+ *  item id that was pressed, so installing a second collection in between never
+ *  settles the first one's written plugin. */
+it("keeps the debt while another item's press lands", async () => {
+  const OTHER_ID = "other-collection";
+  const held = {
+    key: PLUGIN_CONSENT_B.key,
+    name: PLUGIN_CONSENT_B.name,
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  let firstCalls = 0;
+  const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { catalogueId: string };
+    if (body.catalogueId === OTHER_ID) {
+      return jsonResponse({ ok: true, id: OTHER_ID, members: [] });
+    }
+    firstCalls += 1;
+    return firstCalls === 1
+      ? jsonResponse(
+          {
+            held,
+            memberId: "plugin-b",
+            members: [
+              { id: "plugin-a", ok: true },
+              { id: "plugin-b", ok: false, reason: "A review is needed." },
+            ],
+          },
+          409,
+        )
+      : jsonResponse({
+          ok: true,
+          id: COLLECTION_ID,
+          members: [
+            { id: "plugin-a", ok: true, reason: "Already installed." },
+            { id: "plugin-b", ok: true },
+          ],
+        });
+  });
+  vi.stubGlobal("fetch", fetch);
+  const grant = vi.fn(granted);
+  grant.mockResolvedValueOnce({ ok: false, message: "no" });
   const harness: HarnessOptions = {
     extensions: {
       list: async () => [
@@ -415,40 +519,82 @@ it("grants a carried member plus the member this press wrote", async () => {
     readPlan: async () => PLUGIN_PLAN,
   };
   await mount(harness);
+  const other = collectionItem();
+  const otherItem: StoreItem = {
+    ...other,
+    id: OTHER_ID,
+    ...(other.catalogue === undefined
+      ? {}
+      : { catalogue: { ...other.catalogue, id: OTHER_ID } }),
+  };
+
+  await act(async () =>
+    pressWith(harness, ["plugin-a", "plugin-b"], undefined, PLUGIN_PLAN),
+  );
+  await vi.waitFor(() =>
+    expect(control?.refusal?.written).toEqual(["plugin-a"]),
+  );
 
   await act(async () =>
     pressWith(
       harness,
       ["plugin-a", "plugin-b"],
-      "plugin-b",
-      ["plugin-a"],
+      undefined,
       PLUGIN_PLAN,
+      otherItem,
     ),
   );
-  await vi.waitFor(() => expect(grant).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  expect(control?.owedMembers(COLLECTION_ID)).toEqual(["plugin-a"]);
 
-  expect(grant).toHaveBeenCalledWith("acme/a", "fp-a");
-  expect(grant).toHaveBeenCalledWith("acme/b", "fp-b");
-  expect(announcement).toBe(uiCopy.store.install.installed("Ops collection"));
+  await act(async () =>
+    pressWith(harness, ["plugin-a", "plugin-b"], "plugin-b", PLUGIN_PLAN),
+  );
+  await vi.waitFor(() =>
+    expect(control?.owedMembers(COLLECTION_ID)).toEqual([]),
+  );
+  // C2's press granted nothing, so the retry is the second A call and B's.
+  expect(grant.mock.calls).toEqual([
+    ["acme/a", "fp-a"],
+    ["acme/a", "fp-a"],
+    ["acme/b", "fp-b"],
+  ]);
 });
 
-/** **A cleared refusal does not erase an ungranted plugin.** The approval press
- *  replaces the refusal that named A; the grant it makes for A fails, so the
- *  settled announcement still names it. */
-it("states a carried member whose grant the approval press could not obtain", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        id: COLLECTION_ID,
-        members: [
-          { id: "plugin-a", ok: true, reason: "Already installed." },
-          { id: "plugin-b", ok: true },
-        ],
-      }),
-    ),
-  );
+/** **A grant that fails again keeps the debt.** The retry names the member it
+ *  could not settle, so a reload cannot hide an unloadable plugin. */
+it("keeps a carried member owed when its grant fails again", async () => {
+  const held = {
+    key: PLUGIN_CONSENT_B.key,
+    name: PLUGIN_CONSENT_B.name,
+    publisher: "acme",
+    reasons: ["adds usb:device"],
+  };
+  let calls = 0;
+  const fetch = vi.fn(async () => {
+    calls += 1;
+    return calls === 1
+      ? jsonResponse(
+          {
+            held,
+            memberId: "plugin-b",
+            members: [
+              { id: "plugin-a", ok: true },
+              { id: "plugin-b", ok: false, reason: "A review is needed." },
+            ],
+          },
+          409,
+        )
+      : jsonResponse({
+          ok: true,
+          id: COLLECTION_ID,
+          members: [
+            { id: "plugin-a", ok: true, reason: "Already installed." },
+            { id: "plugin-b", ok: true },
+          ],
+        });
+  });
+  vi.stubGlobal("fetch", fetch);
   const grant = vi.fn(
     async (key: string): Promise<ClientAnswer> =>
       key === "acme/a" ? { ok: false, message: "no" } : { ok: true },
@@ -466,13 +612,15 @@ it("states a carried member whose grant the approval press could not obtain", as
   await mount(harness);
 
   await act(async () =>
-    pressWith(
-      harness,
-      ["plugin-a", "plugin-b"],
-      "plugin-b",
-      ["plugin-a"],
-      PLUGIN_PLAN,
-    ),
+    pressWith(harness, ["plugin-a", "plugin-b"], undefined, PLUGIN_PLAN),
+  );
+  await vi.waitFor(() =>
+    expect(control?.refusal?.written).toEqual(["plugin-a"]),
+  );
+  await act(async () => control?.onDismissUpdate());
+
+  await act(async () =>
+    pressWith(harness, ["plugin-a", "plugin-b"], "plugin-b", PLUGIN_PLAN),
   );
   await vi.waitFor(() =>
     expect(announcement).toBe(
@@ -480,7 +628,7 @@ it("states a carried member whose grant the approval press could not obtain", as
     ),
   );
 
-  expect(grant).toHaveBeenCalledTimes(2);
+  expect(control?.owedMembers(COLLECTION_ID)).toEqual(["plugin-a"]);
 });
 
 it("states a stale list after a successful write", async () => {

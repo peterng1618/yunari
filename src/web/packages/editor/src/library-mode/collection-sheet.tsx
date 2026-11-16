@@ -310,23 +310,18 @@ export function CollectionSheet(props: {
     props.install.refusal?.id === props.item.id
       ? props.install.refusal.consent
       : undefined;
-  /** The members a stopped press wrote. An approval press posts the same chosen
-   *  set, and the retry skips them as already registered, so the sheet carries
-   *  their ids forward: without them their consent would be forgotten when the
-   *  refusal clears. */
-  const refusalWritten =
-    props.install.refusal?.id === props.item.id
-      ? props.install.refusal.written
-      : undefined;
-  const [carried, setCarried] = useState<ReadonlySet<string>>(() => new Set());
-  useEffect(() => {
-    if (refusalWritten === undefined || refusalWritten.length === 0) return;
-    setCarried((current) => {
-      const next = new Set(current);
-      for (const id of refusalWritten) next.add(id);
-      return next;
-    });
-  }, [refusalWritten]);
+  /** **The consent this collection still owes belongs to the install hook.**
+   *  The sheet reads it rather than keeping it, so a Dismiss, a later press of
+   *  another item or the sheet's own remount cannot erase a plugin the host
+   *  already wrote: reopening still names it. Ids the current plan no longer
+   *  names are skipped, because no grant can settle them here. */
+  const owedNames =
+    shown === undefined
+      ? []
+      : props.install
+          .owedMembers(props.item.id)
+          .map((id) => shown.members.find((member) => member.id === id)?.name)
+          .filter((name): name is string => name !== undefined);
   const choice = shown === undefined ? undefined : choiceOf(shown, chosen);
   const blockedReason =
     shown === undefined
@@ -379,7 +374,6 @@ export function CollectionSheet(props: {
       },
       (consent) => setSettled(consent),
       approveMember,
-      carried.size === 0 ? undefined : [...carried],
     );
   };
 
@@ -617,6 +611,16 @@ export function CollectionSheet(props: {
                   </p>
                 )}
               </>
+            )}
+
+            {owedNames.length === 0 ? null : (
+              <p
+                data-yunari-collection-sheet-consent-owed=""
+                role="status"
+                className="text-xs text-warn"
+              >
+                {uiCopy.store.collectionSheet.consentOwed(owedNames)}
+              </p>
             )}
 
             {failedMembers.length === 0 ? null : (

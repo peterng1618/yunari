@@ -12,6 +12,7 @@ import type { StoreItem } from "../store-mode/local-source.js";
 import { uiCopy } from "../ui-copy.js";
 import {
   type CollectionConsentGateway,
+  type CollectionConsentResult,
   choiceOf,
   choicesOf,
   grantCollectionConsent,
@@ -131,6 +132,12 @@ function extension(row: {
     fingerprint: row.fingerprint,
   };
 }
+
+const consent = (
+  granted: readonly string[],
+  notGranted: readonly string[],
+  grantedIds: readonly string[] = [],
+): CollectionConsentResult => ({ granted, notGranted, grantedIds });
 
 describe("choicesOf", () => {
   it("chooses every member by default and locks required ones", () => {
@@ -272,10 +279,7 @@ describe("grantCollectionConsent", () => {
     const result = await grantCollectionConsent(PLAN, gateway);
 
     expect(grants).toEqual([{ key: "acme/hwinfo", fingerprint: "fp-hwinfo" }]);
-    expect(result).toEqual({
-      granted: ["HWiNFO bridge"],
-      notGranted: [],
-    });
+    expect(result).toEqual(consent(["HWiNFO bridge"], [], ["hwinfo-plugin"]));
   });
 
   it("grants one POST per plugin key when two members share one", async () => {
@@ -309,7 +313,7 @@ describe("grantCollectionConsent", () => {
     const result = await grantCollectionConsent(PLAN, gateway);
 
     expect(grant).not.toHaveBeenCalled();
-    expect(result).toEqual({ granted: [], notGranted: ["HWiNFO bridge"] });
+    expect(result).toEqual(consent([], ["HWiNFO bridge"]));
   });
 
   it("reports a refused grant rather than counting it granted", async () => {
@@ -322,7 +326,7 @@ describe("grantCollectionConsent", () => {
 
     const result = await grantCollectionConsent(PLAN, gateway);
 
-    expect(result).toEqual({ granted: [], notGranted: ["HWiNFO bridge"] });
+    expect(result).toEqual(consent([], ["HWiNFO bridge"]));
   });
 });
 
@@ -373,7 +377,7 @@ describe("pressCollection", () => {
     expect(grant).toHaveBeenCalledTimes(1);
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: ["HWiNFO bridge"], notGranted: [] },
+      consent: consent(["HWiNFO bridge"], [], ["hwinfo-plugin"]),
     });
   });
 
@@ -413,7 +417,7 @@ describe("pressCollection", () => {
     expect(grant).not.toHaveBeenCalled();
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: [], notGranted: ["HWiNFO bridge"] },
+      consent: consent([], ["HWiNFO bridge"]),
     });
   });
 
@@ -441,7 +445,7 @@ describe("pressCollection", () => {
     expect(grant).not.toHaveBeenCalled();
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: [], notGranted: [] },
+      consent: consent([], []),
     });
   });
 
@@ -469,7 +473,7 @@ describe("pressCollection", () => {
     expect(grant).not.toHaveBeenCalled();
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: [], notGranted: [] },
+      consent: consent([], []),
     });
   });
 
@@ -598,15 +602,15 @@ describe("pressCollection", () => {
 
     expect(second).toEqual({
       kind: "installed",
-      consent: { granted: ["Plugin B"], notGranted: [] },
+      consent: consent(["Plugin B"], [], ["plugin-a", "plugin-b"]),
     });
     expect(approveGrant).toHaveBeenCalledTimes(1);
     expect(approveGrant).toHaveBeenCalledWith("acme/clock", "fp-b");
   });
 
-  /** **The sheet's carried ids survive the refusal being cleared.** A grant
-   *  that failed on the stopped press is retried on the approval press, over the
-   *  union of what that press wrote and what the sheet carried. */
+  /** **The carried ids survive the refusal being cleared.** A grant that
+   *  failed on the stopped press is retried on the approval press, over the
+   *  union of what that press wrote and what the install hook carried. */
   it("grants a carried member whose grant failed, plus the one this press wrote", async () => {
     const install = vi.fn(async () => ({
       ok: true as const,
@@ -639,14 +643,15 @@ describe("pressCollection", () => {
     expect(grant).toHaveBeenCalledWith("acme/clock", "fp-b");
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: ["Plugin A", "Plugin B"], notGranted: [] },
+      consent: consent(["Plugin A", "Plugin B"], [], ["plugin-a", "plugin-b"]),
     });
   });
 
-  it("does not grant a carried id the current plan no longer names", async () => {
+  /** A carried id the plan names is granted; a retired id is never posted. */
+  it("grants a carried member the plan names, and not one it dropped", async () => {
     const install = vi.fn(async () => ({
       ok: true as const,
-      members: [{ id: "hwinfo-plugin", ok: true }],
+      members: [{ id: "wall-theme", ok: true }],
     }));
     const list = vi.fn(async () => [
       extension({ key: "acme/hwinfo", fingerprint: "fp-hwinfo" }),
@@ -660,7 +665,7 @@ describe("pressCollection", () => {
       {
         readPlan,
         install,
-        carried: ["retired-plugin"],
+        carried: ["hwinfo-plugin", "retired-plugin"],
         consent: { list, grant },
       },
     );
@@ -669,16 +674,18 @@ describe("pressCollection", () => {
     expect(grant).toHaveBeenCalledWith("acme/hwinfo", "fp-hwinfo");
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: ["HWiNFO bridge"], notGranted: [] },
+      consent: consent(["HWiNFO bridge"], [], ["hwinfo-plugin"]),
     });
   });
 
+  /** Neither member was written by this press, so the carry is what makes the
+   *  second one owed; the first already holds consent and is not re-posted. */
   it("does not re-grant a carried member whose consent already succeeded", async () => {
     const install = vi.fn(async () => ({
       ok: true as const,
       members: [
         { id: "plugin-a", ok: true, reason: "Already installed." },
-        { id: "plugin-b", ok: true },
+        { id: "plugin-b", ok: true, reason: "Already installed." },
       ],
     }));
     const list = vi.fn(async () => [
@@ -698,7 +705,7 @@ describe("pressCollection", () => {
       {
         readPlan: async () => TWO_PLUGIN_PLAN,
         install,
-        carried: ["plugin-a"],
+        carried: ["plugin-a", "plugin-b"],
         consent: { list, grant },
       },
     );
@@ -707,7 +714,7 @@ describe("pressCollection", () => {
     expect(grant).toHaveBeenCalledWith("acme/clock", "fp-b");
     expect(outcome).toEqual({
       kind: "installed",
-      consent: { granted: ["Plugin B"], notGranted: [] },
+      consent: consent(["Plugin B"], [], ["plugin-a", "plugin-b"]),
     });
   });
 

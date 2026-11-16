@@ -66,8 +66,8 @@ export interface InstallControl {
         /** The consent a stopped press obtained for the members it did write
          *  before a later member's hold stopped it. */
         readonly consent?: CollectionConsentResult;
-        /** The member ids that stopped press wrote. The sheet carries them into
-         *  the approval press, whose retry skips them as already registered. */
+        /** The member ids that stopped press wrote. The hook keeps them in its
+         *  owed set, because the retry skips them as already registered. */
         readonly written?: readonly string[];
         /** A collection member the host held, with the growth that held it. */
         readonly held?: HeldUpdate;
@@ -76,6 +76,10 @@ export interface InstallControl {
         readonly memberId?: string;
       }
     | undefined;
+  /** The member ids this item's collection still owes consent for. The install
+   *  hook owns the set, so closing or remounting the sheet keeps the debt and
+   *  reopening still names what is owed. */
+  readonly owedMembers: (id: string) => readonly string[];
   /** The update a press was held for, and the item it names. */
   readonly held: { readonly id: string; readonly held: HeldUpdate } | undefined;
   /** Presses the held item again with the approval flag. */
