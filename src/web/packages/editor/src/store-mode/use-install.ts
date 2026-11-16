@@ -71,6 +71,9 @@ export function useInstall(options: {
           readonly id: string;
           readonly ok: boolean;
         }[];
+        /** The consent a part-way press obtained for the members it did write
+         *  before a later member's hold stopped it. */
+        readonly consent?: CollectionConsentResult;
         /** A collection member the host held, with what grew. */
         readonly held?: HeldUpdate;
         /** The held member's id, so pressing Approve names only that member. */
@@ -216,6 +219,9 @@ export function useInstall(options: {
             ...(outcome.members === undefined
               ? {}
               : { members: outcome.members }),
+            ...(outcome.consent === undefined
+              ? {}
+              : { consent: outcome.consent }),
             ...(outcome.held === undefined ? {} : { held: outcome.held }),
             ...(outcome.memberId === undefined
               ? {}

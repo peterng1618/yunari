@@ -60,6 +60,12 @@ export interface InstallControl {
         /** A part-way collection failure's per-member outcomes, so the sheet
          *  can name what the host did not write. */
         readonly members?: readonly CollectionMemberOutcome[];
+        /** The consent a stopped press obtained for the members it did write
+         *  before a later member's hold stopped it. */
+        readonly consent?: {
+          readonly granted: readonly string[];
+          readonly notGranted: readonly string[];
+        };
         /** A collection member the host held, with the growth that held it. */
         readonly held?: HeldUpdate;
         /** The held member's id, so the approval press names exactly that

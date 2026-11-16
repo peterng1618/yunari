@@ -303,6 +303,13 @@ export function CollectionSheet(props: {
     props.install.refusal?.id === props.item.id
       ? props.install.refusal.memberId
       : undefined;
+  /** The consent a press that stopped part-way obtained for the members it did
+   *  write. The retry skips those members, so this sheet is the only place the
+   *  grant is stated. */
+  const refusalConsent =
+    props.install.refusal?.id === props.item.id
+      ? props.install.refusal.consent
+      : undefined;
   const choice = shown === undefined ? undefined : choiceOf(shown, chosen);
   const blockedReason =
     shown === undefined
@@ -563,6 +570,35 @@ export function CollectionSheet(props: {
               >
                 {refusal}
               </p>
+            )}
+
+            {refusalConsent === undefined ||
+            (refusalConsent.granted.length === 0 &&
+              refusalConsent.notGranted.length === 0) ? null : (
+              <>
+                {refusalConsent.granted.length === 0 ? null : (
+                  <p
+                    data-yunari-collection-sheet-consent-granted=""
+                    role="status"
+                    className="text-xs text-muted"
+                  >
+                    {uiCopy.store.collectionSheet.consentGranted(
+                      refusalConsent.granted,
+                    )}
+                  </p>
+                )}
+                {refusalConsent.notGranted.length === 0 ? null : (
+                  <p
+                    data-yunari-collection-sheet-consent-not-granted=""
+                    role="status"
+                    className="text-xs text-warn"
+                  >
+                    {uiCopy.store.collectionSheet.consentNotGranted(
+                      refusalConsent.notGranted,
+                    )}
+                  </p>
+                )}
+              </>
             )}
 
             {failedMembers.length === 0 ? null : (

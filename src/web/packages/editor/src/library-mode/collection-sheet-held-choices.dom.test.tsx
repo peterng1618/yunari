@@ -249,3 +249,52 @@ it("cannot add a member while a held notice is shown", async () => {
   expect(press?.items).toEqual(["wall-theme", "hwinfo-plugin"]);
   expect(press?.approveMember).toBe("hwinfo-plugin");
 });
+
+/** **A stopped press states the consent it did obtain.** The members it wrote
+ *  before the hold are skipped by every retry, so the sheet is the only surface
+ *  that can say which of them are now loadable and which are not. */
+it("states the consent a stopped press granted and withheld", async () => {
+  const element = (install: InstallControl): ReactElement => (
+    <CollectionSheet
+      item={collectionItem()}
+      plan={{ status: "ready", plan: PLAN }}
+      origins={[]}
+      install={install}
+      onClose={() => undefined}
+    />
+  );
+  await mount(
+    element({
+      ...capturingInstall(() => undefined),
+      refusal: {
+        id: COLLECTION_ID,
+        message: uiCopy.store.install.reviewHeading,
+        held: {
+          key: "acme/hwinfo",
+          name: "HWiNFO bridge",
+          publisher: "acme",
+          reasons: ["adds usb:device"],
+        },
+        memberId: "hwinfo-plugin",
+        consent: { granted: ["Office wall"], notGranted: ["HWiNFO bridge"] },
+      },
+    }),
+  );
+
+  expect(
+    must(
+      document.querySelector<HTMLElement>(
+        "[data-yunari-collection-sheet-consent-granted]",
+      ),
+      "granted consent sentence",
+    ).textContent,
+  ).toBe(uiCopy.store.collectionSheet.consentGranted(["Office wall"]));
+  expect(
+    must(
+      document.querySelector<HTMLElement>(
+        "[data-yunari-collection-sheet-consent-not-granted]",
+      ),
+      "withheld consent sentence",
+    ).textContent,
+  ).toBe(uiCopy.store.collectionSheet.consentNotGranted(["HWiNFO bridge"]));
+});

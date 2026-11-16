@@ -1832,6 +1832,41 @@ it("offers Install for a collection with no include installed", async () => {
   ).toBe(uiCopy.store.cell.installStates.install);
 });
 
+/** **An all-optional collection has no required include to count**, so its
+ *  cell prints no "0 of 0" reading and draws the Install control its absent
+ *  state asks for. */
+it("draws no count for an all-optional collection and still offers Install", async () => {
+  const container = await mount(
+    <Gallery
+      items={[
+        collectionItem({
+          includes: INCLUDED_IDS.map((id) => ({ id, optional: true })),
+        }),
+      ]}
+      density="comfortable"
+      onAction={() => undefined}
+      onOpenItem={() => undefined}
+      install={NO_INSTALL}
+      origins={[]}
+    />,
+  );
+
+  const cell = cellOf(container, "ops-collection");
+  expect(
+    cell.querySelector("[data-yunari-store-cell-members]"),
+    "an all-optional collection printed a count",
+  ).toBeNull();
+  expect(
+    must(
+      cell.querySelector<HTMLElement>(
+        '[data-yunari-store-cell-install="install"]',
+      ),
+      "the all-optional collection's install control",
+    ).textContent,
+    "an all-optional collection did not offer Install",
+  ).toBe(uiCopy.store.cell.installStates.install);
+});
+
 /** **An unread register states nothing**, rather than drawing every include as
  *  missing: "0 of 4 installed" and an action are claims the card cannot make
  *  before the read answers, and the surface states the failure beside the grid. */

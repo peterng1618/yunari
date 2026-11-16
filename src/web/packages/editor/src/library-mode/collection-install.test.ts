@@ -7,6 +7,7 @@ import {
   defaultFacetsFor,
 } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
+import type { InstallOutcome } from "../store-mode/install-item.js";
 import type { StoreItem } from "../store-mode/local-source.js";
 import { uiCopy } from "../ui-copy.js";
 import {
@@ -496,6 +497,130 @@ describe("pressCollection", () => {
       message: uiCopy.store.collectionSheet.requiredMissing(["wall-theme"]),
     });
     expect(install).not.toHaveBeenCalled();
+  });
+
+  /** **A press that wrote a member before a later hold still owes that member
+   *  its consent.** The retry skips an already-registered member, so without the
+   *  grant on the refused arm the plugin is written, registered, and unloadable
+   *  while the sheet says installed. */
+  it("grants the member a stopped press wrote, and not the held one", async () => {
+    const pluginA = { ...CONSENT, name: "Plugin A" };
+    const pluginB = {
+      ...CONSENT,
+      key: "acme/clock",
+      name: "Plugin B",
+    };
+    const plan: CollectionPlan = {
+      members: [
+        member({ id: "plugin-a", kind: "plugin", consent: pluginA }),
+        member({ id: "plugin-b", kind: "plugin", consent: pluginB }),
+      ],
+      missing: [],
+      totalBytes: 2048,
+    };
+    const heldB = {
+      key: "acme/clock",
+      name: "Plugin B",
+      publisher: "acme",
+      reasons: ["adds usb:device"],
+    };
+    const install = vi.fn(
+      async (): Promise<InstallOutcome> => ({
+        ok: false as const,
+        held: heldB,
+        memberId: "plugin-b",
+        members: [
+          { id: "plugin-a", ok: true },
+          { id: "plugin-b", ok: false, reason: "A review is needed." },
+        ],
+      }),
+    );
+    const list = vi.fn(async () => [
+      extension({ key: "acme/hwinfo", fingerprint: "fp-a" }),
+      extension({ key: "acme/clock", fingerprint: "fp-b" }),
+    ]);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const first = await pressCollection(
+      collectionItem(),
+      ["plugin-a", "plugin-b"],
+      plan,
+      { readPlan: async () => plan, install, consent: { list, grant } },
+    );
+
+    expect(first).toMatchObject({
+      kind: "refused",
+      held: heldB,
+      memberId: "plugin-b",
+      consent: { granted: ["Plugin A"], notGranted: [] },
+    });
+    // B was held, not written, so its consent is never granted by this press.
+    expect(grant).toHaveBeenCalledTimes(1);
+    expect(grant).toHaveBeenCalledWith("acme/hwinfo", "fp-a");
+
+    // The approval press writes B; A is already registered and stays ungranted
+    // by the retry because this press wrote none of its bytes.
+    install.mockResolvedValueOnce({
+      ok: true,
+      members: [
+        { id: "plugin-a", ok: true, reason: "Already installed." },
+        { id: "plugin-b", ok: true },
+      ],
+    });
+    const approveGrant = vi.fn(async () => ({ ok: true }));
+    const second = await pressCollection(
+      collectionItem(),
+      ["plugin-a", "plugin-b"],
+      plan,
+      {
+        readPlan: async () => plan,
+        install,
+        approveMember: "plugin-b",
+        consent: { list, grant: approveGrant },
+      },
+    );
+
+    expect(second).toEqual({
+      kind: "installed",
+      consent: { granted: ["Plugin B"], notGranted: [] },
+    });
+    expect(approveGrant).toHaveBeenCalledTimes(1);
+    expect(approveGrant).toHaveBeenCalledWith("acme/clock", "fp-b");
+  });
+
+  /** A refused answer whose members all carry a reason wrote nothing, so the
+   *  gateway is never touched and nothing is claimed granted. */
+  it("grants nothing when a refused answer wrote no member", async () => {
+    const install = vi.fn(async () => ({
+      ok: false as const,
+      held: {
+        key: "acme/hwinfo",
+        name: "HWiNFO bridge",
+        publisher: "acme",
+        reasons: ["adds usb:device"],
+      },
+      memberId: "hwinfo-plugin",
+      members: [
+        { id: "wall-theme", ok: true, reason: "Already installed." },
+        { id: "hwinfo-plugin", ok: false, reason: "A review is needed." },
+      ],
+    }));
+    const list = vi.fn(async () => []);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      PLAN,
+      { readPlan, install, consent: { list, grant } },
+    );
+
+    expect(outcome).toMatchObject({
+      kind: "refused",
+      consent: { granted: [], notGranted: [] },
+    });
+    expect(list).not.toHaveBeenCalled();
+    expect(grant).not.toHaveBeenCalled();
   });
 
   /** **A held member is an answer, not a lost press.** The outcome carries the

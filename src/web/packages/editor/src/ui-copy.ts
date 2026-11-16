@@ -1507,6 +1507,14 @@ export const uiCopy = {
        *  the ones whose grant the host refused. Never counted as granted. */
       notGranted: (names: readonly string[]): string =>
         `Installed, but consent was not granted for: ${names.join(", ")}.`,
+      /** A press that wrote some members and then stopped on a later member's
+       *  hold: the grant the written members received, which the retry will not
+       *  repeat, and the ones it did not. The press did not finish, so neither
+       *  sentence claims an install. */
+      consentGranted: (names: readonly string[]): string =>
+        `Consent was granted for: ${names.join(", ")}.`,
+      consentNotGranted: (names: readonly string[]): string =>
+        `Consent was not granted for: ${names.join(", ")}.`,
     },
     /** The library half's submission, whose sentence the client composes only
      *  where the host answers a state and no sentence exists: the wait for the

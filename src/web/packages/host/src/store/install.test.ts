@@ -1206,6 +1206,112 @@ describe("collection install and plan", () => {
     expect(installs).toEqual([false, true, false, true]);
   });
 
+  /** **The request-level approval flag names no member.** A browser still
+   *  posting the superseded wire (`approveUpdate: true`, no `approveMember`)
+   *  approves nobody: every grown member's installer is called with
+   *  `approveUpdate: false`, and the first growth still holds. */
+  it("a collection request-level approveUpdate approves no member", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: PLUGIN_ID }, { id: PLUGIN_B_ID }]);
+    const heldA = {
+      key: "local/plugin-a",
+      name: "Plugin A",
+      publisher: "local",
+      reasons: ["capability:sensor:provide"],
+    };
+    const heldB = {
+      key: "local/plugin-b",
+      name: "Plugin B",
+      publisher: "local",
+      reasons: ["capability:usb:device"],
+    };
+    const installs: boolean[] = [];
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+      [
+        itemUrl(PLUGIN_B_ID),
+        await itemJson({
+          id: PLUGIN_B_ID,
+          kind: "plugin",
+          name: "Acme Panel B",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_B_ID), pluginBytes],
+    ]);
+    const origins = memoryOrigins();
+    const options = {
+      fetch: storeFetch(routes),
+      stores: stores({
+        extensions: extensionService({
+          install: async (_bytes, installOptions) => {
+            const approve = installOptions?.approveUpdate === true;
+            installs.push(approve);
+            if (!approve) {
+              return {
+                ok: false,
+                held: installs.length === 1 ? heldA : heldB,
+              };
+            }
+            return {
+              ok: true,
+              plugin: {
+                key: "local/plugin-a",
+                publisher: "local",
+                manifest: panelManifest(),
+                directory: "/nowhere",
+                contentHash: "hash",
+              },
+            };
+          },
+        }),
+      }),
+      storeOrigin: ORIGIN,
+      origins,
+    };
+
+    const first = await installCatalogueItem(
+      await collectionRequest(bytes, { approveUpdate: true }),
+      options,
+    );
+    expect(first).toMatchObject({
+      ok: false,
+      stage: "review",
+      held: heldA,
+      memberId: PLUGIN_ID,
+      members: [
+        { id: PLUGIN_ID, ok: false },
+        {
+          id: PLUGIN_B_ID,
+          ok: false,
+          reason: "Not attempted after an earlier member failed.",
+        },
+      ],
+    });
+    expect(origins.rows()).toEqual({});
+
+    // A named approval writes A and leaves B's own grown install unapproved.
+    const second = await installCatalogueItem(
+      await collectionRequest(bytes, { approveMember: PLUGIN_ID }),
+      options,
+    );
+    expect(second).toMatchObject({ ok: false, stage: "review", held: heldB });
+    expect(
+      installs,
+      "a request-level approveUpdate reached a collection member",
+    ).toEqual([false, true, false]);
+  });
+
   it("refuses an approval that names a member this press does not install", async () => {
     const bytes = collectionBytes([
       { id: WIDGET_A_ID },

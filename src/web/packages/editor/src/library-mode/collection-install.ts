@@ -240,6 +240,29 @@ export async function grantCollectionConsent(
   return { granted, notGranted };
 }
 
+/**
+ * The members a press wrote, read from the host's own outcomes. A member with a
+ * `reason` was already registered or never attempted, so this press wrote no
+ * bytes for it and it is not granted. No outcomes at all cannot say what was
+ * written, so the answer is `undefined` rather than an empty set.
+ */
+function writtenMembers(
+  members:
+    | readonly {
+        readonly id: string;
+        readonly ok: boolean;
+        readonly reason?: string;
+      }[]
+    | undefined,
+): ReadonlySet<string> | undefined {
+  if (members === undefined) return undefined;
+  return new Set(
+    members
+      .filter((member) => member.ok && member.reason === undefined)
+      .map((member) => member.id),
+  );
+}
+
 /** What one Install press answers. */
 export type CollectionPressOutcome =
   | { readonly kind: "installed"; readonly consent: CollectionConsentResult }
@@ -250,7 +273,9 @@ export type CollectionPressOutcome =
       readonly change: PlanChange;
     }
   /** The host refused the press. `members` is present for a part-way failure:
-   *  the sheet names the members it could not write. `held` is the update the
+   *  the sheet names the members it could not write. `consent` is the grant the
+   *  members this press did write received before a later member's hold stopped
+   *  it, so a written plugin is never left loadable. `held` is the update the
    *  host read and refused to write, which the sheet renders for approval;
    *  `memberId` names the include that hold belongs to. */
   | {
@@ -260,6 +285,7 @@ export type CollectionPressOutcome =
         readonly id: string;
         readonly ok: boolean;
       }[];
+      readonly consent?: CollectionConsentResult;
       readonly held?: HeldUpdate;
       readonly memberId?: string;
     };
@@ -348,6 +374,16 @@ export async function pressCollection(
     deps.approveMember,
   );
   if (!outcome.ok) {
+    // **A part-way press still owes the members it wrote their consent.** The
+    // host wrote them before a later member's hold stopped the press, and the
+    // retry skips them as already registered, so this is the only press that
+    // can grant them. Nothing is granted for a member with a reason, and no
+    // per-member evidence means nothing was written.
+    const written = writtenMembers(outcome.members);
+    const consent =
+      written === undefined
+        ? undefined
+        : await grantCollectionConsent(fresh, deps.consent, written);
     return {
       kind: "refused",
       message:
@@ -357,6 +393,7 @@ export async function pressCollection(
       ...("members" in outcome && outcome.members !== undefined
         ? { members: outcome.members }
         : {}),
+      ...(consent === undefined ? {} : { consent }),
       ...("held" in outcome ? { held: outcome.held } : {}),
       ...("memberId" in outcome && outcome.memberId !== undefined
         ? { memberId: outcome.memberId }
@@ -384,11 +421,7 @@ export async function pressCollection(
       consent: { granted: [], notGranted: [...notGranted.values()] },
     };
   }
-  const written = new Set(
-    outcome.members
-      .filter((member) => member.ok && member.reason === undefined)
-      .map((member) => member.id),
-  );
+  const written = writtenMembers(outcome.members) ?? new Set<string>();
 
   return {
     kind: "installed",

@@ -382,9 +382,10 @@ export function createThemeWrites(
 
       const installed = await installCatalogueItem(install, installOptions);
       if (!installed.ok && installed.stage === "review") {
-        // A held update is an answer the browser draws as a review notice; its
-        // approval press re-posts with this item's approveUpdate flag. A
-        // collection names the members it had already written, so the review is
+        // A held update is an answer the browser draws as a review notice; a
+        // single item's approval press re-posts with its `approveUpdate` flag,
+        // and a collection's names the member with `memberId`. A collection
+        // also names the members it had already written, so the review is
         // about one member and the retry knows which ones landed.
         sendJson(response, 409, {
           ok: false,
