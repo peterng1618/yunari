@@ -57,6 +57,9 @@ function messageOf(failure: unknown): string {
 
 export function ItemModal(props: {
   readonly item: StoreItem;
+  /** The card the press came from, when the surface has one. It carries the
+   *  multi-member key, so a handler never has to rebuild it from the item. */
+  readonly card?: StoreCard;
   /** The member card that opened this modal, or `undefined` when the card is
    *  the listing's own. The member's kind is what selects the actions and the
    *  word its badge carries; the listing's kind answers only when there is no
@@ -82,6 +85,13 @@ export function ItemModal(props: {
   readonly extensionsFailure?: { readonly onRetry: () => void } | undefined;
   /** This PC's origin register, for a collection's installed count. */
   readonly origins?: readonly CatalogueOrigin[];
+  /** The register's read failed, which is not the same fact as a collection
+   *  with nothing installed. */
+  readonly originsFailure?:
+    | { readonly message: string; readonly onRetry: () => void }
+    | undefined;
+  /** The register's read is in flight. */
+  readonly originsLoading?: boolean | undefined;
   /** The collection plan read. The modal calls it when it opens, never while a
    *  grid renders; a case can hand its own reader to keep the wire out of a
    *  DOM test. */
@@ -107,9 +117,12 @@ export function ItemModal(props: {
    *  the sign-in outlives the press that started it. */
   readonly submit: SubmitControl;
   /** Opens another item's card — the region's own open state, which is what
-   *  moves the surface from a remix to the parent it credits or from an item to
-   *  a collection that includes it. */
+   *  moves the surface from a remix to the parent it credits. */
   readonly onOpenItem?: (card: StoreCard) => void;
+  /** Opens a collection the item belongs to. Absent on a surface whose open
+   *  state cannot hold a listing outside its own page, so the collection's name
+   *  draws as text rather than a link that closes the dialog. */
+  readonly onOpenCollection?: (card: StoreCard) => void;
   /** The parent the listing resolved for this item's credit, when it holds
    *  one. A resolved `StoreItem`, never an id. */
   readonly remixParent?: StoreItem;
@@ -175,7 +188,7 @@ export function ItemModal(props: {
       ? collectionStateOf(item, props.origins)
       : undefined;
   const collectionStateRead = props.origins !== undefined;
-  const card: StoreCard = {
+  const card: StoreCard = props.card ?? {
     key: item.id,
     listing: item,
     member: props.member,
@@ -274,6 +287,7 @@ export function ItemModal(props: {
               vocabulary={props.vocabulary}
               remixParent={props.remixParent}
               onOpenItem={props.onOpenItem}
+              onOpenCollection={props.onOpenCollection}
               plan={plan}
               onRetryPlan={() => setPlanAttempt((current) => current + 1)}
               extension={extension}
@@ -289,6 +303,8 @@ export function ItemModal(props: {
               kind={kind}
               collectionState={collectionState}
               collectionStateRead={collectionStateRead}
+              originsFailure={props.originsFailure}
+              originsLoading={props.originsLoading ?? false}
               install={install}
               submit={submit}
               onAction={onAction}

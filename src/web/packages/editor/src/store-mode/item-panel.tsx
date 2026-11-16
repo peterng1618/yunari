@@ -298,6 +298,9 @@ export function PanelBody(props: {
   readonly vocabulary: readonly string[];
   readonly remixParent: StoreItem | undefined;
   readonly onOpenItem: ((card: StoreCard) => void) | undefined;
+  /** Opens a collection that includes this item; absent where the surface's
+   *  open state cannot hold it, which draws the name as text. */
+  readonly onOpenCollection: ((card: StoreCard) => void) | undefined;
   readonly plan: DetailPlanState | undefined;
   readonly onRetryPlan: () => void;
   readonly extension: InstalledExtension | undefined;
@@ -394,13 +397,13 @@ export function PanelBody(props: {
                   data-yunari-store-detail-collection={collection.id}
                   className="text-xs text-muted"
                 >
-                  {onOpenItem === undefined ? (
+                  {props.onOpenCollection === undefined ? (
                     collection.name
                   ) : (
                     <button
                       type="button"
                       onClick={() =>
-                        onOpenItem({
+                        props.onOpenCollection?.({
                           key: collection.id,
                           listing: collection,
                           member: undefined,

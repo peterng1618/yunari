@@ -38,6 +38,7 @@ import {
   type LibraryClients,
   type LibraryPage,
   librarySourceFor,
+  type OriginsRead,
   type WidgetPackRow,
 } from "./sources.js";
 
@@ -295,6 +296,36 @@ export function LibraryRegion(props: {
       !collectionsFailed,
     retry: readCollections,
   };
+  /** The register behind every collection's install count. Read on the first
+   *  detail open on any page, so a collection reached from "Part of" has its
+   *  Install or Update press rather than a false "unread" state. */
+  const [originEntries, setOriginEntries] = useState<
+    readonly CatalogueOrigin[] | undefined
+  >(undefined);
+  const [originsReadRequested, setOriginsReadRequested] = useState(false);
+  const [sessionOriginsFailed, setSessionOriginsFailed] = useState(false);
+  const readSessionOrigins = useCallback(() => {
+    setSessionOriginsFailed(false);
+    readOrigins().then(
+      (entries) => setOriginEntries(entries),
+      () => setSessionOriginsFailed(true),
+    );
+  }, []);
+  const detailOrigins: OriginsRead = {
+    entries: originEntries,
+    failed: sessionOriginsFailed,
+    loading:
+      originsReadRequested &&
+      originEntries === undefined &&
+      !sessionOriginsFailed,
+    retry: readSessionOrigins,
+  };
+  const ensureDetailReads = useCallback(() => {
+    ensureCollections();
+    if (originsReadRequested) return;
+    setOriginsReadRequested(true);
+    readSessionOrigins();
+  }, [ensureCollections, originsReadRequested, readSessionOrigins]);
 
   return (
     <div data-yunari-library-region="" className="flex min-h-0 flex-1 flex-col">
@@ -345,7 +376,7 @@ export function LibraryRegion(props: {
               <StoreRegion
                 client={client}
                 collections={collections}
-                onDetailOpen={ensureCollections}
+                onDetailOpen={ensureDetailReads}
                 {...(props.onOpenTheme === undefined
                   ? {}
                   : { onOpenTheme: props.onOpenTheme })}
@@ -377,7 +408,8 @@ export function LibraryRegion(props: {
                 clients={clients}
                 onStatus={props.onStatus}
                 collections={collections}
-                onDetailOpen={ensureCollections}
+                detailOrigins={detailOrigins}
+                onDetailOpen={ensureDetailReads}
                 {...(props.onOpenSettings === undefined
                   ? {}
                   : { onOpenSettings: props.onOpenSettings })}
@@ -399,6 +431,7 @@ function PageListing(props: {
   readonly onStatus?: ((count: number | undefined) => void) | undefined;
   readonly onOpenSettings?: ((page: "extensions") => void) | undefined;
   readonly collections: CollectionsRead;
+  readonly detailOrigins: OriginsRead;
   readonly onDetailOpen: () => void;
 }): React.JSX.Element {
   const [density] = useState<GridDensityLevel>(
@@ -662,6 +695,7 @@ function PageListing(props: {
         {openCard === undefined ? null : (
           <ItemModal
             item={openCard.listing}
+            card={openCard}
             {...(openCard.member === undefined
               ? {}
               : { member: openCard.member })}
@@ -683,7 +717,22 @@ function PageListing(props: {
                   },
                 }
               : {})}
-            {...(origins === undefined ? {} : { origins })}
+            {...(origins === undefined
+              ? props.detailOrigins.entries === undefined
+                ? {}
+                : { origins: props.detailOrigins.entries }
+              : { origins })}
+            originsLoading={
+              origins === undefined && props.detailOrigins.loading
+            }
+            {...(origins === undefined && props.detailOrigins.failed
+              ? {
+                  originsFailure: {
+                    message: uiCopy.store.unreadable.origins,
+                    onRetry: props.detailOrigins.retry,
+                  },
+                }
+              : {})}
             readPlan={readCollectionPlan}
             vocabulary={settledTags(
               [...(catalogue ?? []), ...(library ?? [])],
@@ -695,6 +744,7 @@ function PageListing(props: {
             install={install}
             submit={submit}
             onOpenItem={openCardAt}
+            onOpenCollection={openCardAt}
             {...(props.onOpenSettings === undefined
               ? {}
               : { onOpenSettings: props.onOpenSettings })}

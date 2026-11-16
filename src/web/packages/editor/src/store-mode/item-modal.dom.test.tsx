@@ -1408,6 +1408,7 @@ function kindItem(kind: string, overrides: Partial<StoreItem> = {}): StoreItem {
 /** What the detail surface needs beyond the library item it already took. */
 interface DetailOptions {
   readonly member?: MemberRecord;
+  readonly card?: StoreCard;
   readonly collections?: readonly StoreItem[];
   readonly collectionsFailure?: {
     readonly message: string;
@@ -1687,6 +1688,42 @@ it("lists the collections an item belongs to", async () => {
 });
 
 /**
+ * **A collection is a link only where the surface can open it.** A region whose
+ * open state holds only its own page's rows would close the dialog on a link
+ * it cannot resolve, so it omits the collection opener and the name is text.
+ */
+it("draws a collection as text where the surface cannot open it", async () => {
+  const collection = kindItem("collection", {
+    id: "collection-uuid",
+    name: "Starter kit",
+    members: [],
+    includes: ["item-uuid"],
+  });
+  await mount(
+    detailModal(
+      { ...onlineItem(), id: "item-uuid" },
+      {
+        collections: [collection],
+        onOpenItem: () => undefined,
+      },
+    ),
+  );
+
+  const membership = detailNode(
+    "[data-yunari-store-detail-collection]",
+    "collection membership",
+  );
+  expect(
+    membership.querySelector("button"),
+    "a collection the surface cannot open is drawn as a link",
+  ).toBeNull();
+  expect(
+    membership.textContent?.trim(),
+    "the collection's name is not stated",
+  ).toBe("Starter kit");
+});
+
+/**
  * **A failed collections read is not "belongs to none."** The section states
  * the read failed and offers it again; drawing nothing would assert a
  * membership the surface never obtained.
@@ -1722,6 +1759,39 @@ it("states a failed collections read instead of drawing no membership", async ()
     ).click(),
   );
   expect(retried, "the failure's retry did not report the press").toEqual([1]);
+});
+
+/**
+ * **The pressed card is carried through the modal.** Rebuilding it from the
+ * item would mint the listing's key and lose a multi-member card's
+ * `memberCardKey`, so a later handler could not tell two members apart.
+ */
+it("reports the card it was opened with", async () => {
+  const card: StoreCard = {
+    key: "pack-uuid#0:widget/cpu",
+    listing: widgetPack(),
+    member: WIDGET,
+  };
+  const pressed: StoreCard[] = [];
+  await mount(
+    detailModal(widgetPack(), {
+      card,
+      member: WIDGET,
+      onAction: (_action, reported) => pressed.push(reported),
+    }),
+  );
+
+  await act(async () =>
+    detailNode(
+      '[data-yunari-store-item-action="insert"]',
+      "widget Insert action",
+    ).click(),
+  );
+
+  expect(
+    pressed[0]?.key,
+    "the modal rebuilt the card and lost its member key",
+  ).toBe("pack-uuid#0:widget/cpu");
 });
 
 /**

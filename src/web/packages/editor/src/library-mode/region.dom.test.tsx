@@ -615,12 +615,8 @@ it("opens a member's detail from its card", async () => {
   ).toContain("Insert in canvas");
 });
 
-/**
- * **"Part of" reads the session's collection entries, not the page's rows.**
- * The Widgets page filters collections out of its own listing, so membership
- * can only be answered by the collections source the region reads when a
- * detail first opens.
- */
+/** Membership comes from the session's collection entries; the Widgets page
+ *  filters collections out of its own rows. */
 it("lists a collection an item belongs to from another page", async () => {
   vi.stubGlobal(
     "fetch",
@@ -669,11 +665,77 @@ it("lists a collection an item belongs to from another page", async () => {
   );
 });
 
-/**
- * **A failed collections read is stated, not read as no membership.** The
- * page's own catalogue read answered, so the modal opens; the session's
- * collection read did not, and the Part of section says so with a retry.
- */
+/** A collection reached from Part of keeps its Install press: the register is
+ *  read when any detail opens, not only on the Collections page. */
+it("reads the register for a collection opened from another page", async () => {
+  vi.stubGlobal(
+    "fetch",
+    answering([
+      [
+        CATALOGUE,
+        () =>
+          indexOf([
+            entry(
+              "widget-pack",
+              "11111111-1111-4111-8111-111111111111",
+              "System pack",
+              [{ id: "cpu", kind: "widget", name: "CPU gauge" }],
+            ),
+            entry(
+              "collection",
+              "22222222-2222-4222-8222-222222222222",
+              "Starter kit",
+              [],
+              { includes: ["11111111-1111-4111-8111-111111111111"] },
+            ),
+          ]),
+      ],
+      ["/api/widget-packs", () => json({ packs: [] })],
+      ["/api/store/origins", () => json({ origins: [] })],
+      [
+        "/api/store/collection/plan",
+        () => json({ plan: { members: [], missing: [] } }),
+      ],
+    ]),
+  );
+  const container = await mountHarness("widgets");
+  await waitForCells(container, ["System pack"]);
+
+  await act(async () =>
+    must(
+      container.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-cell-name-press]",
+      ),
+      "cell name press",
+    ).click(),
+  );
+  const collectionLink = await vi.waitFor(() =>
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        "[data-yunari-store-detail-collection] button",
+      ),
+      "collection link",
+    ),
+  );
+  await act(async () => collectionLink.click());
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector(
+        '[data-yunari-store-collection-install="install"]',
+      ),
+      "a collection opened from Part of offers no Install",
+    ).not.toBeNull(),
+  );
+  expect(
+    document.body.querySelector(
+      '[data-yunari-store-collection-state="unavailable"]',
+    ),
+    "the collection's install state reads as unread after the register answered",
+  ).toBeNull();
+});
+
+/** A failed collections read is stated with a retry, never as no membership. */
 it("states a failed collections read instead of claiming no membership", async () => {
   let catalogueReads = 0;
   vi.stubGlobal(

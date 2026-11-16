@@ -235,6 +235,10 @@ function CollectionFooter(props: {
   readonly card: StoreCard;
   readonly state: CollectionState | undefined;
   readonly stateRead: boolean;
+  readonly originsFailure:
+    | { readonly message: string; readonly onRetry: () => void }
+    | undefined;
+  readonly originsLoading: boolean;
   readonly install: InstallControl;
   readonly onAction: (action: CellAction, card: StoreCard) => void;
 }): React.JSX.Element {
@@ -246,12 +250,31 @@ function CollectionFooter(props: {
   return (
     <span className="flex flex-col gap-[var(--space-8)]">
       <span className="flex flex-wrap items-center gap-[var(--space-8)]">
-        {!props.stateRead || state === undefined ? (
+        {props.originsFailure !== undefined ? (
           <span
-            data-yunari-store-collection-state="unavailable"
+            data-yunari-store-collection-state="failed"
+            className="flex flex-col items-start gap-[var(--space-4)] text-xs text-warn"
+          >
+            {props.originsFailure.message}
+            <button
+              type="button"
+              data-yunari-store-collection-retry=""
+              onClick={props.originsFailure.onRetry}
+              className="text-xs text-accent underline hover:text-text"
+            >
+              {uiCopy.store.retry}
+            </button>
+          </span>
+        ) : !props.stateRead || state === undefined ? (
+          <span
+            data-yunari-store-collection-state={
+              props.originsLoading ? "loading" : "unavailable"
+            }
             className="text-xs text-muted"
           >
-            {uiCopy.store.detail.collectionStateUnavailable}
+            {props.originsLoading
+              ? uiCopy.store.detail.collectionStateLoading
+              : uiCopy.store.detail.collectionStateUnavailable}
           </span>
         ) : state.state === "absent" ? (
           <button
@@ -321,6 +344,10 @@ export function PanelFoot(props: {
   readonly kind: string;
   readonly collectionState: CollectionState | undefined;
   readonly collectionStateRead: boolean;
+  readonly originsFailure:
+    | { readonly message: string; readonly onRetry: () => void }
+    | undefined;
+  readonly originsLoading: boolean;
   readonly install: InstallControl;
   readonly submit: SubmitControl;
   readonly onAction: (action: CellAction, card: StoreCard) => void;
@@ -368,6 +395,8 @@ export function PanelFoot(props: {
           card={props.card}
           state={props.collectionState}
           stateRead={props.collectionStateRead}
+          originsFailure={props.originsFailure}
+          originsLoading={props.originsLoading}
           install={install}
           onAction={onAction}
         />

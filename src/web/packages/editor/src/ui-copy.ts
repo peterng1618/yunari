@@ -1579,6 +1579,8 @@ export const uiCopy = {
        *  that has not answered is stated rather than read as "not installed". */
       collectionStateUnavailable:
         "This collection's install state could not be read.",
+      /** The register's read is in flight, which is not the failure above. */
+      collectionStateLoading: "Reading this collection's install state…",
     },
     /** The modal's pill groups, which are the facet's own content under the name
      *  the surface gives it: the row names what a filter narrows by (*Sensors*,

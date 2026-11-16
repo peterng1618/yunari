@@ -209,6 +209,18 @@ export interface CollectionsRead {
   readonly retry: () => void;
 }
 
+/**
+ * This PC's origin register, read once for the Library session when a detail
+ * first opens. A collection's install state is counted over these rows, so a
+ * collection reached from another page needs them too.
+ */
+export interface OriginsRead {
+  readonly entries: readonly CatalogueOrigin[] | undefined;
+  readonly failed: boolean;
+  readonly loading: boolean;
+  readonly retry: () => void;
+}
+
 /** One listing row as the item the gallery draws. A non-theme listing has no
  *  document to derive a record from, so it takes the store's own record for the
  *  kind rather than a second spelling here. */
