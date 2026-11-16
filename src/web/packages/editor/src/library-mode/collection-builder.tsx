@@ -1,5 +1,5 @@
 import { STORE_ITEM_KINDS } from "@yunari/renderer-core";
-import type { CollectionInclude } from "@yunari/theme-package";
+import type { CollectionDraft, CollectionInclude } from "@yunari/theme-package";
 import type * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { StoreItem } from "../store-mode/local-source.js";
@@ -12,15 +12,13 @@ import { Empty, Failure } from "../store-mode/region.js";
 import { StoreStatusBadge } from "../store-mode/status-badge.js";
 import { useSubmit } from "../store-mode/use-submit.js";
 import { uiCopy } from "../ui-copy.js";
-import { type CollectionDraft } from "./collection-draft.js";
 
 export {
   type CollectionDraft,
   collectionManifest,
   parseCollectionDraft,
   readCollectionDraft,
-  selfIncludeRefusal,
-} from "./collection-draft.js";
+} from "@yunari/theme-package";
 
 /** One page's read: the rows, or the fact that nothing answered. */
 type Read<T> =
@@ -30,7 +28,10 @@ type Read<T> =
 
 const words = uiCopy.library.collectionBuilder;
 
-/** Why a listing cannot be added, or nothing when it can. */
+/** Why a listing cannot be added, or nothing when it can. The list is the
+ *  published catalogue with collections filtered out, so the only refusals left
+ *  are a row with no id and one already added. Membership itself — published,
+ *  one level deep — is the store's rule and is checked there. */
 function addRefusalOf(
   item: StoreItem,
   includes: readonly CollectionInclude[],
@@ -39,12 +40,6 @@ function addRefusalOf(
   if (includes.some((include) => include.id === item.id)) {
     return words.alreadyAdded(item.name);
   }
-  if (item.status !== undefined && item.status !== "published") {
-    return words.unpublished(item.name);
-  }
-  // Collections are one level deep, so a collection cannot be a member. The
-  // store refuses the same shape; saying it here saves the round trip.
-  if (item.kind === "collection") return words.nested(item.name);
   return undefined;
 }
 
@@ -52,17 +47,13 @@ function addRefusalOf(
  * The collection builder: published listings to pick from, the drafts the
  * author has added, and the one press that publishes them.
  *
- * **A new listing is created, never republished**: its id is the host's to
- * mint, so the browser never invents one. The builder's own press posts the
- * draft; when the draft belongs to an existing listing, `listingId` lets the
- * self-reference check refuse it here. Every refusal — the reader's, the
- * self-reference check's, or the host's — is drawn in one live region, verbatim.
+ * **The browser posts the draft and nothing else**: the host packages it,
+ * decides whether the name publishes a new listing or a new version of the
+ * author's existing one, and holds the store token. Every refusal — the
+ * reader's or the host's — is drawn in one live region, verbatim.
  */
 export function CollectionBuilder(props: {
   readonly listings: readonly StoreItem[];
-  /** The listing an existing collection publishes to. Absent for a new one,
-   *  whose id the host mints. */
-  readonly listingId?: string;
   readonly onSubmitted?: () => void;
   readonly fetch?: typeof fetch;
 }): React.JSX.Element {
@@ -114,11 +105,7 @@ export function CollectionBuilder(props: {
 
   const publish = (): void => {
     const draft: CollectionDraft = { name, description, includes };
-    collection.onSubmit(
-      props.listingId === undefined
-        ? { draft }
-        : { listingId: props.listingId, draft },
-    );
+    collection.onSubmit({ draft });
   };
 
   const refusal =
@@ -204,7 +191,7 @@ export function CollectionBuilder(props: {
                   onClick={() => add(item)}
                   className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-text enabled:hover:border-muted"
                 >
-                  Add
+                  {words.addWord}
                 </button>
               </li>
             ))}
@@ -243,7 +230,11 @@ export function CollectionBuilder(props: {
                     type="button"
                     data-yunari-collection-optional={include.id}
                     aria-pressed={include.optional}
-                    aria-label={words.optional(listingName)}
+                    aria-label={
+                      include.optional
+                        ? words.makeRequired(listingName)
+                        : words.makeOptional(listingName)
+                    }
                     onClick={() => toggleOptional(include.id)}
                     className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted aria-pressed:border-accent aria-pressed:text-text hover:border-muted"
                   >
@@ -260,7 +251,7 @@ export function CollectionBuilder(props: {
                     }
                     className="flex-none rounded-[var(--radius-md)] border border-edge bg-[var(--yunari-control-bg)] px-[var(--space-8)] py-[var(--space-4)] text-xs text-muted hover:border-muted"
                   >
-                    Remove
+                    {words.removeWord}
                   </button>
                 </li>
               );
@@ -317,14 +308,16 @@ export function SubmissionsPage(props: {
   const [listings, setListings] = useState<Read<readonly StoreItem[]>>({
     state: "loading",
   });
-  const [attempt, setAttempt] = useState(0);
+  /** Two reads, two attempts: a publish refreshes the author's rows only, so the
+   *  builder stays mounted and its confirmation is not replaced by a re-read. */
+  const [mineAttempt, setMineAttempt] = useState(0);
+  const [listingsAttempt, setListingsAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
     setMine({ state: "loading" });
-    setListings({ state: "loading" });
     const options = fetcher === undefined ? {} : { fetch: fetcher };
-    void mineThemeSource(options)
+    void mineThemeSource({ kinds: STORE_ITEM_KINDS, ...options })
       .list()
       .then(
         (rows) => {
@@ -334,6 +327,15 @@ export function SubmissionsPage(props: {
           if (live) setMine({ state: "failed" });
         },
       );
+    return () => {
+      live = false;
+    };
+  }, [fetcher, mineAttempt]);
+
+  useEffect(() => {
+    let live = true;
+    setListings({ state: "loading" });
+    const options = fetcher === undefined ? {} : { fetch: fetcher };
     void readCatalogueListing(options, STORE_ITEM_KINDS).then(
       (parsed) => {
         if (!live) return;
@@ -352,9 +354,12 @@ export function SubmissionsPage(props: {
     return () => {
       live = false;
     };
-  }, [fetcher, attempt]);
+  }, [fetcher, listingsAttempt]);
 
-  const retry = (): void => setAttempt((current) => current + 1);
+  const retry = (): void => {
+    setMineAttempt((current) => current + 1);
+    setListingsAttempt((current) => current + 1);
+  };
 
   return (
     <div
@@ -405,7 +410,7 @@ export function SubmissionsPage(props: {
       ) : listings.state === "loading" ? null : (
         <CollectionBuilder
           listings={listings.rows}
-          onSubmitted={retry}
+          onSubmitted={() => setMineAttempt((current) => current + 1)}
           {...(fetcher === undefined ? {} : { fetch: fetcher })}
         />
       )}

@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { parseCatalogueIndex, STORE_ITEM_KINDS } from "@yunari/renderer-core";
 import {
+  type CatalogueEntry,
+  parseCatalogueIndex,
+  STORE_ITEM_KINDS,
+} from "@yunari/renderer-core";
+import {
+  bumpVersion,
   collectionManifest,
   readCollectionDraft,
   validateCollectionIncludes,
@@ -37,16 +42,9 @@ const NO_SESSION = "Sign in to the store before submitting.";
 const NO_STORE = "This host has no store to submit to.";
 const CATALOGUE_UNREADABLE =
   "The store's catalogue could not be read, so this collection was not submitted.";
-/** A collection publication starts at the first release. Republishing an
- *  existing collection — the membership-change rule — is not built. */
+/** A collection publication starts at the first release; a name that matches an
+ *  existing collection adds a version instead. */
 const FIRST_COLLECTION_VERSION = "1.0.0";
-/** The Worker requires a picture on every finalize and never decodes it. A
- *  collection has no art of its own yet, so this 1×1 transparent PNG stands in
- *  until the builder or the storefront can supply one. */
-const COLLECTION_THUMBNAIL = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
 
 export interface SubmitRouteDeps {
   /** The Worker's origin. Absent when this host has no store to submit to. */
@@ -215,6 +213,16 @@ export async function handleSubmitRoute(
  * refuses a self-reference or another collection by name before a version row
  * exists. The bytes, their digest and their size are built from the draft with
  * the format's one writer, so what the Worker validates is what this host read.
+ *
+ * **A name that matches one of this author's collections publishes a version of
+ * it**, so a retry after a lost answer, or a membership change, reaches the
+ * listing that already exists instead of minting a second public collection. A
+ * name that matches nothing mints an id — nothing in the pack route does.
+ *
+ * **The cover is the published picture of the collection's first member** (the
+ * first required include, else the first optional one). The store never invents
+ * an image: when that picture cannot be fetched the submission is refused and
+ * the member is named.
  */
 async function submitCollection(
   body: Readonly<Record<string, unknown>>,
@@ -226,16 +234,63 @@ async function submitCollection(
   if (!read.ok) return json(400, { ok: false, message: read.message });
   const draft = read.draft;
 
-  // The Worker takes the item id in the path; nothing in the pack request mints
-  // one, so the id a new collection is created with is this host's.
-  const id = randomUUID();
-  const published = await publishedKinds(origin, deps.fetch);
-  if (published === undefined) {
+  const entries = await catalogueEntries(origin, deps.fetch);
+  if (entries === undefined) {
     return json(502, { ok: false, message: CATALOGUE_UNREADABLE });
   }
+
+  let existing: { readonly id: string; readonly version: string } | undefined;
+  try {
+    const mine = await client.mine();
+    const match = mine.entries.find(
+      (entry) => entry.kind === "collection" && entry.name === draft.name,
+    );
+    if (match !== undefined && match.status !== "removed") {
+      existing = { id: match.id, version: match.version };
+    }
+  } catch (error) {
+    return refusal(error, deps.sessionStore, true);
+  }
+
+  const id = existing?.id ?? randomUUID();
+  const published = new Map(
+    [...entries].map(([entryId, entry]) => [entryId, entry.kind]),
+  );
   const membership = validateCollectionIncludes(draft.includes, published, id);
   if (!membership.ok)
     return json(400, { ok: false, message: membership.message });
+
+  const version =
+    existing === undefined
+      ? FIRST_COLLECTION_VERSION
+      : bumpVersion(existing.version, "minor");
+  if (version === undefined) {
+    return json(400, {
+      ok: false,
+      message: `The store's copy of "${draft.name}" records version "${existing?.version ?? ""}", which cannot be bumped.`,
+    });
+  }
+
+  // The first required include, or the first optional one when every member is
+  // optional. Membership just proved it is listed, so the entry is present.
+  const coverMember =
+    draft.includes.find((include) => !include.optional) ?? draft.includes[0];
+  const coverEntry =
+    coverMember === undefined ? undefined : entries.get(coverMember.id);
+  const cover =
+    coverEntry === undefined
+      ? undefined
+      : await fetchBytes(coverEntry.thumbnail, origin, deps.fetch);
+  if (
+    coverMember === undefined ||
+    coverEntry === undefined ||
+    cover === undefined
+  ) {
+    return json(502, {
+      ok: false,
+      message: `The collection's cover could not be fetched from "${coverEntry?.name ?? coverMember?.id ?? draft.name}", so this collection was not submitted.`,
+    });
+  }
 
   const bytes = collectionManifest(draft);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -245,7 +300,7 @@ async function submitCollection(
     plan = await client.createPackVersion(id, {
       kind: "collection",
       name: draft.name,
-      version: FIRST_COLLECTION_VERSION,
+      version,
       metadata: {
         name: draft.name,
         description: draft.description,
@@ -265,16 +320,15 @@ async function submitCollection(
   }
 
   try {
-    const finalized = await client.finalize(
-      id,
-      plan.version,
-      COLLECTION_THUMBNAIL,
-      undefined,
-    );
+    const finalized = await client.finalize(id, plan.version, cover, undefined);
     return json(200, {
       ok: true,
       status: finalized.status,
-      version: { from: null, to: plan.version, level: "initial" },
+      version: {
+        from: existing?.version ?? null,
+        to: plan.version,
+        level: existing === undefined ? "initial" : "minor",
+      },
     });
   } catch (error) {
     return refusal(error, deps.sessionStore, true);
@@ -282,14 +336,14 @@ async function submitCollection(
 }
 
 /**
- * The published catalogue as id → kind, or undefined where it could not be
- * read. Only published entries are listed, and an entry this build cannot read
- * is left out, so an include that cannot be confirmed is refused.
+ * The published catalogue by id. Only published entries are listed, and an
+ * entry this build cannot read is left out, so an include that cannot be
+ * confirmed is refused. Undefined is a catalogue that could not be read.
  */
-async function publishedKinds(
+async function catalogueEntries(
   origin: string,
   doFetch: typeof fetch,
-): Promise<Map<string, string> | undefined> {
+): Promise<Map<string, CatalogueEntry> | undefined> {
   let response: Response;
   try {
     response = await doFetch(new URL("/index.json", origin));
@@ -307,5 +361,27 @@ async function publishedKinds(
     return undefined;
   }
   const index = parseCatalogueIndex(value, STORE_ITEM_KINDS);
-  return new Map(index.entries.map((entry) => [entry.id, entry.kind]));
+  return new Map(index.entries.map((entry) => [entry.id, entry]));
+}
+
+/** One published file's bytes, or undefined when the store could not serve it.
+ *  The path is the catalogue entry's own; no client-supplied URL is fetched. */
+async function fetchBytes(
+  path: string,
+  origin: string,
+  doFetch: typeof fetch,
+): Promise<Uint8Array | undefined> {
+  const url = `${origin.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+  let response: Response;
+  try {
+    response = await doFetch(url);
+  } catch {
+    return undefined;
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return bytes.byteLength === 0 ? undefined : bytes;
 }

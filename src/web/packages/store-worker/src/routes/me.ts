@@ -10,6 +10,7 @@ import {
   isStoreItemKind,
   MAX_METADATA_NAME_BYTES,
   migrateFabricThemeEnvelope,
+  STORE_ITEM_KINDS,
   type StoreItemKind,
   validateFabricThemeEnvelope,
 } from "@yunari/renderer-core";
@@ -372,7 +373,7 @@ async function requestVersion(
   const declaredKind = body["kind"] ?? DASHBOARD_THEME_KIND;
   if (!isStoreItemKind(declaredKind))
     return badRequest(
-      `A version request names one of: dashboard-theme, editor-theme, widget-pack, path-preset-pack, plugin.`,
+      `A version request names one of: ${STORE_ITEM_KINDS.join(", ")}.`,
     );
   if (declaredKind !== DASHBOARD_THEME_KIND)
     return requestPackVersion(

@@ -1,14 +1,11 @@
 import {
+  type CollectionDraft,
+  collectionManifest,
+  readCollectionDraft,
   readCollectionPackage,
   type VersionLevel,
 } from "@yunari/theme-package";
 import { useEffect, useRef, useState } from "react";
-import {
-  type CollectionDraft,
-  collectionManifest,
-  readCollectionDraft,
-  selfIncludeRefusal,
-} from "../library-mode/collection-draft.js";
 import { uiCopy } from "../ui-copy.js";
 import type { StoreItem } from "./local-source.js";
 
@@ -77,12 +74,10 @@ export interface SignInWindow {
   close(): void;
 }
 
-/** What the collection builder hands this flow: the draft it validated, and the
- *  listing id when the draft belongs to a collection that already exists. A new
- *  collection has no id yet — the host mints it — so there is nothing to compare
- *  the includes against and self-reference stays the store's refusal. */
+/** What the collection builder hands this flow: the draft it validated. The
+ *  host decides whether the name publishes a new listing or a new version of an
+ *  existing one, so the browser holds no listing id. */
 export interface CollectionSubmission {
-  readonly listingId?: string;
   readonly draft: CollectionDraft;
 }
 
@@ -469,7 +464,9 @@ export function useSubmit(options: {
   /** One collection press, validated before the host is asked: the package
    *  reader owns the draft's bounds and ids, and the writer/reader round trip
    *  proves the draft is a package. **The host packages and posts it** — the
-   *  browser neither serializes the submission nor holds a store token. */
+   *  browser neither serializes the submission nor holds a store token.
+   *  Self-reference is the store's own refusal: a new listing's id does not
+   *  exist yet, and an existing one is chosen there by name. */
   async function attemptCollection(
     submission: CollectionSubmission,
     retried: boolean,
@@ -479,13 +476,6 @@ export function useSubmit(options: {
     if (!read.ok) {
       refuse(read.message);
       return;
-    }
-    if (submission.listingId !== undefined) {
-      const own = selfIncludeRefusal(read.draft, submission.listingId);
-      if (own !== undefined) {
-        refuse(own);
-        return;
-      }
     }
     // The bytes the host will build are bytes this reader accepts: a format
     // drift fails here rather than at the store.
@@ -515,14 +505,8 @@ export function useSubmit(options: {
     clearTimer();
     activeFlow.current = "collection";
     setFlow("collection");
-    // A new collection has no listing id until the host mints one; the answer's
-    // live region names it by the author's own name either way.
-    setItemId(submission.listingId);
-    setItemLabel(
-      submission.draft.name === ""
-        ? (submission.listingId ?? "")
-        : submission.draft.name,
-    );
+    setItemId(undefined);
+    setItemLabel(submission.draft.name);
     setState("submitting");
     setRefusal(undefined);
     setUrl(undefined);

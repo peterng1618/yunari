@@ -5,7 +5,7 @@ import {
   DASHBOARD_THEME_KIND,
   isCatalogueStatus,
   parseCatalogueIndex,
-  STORE_ITEM_KINDS,
+  type StoreItemKind,
 } from "@yunari/renderer-core";
 import type { ItemSource, StoreItem } from "./local-source.js";
 import { catalogueItemOf } from "./online-source.js";
@@ -31,11 +31,20 @@ interface ItemState {
  * A failed read throws rather than answering an empty listing, as the catalogue
  * source does: `undefined` is what the region draws as "nothing to say", where
  * `[]` would claim the author has submitted nothing.
+ *
+ * **The caller names the kinds this source returns.** One shared reader serves
+ * surfaces that show different vocabularies: the Dashboard themes page draws
+ * only themes, and My submissions draws every kind the author owns. A source
+ * that listed every kind for all of them would put plugins and collections on a
+ * grid whose Remove command writes the local theme library.
  */
-export function mineThemeSource(
-  options: { readonly url?: string; readonly fetch?: typeof fetch } = {},
-): ItemSource {
+export function mineThemeSource(options: {
+  readonly kinds: readonly StoreItemKind[];
+  readonly url?: string;
+  readonly fetch?: typeof fetch;
+}): ItemSource {
   const url = options.url ?? MINE_PATH;
+  const kinds = options.kinds;
   let refused: readonly CatalogueRefusal[] = [];
 
   return {
@@ -50,12 +59,12 @@ export function mineThemeSource(
       }
 
       const rows = entriesOf(await response.json());
-      // The author's listing is every kind they own, so the whole vocabulary
-      // is parsed; the parser reports a row of a kind this build does not ship
-      // as refused rather than dropping it silently.
+      // The parser is given the kinds this surface draws: a row of another kind
+      // is refused and counted rather than silently dropped, so the surface can
+      // say it could not read a row instead of pretending none was sent.
       const parsed = parseCatalogueIndex(
         { generatedAt: new Date().toISOString(), entries: rows },
-        STORE_ITEM_KINDS,
+        kinds,
       );
       const states = statesOf(rows);
 

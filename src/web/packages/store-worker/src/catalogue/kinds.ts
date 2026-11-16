@@ -3,7 +3,11 @@ import {
   type PluginManifest,
   readPluginPackage,
 } from "@yunari/extension-api";
-import { isStoreItemKind, type StoreItemKind } from "@yunari/renderer-core";
+import {
+  isStoreItemKind,
+  STORE_ITEM_KINDS,
+  type StoreItemKind,
+} from "@yunari/renderer-core";
 import {
   type CollectionPackage,
   MAX_ARCHIVE_BYTES,
@@ -56,7 +60,7 @@ export function readPackSubmission(value: unknown): PackSubmissionResult {
   const kind = field(value, "kind");
   if (!isStoreItemKind(kind))
     return refuse(
-      'A pack submission needs a "kind" of editor-theme, widget-pack, path-preset-pack or plugin.',
+      `A pack submission needs a "kind" of ${STORE_ITEM_KINDS.join(", ")}.`,
     );
   if (kind === "dashboard-theme")
     return refuse("A dashboard theme is submitted as an envelope, not a pack.");

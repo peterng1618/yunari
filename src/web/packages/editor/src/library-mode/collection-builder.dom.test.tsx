@@ -18,7 +18,6 @@ import {
   parseCollectionDraft,
   readCollectionDraft,
   SubmissionsPage,
-  selfIncludeRefusal,
 } from "./collection-builder.js";
 
 (
@@ -27,7 +26,6 @@ import {
 
 const FIRST_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
 const SECOND_ID = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
-const OWN_ID = "5d41402a-bc4b-4c8a-9d0e-2f1a3b4c5d6e";
 
 const FACETS = {
   author: undefined,
@@ -181,18 +179,8 @@ it("refuses a draft with no includes or a duplicate include", () => {
   if (!duplicate.ok) expect(duplicate.message).toMatch(/twice/);
 });
 
-it("refuses a draft naming its own listing", () => {
-  expect(selfIncludeRefusal(DRAFT, OWN_ID)).toBeUndefined();
-  expect(selfIncludeRefusal(DRAFT, FIRST_ID)).toMatch(/itself/);
-});
-
 it("adds a published listing and marks it optional", async () => {
-  await mount(
-    createElement(CollectionBuilder, {
-      listings: [FIRST, SECOND],
-      listingId: OWN_ID,
-    }),
-  );
+  await mount(createElement(CollectionBuilder, { listings: [FIRST, SECOND] }));
 
   const search = control(document.body, "search");
   expect(search.getAttribute("aria-label")).toBe(
@@ -223,42 +211,27 @@ it("adds a published listing and marks it optional", async () => {
     "optional toggle",
   );
   expect(optional.getAttribute("aria-pressed")).toBe("false");
+  // The label states the action the press takes, so it cannot contradict the
+  // state `aria-pressed` and the visible word already report.
   expect(optional.getAttribute("aria-label")).toBe(
-    uiCopy.library.collectionBuilder.optional(FIRST.name),
+    uiCopy.library.collectionBuilder.makeOptional(FIRST.name),
   );
 
   await press(optional);
   expect(optional.getAttribute("aria-pressed")).toBe("true");
+  expect(optional.getAttribute("aria-label")).toBe(
+    uiCopy.library.collectionBuilder.makeRequired(FIRST.name),
+  );
+  expect(optional.textContent).toBe(
+    uiCopy.library.collectionBuilder.optionalWord,
+  );
 });
 
-it("says why an unpublished or already added listing cannot be added", async () => {
-  const unpublished = listing(SECOND_ID, "Draft wall", {
-    status: "unpublished",
-  });
-  await mount(
-    createElement(CollectionBuilder, {
-      listings: [FIRST, unpublished],
-      listingId: OWN_ID,
-    }),
-  );
+it("says why a listing that is already added cannot be added again", async () => {
+  await mount(createElement(CollectionBuilder, { listings: [FIRST, SECOND] }));
 
-  await press(
-    must(
-      document.body.querySelector<HTMLButtonElement>(
-        `[data-yunari-collection-add="${SECOND_ID}"]`,
-      ),
-      "unpublished add control",
-    ),
-  );
-  expect(
-    must(
-      document.body.querySelector<HTMLElement>(
-        "[data-yunari-collection-notice]",
-      ),
-      "notice",
-    ).textContent,
-  ).toBe(uiCopy.library.collectionBuilder.unpublished(unpublished.name));
-
+  // A row with no catalogue id cannot be an include; the add control asks the
+  // host's rule rather than trusting a row the catalogue could not name.
   await press(
     must(
       document.body.querySelector<HTMLButtonElement>(
@@ -292,7 +265,6 @@ it("reports the owner's refusal sentence beside the draft", async () => {
   await mount(
     createElement(CollectionBuilder, {
       listings: [FIRST],
-      listingId: OWN_ID,
       fetch: fetch as unknown as typeof fetch,
     }),
   );
@@ -308,7 +280,7 @@ it("reports the owner's refusal sentence beside the draft", async () => {
   );
   await press(control(document.body, "publish") as HTMLButtonElement);
 
-  // The digest is async, so the host is asked a macrotask after the press.
+  // The host answers asynchronously; the sentence arrives after the post.
   await vi.waitFor(() =>
     expect(
       document.body.querySelector<HTMLElement>(
@@ -370,6 +342,70 @@ it("lists a submitted collection under My submissions", async () => {
     "submitted collection row",
   );
   expect(row.textContent).toContain("Acme Kit");
+});
+
+/** **The confirmation survives the publish**: a successful press refreshes the
+ *  author's rows without remounting the builder, so the sentence the hook writes
+ *  is still on screen when the new row arrives. */
+it("keeps the published sentence on screen after a collection lands", async () => {
+  const entry = {
+    id: FIRST_ID,
+    kind: "dashboard-theme",
+    name: FIRST.name,
+    version: "1.0.0",
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-14T00:00:00.000Z",
+    downloads: 0,
+    favorites: 0,
+    packageUrl: `https://store.test/catalogue/${FIRST_ID}/1.0.0.zip`,
+    thumbnail: `catalogue/${FIRST_ID}/thumbnail.png`,
+    members: [],
+    facets: FACETS,
+    status: "published",
+  };
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/store/mine")) return json({ entries: [entry] });
+    if (url.includes("/api/themes/submit")) {
+      return json({
+        ok: true,
+        status: "pending",
+        version: { from: null, to: "1.0.0", level: "initial" },
+      });
+    }
+    return json({ generatedAt: "2026-11-16T00:00:00.000Z", entries: [entry] });
+  });
+
+  await mount(
+    createElement(SubmissionsPage, {
+      fetch: fetch as unknown as typeof fetch,
+    }),
+  );
+  await flush();
+
+  await type(control(document.body, "name") as HTMLInputElement, "Acme Kit");
+  await press(
+    must(
+      document.body.querySelector<HTMLButtonElement>(
+        `[data-yunari-collection-add="${FIRST_ID}"]`,
+      ),
+      "add control",
+    ),
+  );
+  await press(control(document.body, "publish") as HTMLButtonElement);
+
+  await vi.waitFor(() =>
+    expect(
+      document.body.querySelector<HTMLElement>(
+        "[data-yunari-collection-refusal]",
+      )?.textContent,
+      "the published sentence was not drawn",
+    ).toBe(uiCopy.store.submit.submitted("pending")),
+  );
+  expect(
+    document.body.querySelector("[data-yunari-collection-builder]"),
+    "the builder was unmounted before the confirmation was read",
+  ).not.toBeNull();
 });
 
 it("states a failed read instead of claiming nothing was submitted", async () => {

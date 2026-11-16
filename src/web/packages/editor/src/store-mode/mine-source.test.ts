@@ -1,4 +1,4 @@
-import { DASHBOARD_THEME_KIND } from "@yunari/renderer-core";
+import { DASHBOARD_THEME_KIND, STORE_ITEM_KINDS } from "@yunari/renderer-core";
 import { describe, expect, it, vi } from "vitest";
 import { mineThemeSource } from "./mine-source.js";
 
@@ -11,6 +11,9 @@ import { mineThemeSource } from "./mine-source.js";
  * against the Worker's own output would agree with the Worker rather than with
  * the shape.
  */
+
+/** The Dashboard themes page draws themes only. */
+const THEME_KINDS = [DASHBOARD_THEME_KIND];
 
 const ITEM_ID = "5d41402a-bc4b-4c8a-9d0e-2f1a3b4c5d6e";
 
@@ -57,6 +60,7 @@ function mineWith(entries: readonly unknown[]): typeof fetch {
 describe("the author's own source", () => {
   it("maps status and reason from the host answer", async () => {
     const source = mineThemeSource({
+      kinds: THEME_KINDS,
       fetch: mineWith([
         {
           ...ENTRY,
@@ -77,13 +81,16 @@ describe("the author's own source", () => {
 
   it("asks the host's own listing route", async () => {
     const fetcher = mineWith([ENTRY]);
-    await mineThemeSource({ fetch: fetcher }).list();
+    await mineThemeSource({ kinds: THEME_KINDS, fetch: fetcher }).list();
 
     expect(fetcher).toHaveBeenCalledWith("/api/store/mine");
   });
 
   it("reads the row as the item the gallery draws", async () => {
-    const source = mineThemeSource({ fetch: mineWith([ENTRY]) });
+    const source = mineThemeSource({
+      kinds: THEME_KINDS,
+      fetch: mineWith([ENTRY]),
+    });
 
     const [item] = await source.list();
 
@@ -108,7 +115,10 @@ describe("the author's own source", () => {
   });
 
   it("leaves the reason absent when the host sends none", async () => {
-    const source = mineThemeSource({ fetch: mineWith([ENTRY]) });
+    const source = mineThemeSource({
+      kinds: THEME_KINDS,
+      fetch: mineWith([ENTRY]),
+    });
 
     const [item] = await source.list();
 
@@ -120,6 +130,7 @@ describe("the author's own source", () => {
 
   it("drops a row whose status this build cannot read", async () => {
     const source = mineThemeSource({
+      kinds: THEME_KINDS,
       fetch: mineWith([
         ENTRY,
         {
@@ -139,6 +150,7 @@ describe("the author's own source", () => {
     // A dropped row is still a row the host sent: an empty listing plus no
     // refusal would draw "you have no submissions yet" over one that exists.
     const source = mineThemeSource({
+      kinds: THEME_KINDS,
       fetch: mineWith([{ ...ENTRY, status: "shadow-banned" }]),
     });
 
@@ -151,13 +163,17 @@ describe("the author's own source", () => {
   });
 
   it("rejects when the host answers not-ok", async () => {
-    const source = mineThemeSource({ fetch: answering("", 401) });
+    const source = mineThemeSource({
+      kinds: THEME_KINDS,
+      fetch: answering("", 401),
+    });
 
     await expect(source.list()).rejects.toThrow("401");
   });
 
   it("rejects a body that is not JSON", async () => {
     const source = mineThemeSource({
+      kinds: THEME_KINDS,
       fetch: vi.fn(
         async () => new Response("not json", { status: 200 }),
       ) as unknown as typeof fetch,
@@ -168,6 +184,7 @@ describe("the author's own source", () => {
 
   it("reports the entries the listing skipped", async () => {
     const source = mineThemeSource({
+      kinds: THEME_KINDS,
       fetch: mineWith([ENTRY, { ...ENTRY, name: "" }]),
     });
 
@@ -184,6 +201,7 @@ describe("the author's own source", () => {
   it("lists a submitted collection beside the other kinds", async () => {
     const collectionId = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
     const source = mineThemeSource({
+      kinds: STORE_ITEM_KINDS,
       fetch: mineWith([
         ENTRY,
         {
@@ -204,5 +222,28 @@ describe("the author's own source", () => {
       [collectionId, "collection"],
     ]);
     expect(items[1]?.includes).toEqual([ITEM_ID]);
+  });
+
+  /** **A source returns the kinds its caller draws**: the themes page asks for
+   *  themes, so a plugin row is refused rather than drawn as a theme card whose
+   *  Remove command would write the wrong store. */
+  it("refuses a kind its caller does not draw", async () => {
+    const source = mineThemeSource({
+      kinds: [DASHBOARD_THEME_KIND],
+      fetch: mineWith([
+        {
+          ...ENTRY,
+          id: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+          kind: "plugin",
+        },
+      ]),
+    });
+
+    const items = await source.list();
+
+    expect(items).toEqual([]);
+    expect(source.refused()).toEqual([
+      { kind: "plugin", reason: "unknown-kind", count: 1 },
+    ]);
   });
 });

@@ -1,8 +1,10 @@
 import { isCatalogueId } from "@yunari/renderer-core";
 
-/** The collection format's own name: the manifest of a package that lists
- *  catalogue ids rather than carrying a theme. */
+/** The collection format's own name and version: the manifest of a package
+ *  that lists catalogue ids rather than carrying a theme. Both are written and
+ *  checked here only, so a version bump is one edit. */
 export const COLLECTION_PACKAGE_FORMAT = "yunari-collection-package";
+export const COLLECTION_PACKAGE_VERSION = 1;
 export const MAX_COLLECTION_INCLUDES = 64;
 
 const MAX_NAME_LENGTH = 200;
@@ -73,7 +75,7 @@ export function readCollectionPackage(
   if (value["format"] !== COLLECTION_PACKAGE_FORMAT) {
     return fail("Unsupported collection package format.");
   }
-  if (value["version"] !== 1) {
+  if (value["version"] !== COLLECTION_PACKAGE_VERSION) {
     return fail("Unsupported collection package version.");
   }
 
@@ -154,7 +156,7 @@ export function collectionManifest(draft: CollectionDraft): Uint8Array {
   return new TextEncoder().encode(
     JSON.stringify({
       format: COLLECTION_PACKAGE_FORMAT,
-      version: 1,
+      version: COLLECTION_PACKAGE_VERSION,
       name: draft.name,
       description: draft.description,
       includes: draft.includes.map((include) => ({
@@ -187,7 +189,7 @@ export function readCollectionDraft(value: unknown): CollectionDraftResult {
     new TextEncoder().encode(
       JSON.stringify({
         format: COLLECTION_PACKAGE_FORMAT,
-        version: 1,
+        version: COLLECTION_PACKAGE_VERSION,
         name: typeof name === "string" ? name : "",
         description: description === undefined ? "" : description,
         includes: Array.isArray(includes) ? includes : [],

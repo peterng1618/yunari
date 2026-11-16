@@ -1,4 +1,7 @@
-import type { CatalogueRefusal } from "@yunari/renderer-core";
+import {
+  type CatalogueRefusal,
+  DASHBOARD_THEME_KIND,
+} from "@yunari/renderer-core";
 import { useEffect, useRef, useState } from "react";
 import { uiCopy } from "../ui-copy.js";
 import { withInstalledVersions } from "./install-state.js";
@@ -104,8 +107,12 @@ export function useMineListing(
   >(undefined);
   const [mineFailed, setMineFailed] = useState(false);
   const [mineAttempt, setMineAttempt] = useState(0);
-  // One source for the life of the region, as the catalogue half's is.
-  const [source] = useState(() => mineThemeSource());
+  // One source for the life of the region, as the catalogue half's is. This
+  // page draws the Dashboard themes grid only: another kind's row here would be
+  // a card whose Remove command writes the local theme library.
+  const [source] = useState(() =>
+    mineThemeSource({ kinds: [DASHBOARD_THEME_KIND] }),
+  );
 
   useEffect(() => {
     let live = true;

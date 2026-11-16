@@ -1943,21 +1943,20 @@ export const uiCopy = {
       search: "Search published listings",
       noMatches: "No published listing matches that search.",
       empty: "The store has no published listings to choose from.",
+      addWord: "Add",
       add: (name: string): string => `Add ${name}`,
       alreadyAdded: (name: string): string =>
         `${name} is already in this collection.`,
-      unpublished: (name: string): string =>
-        `${name} is not published, so it cannot be added.`,
       unknown: "That listing has no catalogue id, so it cannot be added.",
-      nested: (name: string): string =>
-        `${name} is itself a collection; collections are one level deep.`,
       includes: "Included listings",
       includesEmpty: "Add at least one published listing.",
       optionalHint:
         "An unticked optional member may be skipped when someone installs this collection.",
-      optional: (name: string): string => `Optional: ${name}`,
+      makeOptional: (name: string): string => `Make ${name} optional`,
+      makeRequired: (name: string): string => `Make ${name} required`,
       optionalWord: "Optional",
       requiredWord: "Required",
+      removeWord: "Remove",
       remove: (name: string): string => `Remove ${name}`,
       publish: "Publish collection",
       publishing: "Publishing…",

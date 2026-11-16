@@ -13,7 +13,8 @@ import {
 /**
  * The collection half of the submit route: the browser posts a draft, and the
  * host packages it, revalidates every include against the published catalogue,
- * and drives the Worker's existing pack routes with its own token.
+ * reuses the author's existing listing when the name matches, and drives the
+ * Worker's existing pack routes with its own token.
  */
 
 const MEMBER_ID = "3f2a1c9e-8b7d-4c6a-9e0f-1a2b3c4d5e6f";
@@ -21,11 +22,14 @@ const OTHER_ID = "7c9d2b1a-4e5f-4a8b-9c0d-1e2f3a4b5c6d";
 const ORIGIN = "https://store.test";
 const UPLOAD_URL = "https://store.test/api/me/uploads/1";
 
-/** One published catalogue entry, every field the reader holds. */
-function entry(id: string, kind = "dashboard-theme"): Record<string, unknown> {
+/** One catalogue entry, every field the reader holds. */
+function entry(
+  id: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
     id,
-    kind,
+    kind: "dashboard-theme",
     name: `Item ${id.slice(0, 4)}`,
     version: "1.0.0",
     createdAt: "2026-10-01T00:00:00Z",
@@ -45,6 +49,7 @@ function entry(id: string, kind = "dashboard-theme"): Record<string, unknown> {
       height: 1080,
     },
     members: [],
+    ...overrides,
   };
 }
 
@@ -67,12 +72,16 @@ interface Call {
   readonly body: string | undefined;
 }
 
-/** The store as this test answers it: one catalogue document, and the pack
- *  routes the host drives. Every call is recorded so a case can assert what was
- *  and was not sent. */
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+
+/** The store as this test answers it: the catalogue, the author's own rows, one
+ *  member's picture, and the pack routes the host drives. Every call is recorded
+ *  so a case can assert what was and was not sent. */
 function storeOf(options: {
   readonly entries: readonly Record<string, unknown>[];
+  readonly mine?: readonly Record<string, unknown>[];
   readonly indexOk?: boolean;
+  readonly thumbnailOk?: boolean;
 }) {
   const calls: Call[] = [];
   const fetcher = (async (
@@ -93,34 +102,43 @@ function storeOf(options: {
       if (options.indexOk === false) {
         return new Response("nope", { status: 500 });
       }
-      return new Response(
-        JSON.stringify({
-          generatedAt: "2026-11-16T00:00:00Z",
-          entries: options.entries,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return json({
+        generatedAt: "2026-11-16T00:00:00Z",
+        entries: options.entries,
+      });
+    }
+    if (url === `${ORIGIN}/api/me/items`) {
+      return json({ entries: options.mine ?? [] });
+    }
+    for (const item of options.entries) {
+      if (url === `${ORIGIN}/${String(item["thumbnail"])}`) {
+        return options.thumbnailOk === false
+          ? new Response("missing", { status: 404 })
+          : new Response(PNG, { status: 200 });
+      }
     }
     if (url.endsWith("/versions")) {
-      return new Response(
-        JSON.stringify({
-          version: "1.0.0",
-          status: "pending",
-          uploadUrl: UPLOAD_URL,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      const asked = JSON.parse(body ?? "{}") as { readonly version?: string };
+      return json({
+        version: asked.version,
+        status: "pending",
+        uploadUrl: UPLOAD_URL,
+      });
     }
     if (url === UPLOAD_URL) return new Response(null, { status: 200 });
     if (url.endsWith("/finalize")) {
-      return new Response(
-        JSON.stringify({ ok: true, status: "pending", version: "1.0.0" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return json({ ok: true, status: "pending", version: "1.0.0" });
     }
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;
   return { calls, fetcher };
+}
+
+function json(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 function depsOf(fetcher: typeof fetch): SubmitRouteDeps {
@@ -155,20 +173,19 @@ async function submit(body: unknown, deps: SubmitRouteDeps) {
   );
 }
 
+/** The version request's header, parsed. */
+function headerOf(calls: readonly Call[]): Record<string, unknown> {
+  const call = calls.find((one) => one.url.endsWith("/versions"));
+  return JSON.parse(call?.body ?? "{}") as Record<string, unknown>;
+}
+
 describe("the collection submission route", () => {
   it("packages the draft the host read and drives the pack routes", async () => {
     const store = storeOf({ entries: [entry(MEMBER_ID)] });
     const answered = await submit(draft(), depsOf(store.fetcher));
     expect(answered?.status).toBe(200);
 
-    const versionCall = store.calls.find((call) =>
-      call.url.endsWith("/versions"),
-    );
-    expect(versionCall?.body).toBeDefined();
-    const header = JSON.parse(versionCall?.body ?? "{}") as Record<
-      string,
-      unknown
-    >;
+    const header = headerOf(store.calls);
     expect(header["kind"]).toBe("collection");
     expect(header["name"]).toBe("Ops pack");
     expect(header["version"]).toBe("1.0.0");
@@ -178,16 +195,12 @@ describe("the collection submission route", () => {
       includes: [{ id: MEMBER_ID, optional: false }],
     });
 
-    const uploadCall = store.calls.find((call) => call.url === UPLOAD_URL);
-    expect(uploadCall?.method).toBe("PUT");
-
-    const finalized = store.calls.find((call) =>
-      call.url.endsWith("/finalize"),
+    expect(store.calls.find((call) => call.url === UPLOAD_URL)?.method).toBe(
+      "PUT",
     );
-    expect(finalized?.url).toContain("/api/me/items/");
-    expect(JSON.parse(finalized?.body ?? "{}")).toMatchObject({
-      thumbnail: expect.stringMatching(/^iVBOR/),
-    });
+    expect(
+      store.calls.find((call) => call.url.endsWith("/finalize"))?.url,
+    ).toContain("/api/me/items/");
 
     expect(await answered?.json()).toEqual({
       ok: true,
@@ -210,8 +223,7 @@ describe("the collection submission route", () => {
       return store.fetcher(input as string, init);
     }) as unknown as typeof fetch;
 
-    const answered = await submit(draft(), depsOf(fetcher));
-    expect(answered?.status).toBe(200);
+    expect((await submit(draft(), depsOf(fetcher)))?.status).toBe(200);
 
     const bytes = uploaded;
     expect(bytes).toBeDefined();
@@ -221,19 +233,66 @@ describe("the collection submission route", () => {
     expect(read.package.name).toBe("Ops pack");
     expect(read.package.includes).toEqual([{ id: MEMBER_ID, optional: false }]);
 
-    const headerCall = store.calls.find((call) =>
-      call.url.endsWith("/versions"),
-    );
-    const header = JSON.parse(headerCall?.body ?? "{}") as Record<
-      string,
-      unknown
-    >;
+    const header = headerOf(store.calls);
     expect(header["sha256"]).toBe(
       createHash("sha256")
         .update(bytes as Uint8Array)
         .digest("hex"),
     );
     expect(header["bytes"]).toBe((bytes as Uint8Array).byteLength);
+  });
+
+  it("covers the collection with its first required member's published picture", async () => {
+    const optional = entry(OTHER_ID);
+    const store = storeOf({ entries: [entry(MEMBER_ID), optional] });
+    let finalized: Record<string, unknown> = {};
+    const fetcher = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/finalize")) {
+        finalized = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      }
+      return store.fetcher(input as string, init);
+    }) as unknown as typeof fetch;
+
+    const answered = await submit(
+      draft({
+        includes: [
+          { id: OTHER_ID, optional: true },
+          { id: MEMBER_ID, optional: false },
+        ],
+      }),
+      depsOf(fetcher),
+    );
+    expect(answered?.status).toBe(200);
+    expect(
+      store.calls.some(
+        (call) => call.url === `${ORIGIN}/catalogue/${MEMBER_ID}/thumbnail.png`,
+      ),
+    ).toBe(true);
+    // The picture uploaded is the member's own bytes, not a stand-in.
+    expect(Buffer.from(String(finalized["thumbnail"]), "base64")).toEqual(
+      Buffer.from(PNG),
+    );
+  });
+
+  it("refuses when the cover cannot be fetched, naming the member", async () => {
+    const store = storeOf({
+      entries: [entry(MEMBER_ID, { name: "Wall" })],
+      thumbnailOk: false,
+    });
+    const answered = await submit(draft(), depsOf(store.fetcher));
+    expect(answered?.status).toBe(502);
+    expect(await answered?.json()).toEqual({
+      ok: false,
+      message:
+        'The collection\'s cover could not be fetched from "Wall", so this collection was not submitted.',
+    });
+    expect(store.calls.some((call) => call.url.endsWith("/versions"))).toBe(
+      false,
+    );
   });
 
   it("refuses an include the catalogue does not list, before any upload", async () => {
@@ -255,7 +314,7 @@ describe("the collection submission route", () => {
 
   it("refuses a collection as a member, by name", async () => {
     const store = storeOf({
-      entries: [entry(MEMBER_ID, "collection")],
+      entries: [entry(MEMBER_ID, { kind: "collection" })],
     });
     const answered = await submit(draft(), depsOf(store.fetcher));
     expect(answered?.status).toBe(400);
@@ -278,5 +337,48 @@ describe("the collection submission route", () => {
     const store = storeOf({ entries: [], indexOk: false });
     const answered = await submit(draft(), depsOf(store.fetcher));
     expect(answered?.status).toBe(502);
+  });
+
+  it("adds a version to the author's collection with the same name", async () => {
+    const existingId = "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
+    const store = storeOf({
+      entries: [entry(MEMBER_ID)],
+      mine: [
+        entry(existingId, {
+          kind: "collection",
+          name: "Ops pack",
+          version: "1.0.0",
+          status: "published",
+        }),
+      ],
+    });
+    const answered = await submit(draft(), depsOf(store.fetcher));
+    expect(answered?.status).toBe(200);
+
+    const versions = store.calls.filter((call) =>
+      call.url.endsWith("/versions"),
+    );
+    expect(versions).toHaveLength(1);
+    expect(versions[0]?.url).toContain(`/api/me/items/${existingId}/`);
+    const header = headerOf(store.calls);
+    expect(header["version"]).toBe("1.1.0");
+    expect(await answered?.json()).toEqual({
+      ok: true,
+      status: "pending",
+      version: { from: "1.0.0", to: "1.1.0", level: "minor" },
+    });
+  });
+
+  it("mints a new listing when no collection has that name", async () => {
+    const store = storeOf({
+      entries: [entry(MEMBER_ID)],
+      mine: [entry(MEMBER_ID, { name: "Something else", status: "published" })],
+    });
+    const answered = await submit(draft(), depsOf(store.fetcher));
+    expect(answered?.status).toBe(200);
+    expect(headerOf(store.calls)["version"]).toBe("1.0.0");
+    expect(
+      store.calls.filter((call) => call.url.endsWith("/versions")),
+    ).toHaveLength(1);
   });
 });

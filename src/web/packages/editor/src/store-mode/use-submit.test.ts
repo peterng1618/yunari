@@ -459,30 +459,3 @@ it("refuses a collection draft locally, naming the field", async () => {
   expect(submit().collection.state).toBe("refused");
   expect(submit().collection.refusal).toMatch(/include/);
 });
-
-/** **Self-reference is its own check, because only the listing's own id can
- *  answer it.** A new collection has no id yet, so nothing is compared; a draft
- *  that names the existing listing it publishes to is refused here. */
-it("refuses a collection that includes its own listing", async () => {
-  const fetch = recordingFetch([
-    json({
-      ok: true,
-      status: "published",
-      version: { from: null, to: "1.0.0", level: "initial" },
-    }),
-  ]);
-  const submit = mount({ fetch });
-
-  await act(async () =>
-    submit().collection.onSubmit({
-      listingId: INCLUDE_ID,
-      draft: DRAFT,
-    }),
-  );
-  await flush();
-
-  expect(fetch.calls, "a self-referencing draft reached the host").toHaveLength(
-    0,
-  );
-  expect(submit().collection.refusal).toMatch(/itself/);
-});
