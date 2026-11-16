@@ -329,16 +329,17 @@ export async function pressCollection(
   // per-member outcomes cannot say what was written, so it grants nothing and
   // reports the chosen code members as not granted rather than staying silent.
   if (outcome.members === undefined) {
+    // One plugin can supply several members, so the names are deduped by the
+    // consent key the grant itself is keyed by: a person reads each plugin once.
+    const notGranted = new Map<string, string>();
+    for (const member of fresh.members) {
+      if (member.consent !== undefined && choice.chosen.has(member.id)) {
+        notGranted.set(member.consent.key, member.consent.name);
+      }
+    }
     return {
       kind: "installed",
-      consent: {
-        granted: [],
-        notGranted: fresh.members.flatMap((member) =>
-          member.consent !== undefined && choice.chosen.has(member.id)
-            ? [member.consent.name]
-            : [],
-        ),
-      },
+      consent: { granted: [], notGranted: [...notGranted.values()] },
     };
   }
   const written = new Set(
