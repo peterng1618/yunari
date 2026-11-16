@@ -6,8 +6,21 @@ import type { StoreItem } from "./local-source.js";
 /** Where an install is handed over. The host's own route, named once. */
 const INSTALL_PATH = "/api/store/install";
 
+/** One chosen collection member's answer, as the host reports it after the
+ *  install applied it. `reason` is present for a member that was already
+ *  registered — a row the host merged rather than wrote. */
+export interface CollectionMemberOutcome {
+  readonly id: string;
+  readonly ok: boolean;
+  readonly reason?: string;
+}
+
 export type InstallOutcome =
-  | { readonly ok: true }
+  | {
+      readonly ok: true;
+      /** Present for a collection; absent for a single item. */
+      readonly members?: readonly CollectionMemberOutcome[];
+    }
   | { readonly ok: false; readonly message: string }
   /** The host read the package, held the update, and wrote nothing. */
   | { readonly ok: false; readonly held: HeldUpdate };
@@ -119,5 +132,34 @@ export async function installItem(
     };
   }
 
-  return { ok: true };
+  return { ok: true, ...(await membersFrom(response)) };
+}
+
+/** One row of the install's per-member answer, or nothing when the body is not
+ *  that shape. **The outcomes decide what was written**: a collection's `ok`
+ *  says the collection applied, and each member's `reason` says whether this
+ *  press wrote it or found it already registered. */
+async function membersFrom(response: Response): Promise<{
+  readonly members?: readonly CollectionMemberOutcome[];
+}> {
+  // A body is read lazily: installItem already answered ok, and a host that
+  // sends none must not turn a successful install into a refusal here.
+  const body: unknown = await response.json().catch(() => undefined);
+  if (typeof body !== "object" || body === null) return {};
+  const value = (body as Record<string, unknown>)["members"];
+  if (!Array.isArray(value)) return {};
+  const rows: CollectionMemberOutcome[] = [];
+  for (const row of value) {
+    if (typeof row !== "object" || row === null) return {};
+    const record = row as Record<string, unknown>;
+    const id = record["id"];
+    const ok = record["ok"];
+    const reason = record["reason"];
+    if (typeof id !== "string" || id === "" || typeof ok !== "boolean") {
+      return {};
+    }
+    if (reason !== undefined && typeof reason !== "string") return {};
+    rows.push({ id, ok, ...(reason === undefined ? {} : { reason }) });
+  }
+  return { members: rows };
 }

@@ -35,10 +35,12 @@ export function useInstall(options: {
   /** The extension routes a collection's consent is granted through. The
    *  installed listing is the fingerprint's owner; this hook never takes one
    *  from a plan. */
-  readonly extensions?: Pick<ExtensionClient, "list" | "grant">;
+  readonly extensions?: Pick<ExtensionClient, "list" | "grant"> | undefined;
   /** The plan's reader, for the re-read an Install press makes. Tests hand
    *  their own so the wire stays out of a hook case. */
-  readonly readPlan?: (item: StoreItem) => Promise<CollectionPlan>;
+  readonly readPlan?:
+    | ((item: StoreItem) => Promise<CollectionPlan>)
+    | undefined;
 }): { readonly control: InstallControl; readonly announcement: string } {
   /** The items a press is in flight for: each control disables itself on its
    *  own id, so two items install at once and neither loses the other's busy

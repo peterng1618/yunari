@@ -907,6 +907,42 @@ describe("collection install and plan", () => {
     ).toEqual(["77777777-7777-4777-8777-777777777777", COLLECTION_ID].sort());
   });
 
+  it("carries a held member update out as the review stage", async () => {
+    const pluginBytes = panelPackage();
+    const bytes = collectionBytes([{ id: PLUGIN_ID }]);
+    const held = {
+      key: "local/acme-sensors",
+      name: "Acme Sensors",
+      publisher: "local",
+      reasons: ["capability:sensor:provide"],
+    };
+    const routes = new Map<string, Uint8Array | number>([
+      [packageUrl(COLLECTION_ID), bytes],
+      [
+        itemUrl(PLUGIN_ID),
+        await itemJson({
+          id: PLUGIN_ID,
+          kind: "plugin",
+          name: "Acme Panel",
+          bytes: pluginBytes,
+        }),
+      ],
+      [packageUrl(PLUGIN_ID), pluginBytes],
+    ]);
+
+    const result = await installCatalogueItem(await collectionRequest(bytes), {
+      fetch: storeFetch(routes),
+      stores: stores({
+        extensions: extensionService({
+          install: async () => ({ ok: false, held }),
+        }),
+      }),
+      storeOrigin: ORIGIN,
+    });
+
+    expect(result).toMatchObject({ ok: false, stage: "review", held });
+  });
+
   it("plans each code member's capabilities and devices without writing", async () => {
     const pluginBytes = panelPackage();
     const bytes = collectionBytes([{ id: PLUGIN_ID }]);

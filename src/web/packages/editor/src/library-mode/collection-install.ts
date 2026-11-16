@@ -75,7 +75,9 @@ export function toggleChoice(
  * collection, and rows whose catalogue id is one of the includes — the second
  * is how a member installed by hand still counts as present. A dropped member
  * is a row recorded for this collection that its current includes no longer
- * name; this module never removes one. */
+ * name; this module never removes one. An unavailable include is excluded
+ * from `missing`: the blocked state already names it, and an update list must
+ * not promise an install that cannot be made. */
 export function updateDiff(
   plan: CollectionPlan,
   origins: readonly CatalogueOrigin[],
@@ -88,6 +90,10 @@ export function updateDiff(
     ...plan.members.map((member) => member.id),
     ...plan.missing.map((member) => member.id),
   ]);
+  // **An unavailable member is not "missing from this PC"**: it is already
+  // named and blocking above, and repeating it under an update heading would
+  // promise an install the press cannot make.
+  const unavailable = new Set(plan.missing.map((member) => member.id));
   const installed = new Set<string>();
   for (const origin of origins) {
     if (
@@ -99,7 +105,9 @@ export function updateDiff(
   }
 
   return {
-    missing: [...includes].filter((id) => !installed.has(id)),
+    missing: [...includes].filter(
+      (id) => !installed.has(id) && !unavailable.has(id),
+    ),
     dropped: [...installed].filter((id) => !includes.has(id)),
   };
 }
@@ -183,16 +191,16 @@ export interface CollectionConsentResult {
 export async function grantCollectionConsent(
   plan: CollectionPlan,
   gateway: CollectionConsentGateway,
-  /** The ids the install actually wrote. Absent means the whole plan, which is
-   *  what the sheet's default selection is. */
-  chosen?: ReadonlySet<string>,
+  /** The ids this press wrote. Absent means the whole plan, which is the
+   *  single-call default the tests and a whole-plan grant share. */
+  written?: ReadonlySet<string>,
 ): Promise<CollectionConsentResult> {
   const byKey = new Map<string, CollectionPlanMember>();
   for (const member of plan.members) {
     if (member.consent === undefined) continue;
-    // **An unticked member was not written**, so its plugin is not granted:
-    // consent follows the install, never the plan's full membership.
-    if (chosen !== undefined && !chosen.has(member.id)) continue;
+    // **A member this press did not write is not granted**: consent follows
+    // the write, never the plan's full membership.
+    if (written !== undefined && !written.has(member.id)) continue;
     if (!byKey.has(member.consent.key)) byKey.set(member.consent.key, member);
   }
   if (byKey.size === 0) return { granted: [], notGranted: [] };
@@ -314,8 +322,33 @@ export async function pressCollection(
     };
   }
 
+  // **Only a member this press wrote is granted.** The host answers `ok` for a
+  // collection whose members were all already registered, and each such member
+  // carries a reason; granting those would be a consent write behind an
+  // Install or Update press that wrote nothing for them. An answer with no
+  // per-member outcomes cannot say what was written, so it grants nothing and
+  // reports the chosen code members as not granted rather than staying silent.
+  if (outcome.members === undefined) {
+    return {
+      kind: "installed",
+      consent: {
+        granted: [],
+        notGranted: fresh.members.flatMap((member) =>
+          member.consent !== undefined && choice.chosen.has(member.id)
+            ? [member.consent.name]
+            : [],
+        ),
+      },
+    };
+  }
+  const written = new Set(
+    outcome.members
+      .filter((member) => member.ok && member.reason === undefined)
+      .map((member) => member.id),
+  );
+
   return {
     kind: "installed",
-    consent: await grantCollectionConsent(fresh, deps.consent, choice.chosen),
+    consent: await grantCollectionConsent(fresh, deps.consent, written),
   };
 }

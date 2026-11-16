@@ -182,8 +182,13 @@ describe("updateDiff", () => {
     expect(diff.dropped).toEqual(["old-widget"]);
   });
 
-  it("names an include that was never installed", () => {
-    const diff = updateDiff(PLAN, [], COLLECTION_ID);
+  it("does not repeat an unavailable include as missing", () => {
+    const plan: CollectionPlan = {
+      ...PLAN,
+      missing: [{ id: "gone-theme", reason: "unpublished" }],
+    };
+
+    const diff = updateDiff(plan, [], COLLECTION_ID);
 
     expect(diff.missing).toEqual([
       "wall-theme",
@@ -320,7 +325,13 @@ describe("pressCollection", () => {
   const readPlan = async (): Promise<CollectionPlan> => PLAN;
 
   it("installs the chosen set, then grants consent", async () => {
-    const install = vi.fn(async () => ({ ok: true as const }));
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [
+        { id: "wall-theme", ok: true },
+        { id: "hwinfo-plugin", ok: true },
+      ],
+    }));
     const grant = vi.fn(async () => ({ ok: true }));
     const gateway: CollectionConsentGateway = {
       list: async () => [
@@ -367,8 +378,59 @@ describe("pressCollection", () => {
     expect(grant).not.toHaveBeenCalled();
   });
 
-  it("grants nothing for an optional code member the person unticked", async () => {
+  it("reports code consent when the answer carried no member outcomes", async () => {
     const install = vi.fn(async () => ({ ok: true as const }));
+    const list = vi.fn(async () => []);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      PLAN,
+      { readPlan, install, consent: { list, grant } },
+    );
+
+    expect(list).not.toHaveBeenCalled();
+    expect(grant).not.toHaveBeenCalled();
+    expect(outcome).toEqual({
+      kind: "installed",
+      consent: { granted: [], notGranted: ["HWiNFO bridge"] },
+    });
+  });
+
+  it("grants nothing when every member was already installed", async () => {
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [
+        { id: "wall-theme", ok: true, reason: "Already installed." },
+        { id: "hwinfo-plugin", ok: true, reason: "Already installed." },
+      ],
+    }));
+    const list = vi.fn(async () => [
+      extension({ key: "acme/hwinfo", fingerprint: "fp-hwinfo" }),
+    ]);
+    const grant = vi.fn(async () => ({ ok: true }));
+
+    const outcome = await pressCollection(
+      collectionItem(),
+      ["wall-theme", "hwinfo-plugin"],
+      PLAN,
+      { readPlan, install, consent: { list, grant } },
+    );
+
+    expect(list).not.toHaveBeenCalled();
+    expect(grant).not.toHaveBeenCalled();
+    expect(outcome).toEqual({
+      kind: "installed",
+      consent: { granted: [], notGranted: [] },
+    });
+  });
+
+  it("grants nothing for an optional code member the person unticked", async () => {
+    const install = vi.fn(async () => ({
+      ok: true as const,
+      members: [{ id: "wall-theme", ok: true }],
+    }));
     const list = vi.fn(async () => []);
     const grant = vi.fn(async () => ({ ok: true }));
 

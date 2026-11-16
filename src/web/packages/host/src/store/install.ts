@@ -373,6 +373,10 @@ async function installCollection(
         readonly id: string;
         readonly message: string;
         readonly stage: MemberStage;
+        /** A member whose plugin update the host held for review. The stop
+         *  carries it so the browser can offer the review rather than a bare
+         *  refusal. */
+        readonly held?: HeldUpdate;
       }
     | undefined;
 
@@ -438,6 +442,9 @@ async function installCollection(
         id: include.id,
         message: installed.message,
         stage: installed.stage,
+        ...("held" in installed && installed.held !== undefined
+          ? { held: installed.held }
+          : {}),
       };
       outcomes.push({ id: include.id, ok: false, reason: installed.message });
       continue;
@@ -448,7 +455,13 @@ async function installCollection(
   }
 
   if (stoppedAt !== undefined) {
-    return stopped(outcomes, stoppedAt.id, stoppedAt.message, stoppedAt.stage);
+    return stopped(
+      outcomes,
+      stoppedAt.id,
+      stoppedAt.message,
+      stoppedAt.stage,
+      stoppedAt.held,
+    );
   }
 
   return {
@@ -1010,12 +1023,14 @@ function stopped(
   id: string,
   message: string,
   stage: Extract<CatalogueInstallResult, { readonly ok: false }>["stage"],
+  held?: HeldUpdate,
 ): CatalogueInstallResult {
   return {
     ok: false,
     stage,
     message: `Collection member "${id}": ${message}`,
     members,
+    ...(held === undefined ? {} : { held }),
   };
 }
 

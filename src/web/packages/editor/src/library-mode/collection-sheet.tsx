@@ -305,6 +305,9 @@ export function CollectionSheet(props: {
   const press = (): void => {
     if (shown === undefined || blockedReason !== undefined || busy) return;
     if (props.install.onInstallCollection === undefined) return;
+    // A fresh press answers the change the last one reported: the notice must
+    // not outlive the plan the person is now installing.
+    setChanged(undefined);
     props.install.onInstallCollection(
       props.item,
       [...chosen],
@@ -318,6 +321,65 @@ export function CollectionSheet(props: {
       (consent) => setSettled(consent),
     );
   };
+
+  /**
+   * **The way out is always drawn.** A plan that is still loading or that
+   * failed is exactly when a person wants to leave the sheet, so Cancel does not
+   * depend on the plan having answered. A ready plan adds Install beside it;
+   * a landed press replaces both with Done.
+   */
+  const footer = (
+    <div className="flex justify-end gap-[var(--space-8)]">
+      {settled !== undefined ? (
+        <button type="button" onClick={props.onClose} className={ACTION_BUTTON}>
+          {uiCopy.store.collectionSheet.done}
+        </button>
+      ) : shown === undefined ? (
+        <button type="button" onClick={props.onClose} className={ACTION_BUTTON}>
+          {uiCopy.store.collectionSheet.cancel}
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={props.onClose}
+            className={ACTION_BUTTON}
+          >
+            {uiCopy.store.collectionSheet.cancel}
+          </button>
+          <button
+            type="button"
+            data-yunari-collection-sheet-install=""
+            disabled={
+              busy ||
+              blockedReason !== undefined ||
+              props.install.onInstallCollection === undefined
+            }
+            aria-busy={busy}
+            {...(blockedReason === undefined
+              ? {}
+              : {
+                  "aria-describedby": "yunari-collection-sheet-blocked-reason",
+                })}
+            onClick={press}
+            className={`${ACTION_BUTTON} disabled:text-faint`}
+          >
+            {busy
+              ? uiCopy.store.collectionSheet.busy
+              : uiCopy.store.collectionSheet.install}
+          </button>
+          {blockedReason === undefined ? null : (
+            <span
+              id="yunari-collection-sheet-blocked-reason"
+              className="sr-only"
+            >
+              {blockedReason}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
 
   return (
     <Dialog
@@ -443,7 +505,7 @@ export function CollectionSheet(props: {
               </p>
             )}
 
-            {refusal === undefined || settled !== undefined ? null : (
+            {refusal === undefined ? null : (
               <p
                 data-yunari-collection-sheet-refusal=""
                 className="text-xs text-warn"
@@ -452,59 +514,10 @@ export function CollectionSheet(props: {
               </p>
             )}
 
-            <div className="flex justify-end gap-[var(--space-8)]">
-              {settled === undefined ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={props.onClose}
-                    className={ACTION_BUTTON}
-                  >
-                    {uiCopy.store.collectionSheet.cancel}
-                  </button>
-                  <button
-                    type="button"
-                    data-yunari-collection-sheet-install=""
-                    disabled={
-                      busy ||
-                      blockedReason !== undefined ||
-                      props.install.onInstallCollection === undefined
-                    }
-                    aria-busy={busy}
-                    {...(blockedReason === undefined
-                      ? {}
-                      : {
-                          "aria-describedby":
-                            "yunari-collection-sheet-blocked-reason",
-                        })}
-                    onClick={press}
-                    className={`${ACTION_BUTTON} disabled:text-faint`}
-                  >
-                    {busy
-                      ? uiCopy.store.collectionSheet.busy
-                      : uiCopy.store.collectionSheet.install}
-                  </button>
-                  {blockedReason === undefined ? null : (
-                    <span
-                      id="yunari-collection-sheet-blocked-reason"
-                      className="sr-only"
-                    >
-                      {blockedReason}
-                    </span>
-                  )}
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={props.onClose}
-                  className={ACTION_BUTTON}
-                >
-                  {uiCopy.store.collectionSheet.done}
-                </button>
-              )}
-            </div>
+            {footer}
           </>
         )}
+        {shown === undefined ? footer : null}
       </div>
     </Dialog>
   );

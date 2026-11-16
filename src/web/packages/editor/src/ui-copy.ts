@@ -49,11 +49,14 @@ const memberKindWords: Readonly<Record<string, string>> = {
   "editor-theme": "App theme",
   widget: "Widget",
   shape: "Shape",
+  "widget-pack": "Widget pack",
+  "path-preset-pack": "Preset pack",
   "sensor-provider": "Sensor provider",
   "asset-source": "Asset source",
   "panel-driver": "Panel driver",
   "data-source": "Data source",
-} satisfies Record<(typeof MEMBER_KINDS)[number], string>;
+} satisfies Record<(typeof MEMBER_KINDS)[number], string> &
+  Readonly<Record<string, string>>;
 
 /**
  * The generic word for each kind of layer. `layer-tree.ts`'s row-name fallback
@@ -1457,10 +1460,15 @@ export const uiCopy = {
          *  removal exists, so this names where the decision is made rather
          *  than inventing a route here. */
         removal: (kind: string): string => {
+          // **The kind's own vocabulary**, not the generic removal word: a
+          // theme's own surface says Delete, and only the package and code
+          // kinds say Remove.
           const word =
-            (uiCopy.store.detail.remove as Readonly<Record<string, string>>)[
-              kind
-            ] ?? "Remove";
+            kind === "dashboard-theme" || kind === "editor-theme"
+              ? uiCopy.store.item.actions.delete
+              : ((
+                  uiCopy.store.detail.remove as Readonly<Record<string, string>>
+                )[kind] ?? "Remove");
           switch (kind) {
             case "plugin":
             case "sensor-provider":

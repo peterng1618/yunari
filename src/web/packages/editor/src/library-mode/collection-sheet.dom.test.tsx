@@ -82,6 +82,14 @@ async function mount(element: ReactElement): Promise<HTMLDivElement> {
   return container;
 }
 
+/** The same tree with a new element, so a prop change keeps the sheet's own
+ *  state: that is how a settled press is read against a later refresh failure. */
+async function rerender(element: ReactElement): Promise<void> {
+  const mounted = root;
+  if (mounted === undefined) throw new Error("no sheet is mounted");
+  await act(async () => mounted.render(element));
+}
+
 function must<T extends Element>(found: T | null, what: string): T {
   if (found === null) throw new Error(`the sheet rendered no ${what}`);
   return found;
@@ -279,7 +287,9 @@ it("lists every member with its publisher, kind and size", async () => {
   expect(row(document, "wall-theme").textContent).toContain(
     uiCopy.store.cell.memberKinds[DASHBOARD_THEME_KIND],
   );
-  expect(row(document, "clock-widget").textContent).toContain("widget-pack");
+  expect(row(document, "clock-widget").textContent).toContain(
+    uiCopy.store.cell.memberKinds["widget-pack"],
+  );
 });
 
 it("locks a required member and lets an optional one be unticked", async () => {
@@ -435,6 +445,11 @@ it("replaces the sheet and states what changed when the plan moved", async () =>
     "hwinfo-plugin",
     "new-shape",
   ]);
+  // The notice answered the previous press and must not outlive it.
+  expect(
+    document.querySelector("[data-yunari-collection-sheet-changed]"),
+    "the changed notice survived the next press",
+  ).toBeNull();
 });
 
 it("offers a dropped member where its kind removes it, without removing it", async () => {
@@ -445,6 +460,10 @@ it("offers a dropped member where its kind removes it, without removing it", asy
         origin("clock-widget"),
         origin("old-widget", {
           kind: "widget-pack",
+          collections: [COLLECTION_ID],
+        }),
+        origin("old-theme", {
+          kind: "dashboard-theme",
           collections: [COLLECTION_ID],
         }),
       ],
@@ -459,14 +478,54 @@ it("offers a dropped member where its kind removes it, without removing it", asy
   expect(dropped.textContent).toContain(
     uiCopy.store.collectionSheet.update.removal("widget-pack"),
   );
+  // **The kind's own word**: a theme's surface says Delete, not Remove.
+  expect(dropped.textContent).toContain(
+    uiCopy.store.collectionSheet.update.removal("dashboard-theme"),
+  );
+  expect(
+    uiCopy.store.collectionSheet.update.removal("dashboard-theme"),
+  ).toContain(uiCopy.store.item.actions.delete);
   expect(
     dropped.querySelector("button"),
     "the sheet invented a removal control",
   ).toBeNull();
   expect(
-    document.body.querySelector("[data-yunari-collection-sheet-missing]"),
+    document.body.querySelector(
+      '[data-yunari-collection-missing="wall-theme"]',
+    ),
     "an installed include was listed as missing",
   ).toBeNull();
+  expect(
+    document.body.querySelector(
+      '[data-yunari-collection-missing="hwinfo-plugin"]',
+    ),
+    "an include that is not on this PC was not listed",
+  ).not.toBeNull();
+});
+
+it("does not repeat an unavailable member under the update heading", async () => {
+  await mount(
+    sheet(
+      {
+        ...PLAN,
+        missing: [{ id: "gone-theme", reason: "unpublished" }],
+      },
+      {
+        origins: [
+          origin("wall-theme", { collections: [COLLECTION_ID] }),
+          origin("clock-widget"),
+        ],
+      },
+    ),
+  );
+
+  expect(
+    document.body.querySelector(
+      '[data-yunari-collection-missing="gone-theme"]',
+    ),
+    "the unavailable member was offered as an install",
+  ).toBeNull();
+  expect(document.body.textContent).toContain("gone-theme");
 });
 
 it("reports a code member whose consent was not granted after a write", async () => {
@@ -485,6 +544,52 @@ it("reports a code member whose consent was not granted after a write", async ()
     document.querySelector("[data-yunari-collection-sheet-install]"),
     "Install stayed after a write",
   ).toBeNull();
+});
+
+it("keeps the way out while the plan is loading or failed", async () => {
+  for (const planState of ["loading", "failed"] as const) {
+    await mount(sheet(PLAN, { planState }));
+    const cancel = [...document.querySelectorAll("button")].find(
+      (button) =>
+        button.textContent?.trim() === uiCopy.store.collectionSheet.cancel,
+    );
+    expect(cancel, `a ${planState} plan drew no Cancel control`).toBeDefined();
+  }
+});
+
+it("states a failed re-list beside the done state", async () => {
+  let press: PressCapture | undefined;
+  await mount(sheet(PLAN, { install: capturingInstall((it) => (press = it)) }));
+  await act(async () => installButton(document).click());
+  await act(async () => {
+    press?.installed({ granted: [], notGranted: [] });
+  });
+
+  await rerender(
+    sheet(PLAN, {
+      install: {
+        ...NO_INSTALL,
+        refusal: {
+          id: COLLECTION_ID,
+          message: uiCopy.store.install.notRefreshed,
+        },
+      },
+    }),
+  );
+
+  expect(
+    document.querySelector("[data-yunari-collection-sheet-installed]"),
+    "the settled state disappeared",
+  ).not.toBeNull();
+  expect(
+    must(
+      document.querySelector<HTMLElement>(
+        "[data-yunari-collection-sheet-refusal]",
+      ),
+      "refresh refusal",
+    ).textContent,
+    "the stale list was hidden behind the installed sentence",
+  ).toContain(uiCopy.store.install.notRefreshed);
 });
 
 it("traps focus in a named dialog", async () => {
