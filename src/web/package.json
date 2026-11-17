@@ -2,7 +2,7 @@
   "name": "yunari-web",
   "private": true,
   "//version": "The product's version, and the only place a release writes it (`vg-279`). The workspace's own packages stay 0.0.0 — they are private members of this tree, not released artifacts — so the host CLI and the editor bundle both read this field rather than a copy of it.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Frontend workspace: shared renderer, display-only player and editor.",
