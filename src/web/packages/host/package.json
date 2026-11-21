@@ -31,9 +31,9 @@
     "node-forge": "1.4.3",
     "node-hid": "^3.4.0",
     "serialport": "^13.0.0",
-    "systeminformation": "^5.33.13",
+    "systeminformation": "^5.33.23",
     "undici": "7.30.1",
-    "usb": "^3.2.1"
+    "usb": "^3.3.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
